@@ -96,10 +96,21 @@ void WS2812FX::setUpMatrix() {
       }
       if ((size > 0) && (customMappingTable == nullptr)) { // second try
         DEBUG_PRINTLN("setUpMatrix: trying to get fresh memory block.");
-        customMappingTable = (uint16_t*) calloc(size, sizeof(uint16_t));
+        // #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
+        // if (psramFound()){
+        //   customMappingTable = (uint16_t*) ps_calloc(size, sizeof(uint16_t));
+        // } else {
+        //   customMappingTable = (uint16_t*) calloc(size, sizeof(uint16_t));
+        // }
+        // #else
+        // customMappingTable = (uint16_t*) calloc(size, sizeof(uint16_t));
+        // #endif
+        customMappingTable = (uint16_t*) heap_caps_calloc_prefer(size, sizeof(uint16_t),2,MALLOC_CAP_SPIRAM,MALLOC_CAP_INTERNAL);
         if (customMappingTable == nullptr) { 
           USER_PRINTLN("setUpMatrix: alloc failed");
           errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
+        } else {
+          USER_PRINTLN("setUpMatrix: alloc failed");
         }
       }
       if (customMappingTable != nullptr) customMappingTableSize = size;
@@ -363,7 +374,7 @@ void IRAM_ATTR_YN Segment::setPixelColorXY(int x, int y, uint32_t col) //WLEDMM:
     col = color_fade(col, _bri_t);
   }
 
-#if 0 // this is a dangerous optimization
+#if 1 // this is a dangerous optimization
   if ((i < UINT_MAX) && sameColor && (call > 0) && (!transitional) && (ledsrgb[i] == CRGB(col))) return; // WLEDMM looks like nothing to do
 #endif
 

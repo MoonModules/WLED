@@ -566,7 +566,7 @@ void showRealSpeed() {
 
   Serial.print("FLASH CHIP FREQ (magic): "); Serial.print(ESP.getFlashChipSpeed()/1000000.0, 1); Serial.println(" MHz");
   Serial.print("FLASH SIZE (magic byte): "); Serial.print(ESP.getFlashChipSize() / (1024.0 * 1024), 2); Serial.println(" MB");
-  Serial.print("FLASH MODE (magic byte): "); Serial.print(ESP.getFlashChipMode()); Serial.println(" ;  0=QIO, 1=QOUT, 2=DIO, 3=DOUT or other\n");
+  // Serial.print("FLASH MODE (magic byte): "); Serial.print(ESP.getFlashChipMode()); Serial.println(" ;  0=QIO, 1=QOUT, 2=DIO, 3=DOUT or other\n");
 
   Serial.flush();
   Serial.print("FLASH CHIP ID:   0x"); Serial.println(my_ESP_getFlashChipId(), HEX);
@@ -574,7 +574,7 @@ void showRealSpeed() {
   //Serial.print("FLASH CHIP FREQ: "); Serial.print(my_ESP_getFlashChipSpeed() / 1000000.0, 1); Serial.println(" MHz"); // this seems to crash on -S2
 #endif
   Serial.print("FLASH REAL SIZE: "); Serial.print(my_ESP_getFlashChipRealSize() / (1024.0 * 1024), 2); Serial.println(" MB");
-  Serial.print("FLASH REAL MODE: "); Serial.println(my_ESP_getFlashChipMode());
+  // Serial.print("FLASH REAL MODE: "); Serial.println(my_ESP_getFlashChipMode());
 
   for(int aa=0; aa<42; aa++) Serial.print("-"); Serial.println();
   Serial.flush();

@@ -758,18 +758,31 @@ void sendSysInfoUDP()
 // buffer - a buffer of at least length*4 bytes long
 // isRGBW - true if the buffer contains 4 components per pixel
 
-static       size_t sequenceNumber = 0; // this needs to be shared across all outputs
-static const size_t ART_NET_HEADER_SIZE = 12;
-static const byte   ART_NET_HEADER[] PROGMEM = {0x41,0x72,0x74,0x2d,0x4e,0x65,0x74,0x00,0x00,0x50,0x00,0x0e};
+#ifndef ARTNET_FPS_LIMIT
+  // ...in theory we could discover and probe the hardware for the FPS limit, 
+  // but 44 is pretty common as it matches the wired DMX512 max speed for one universe.
+  // The H807SA responds with 44Hz, aka 44 FPS.
+  #define ARTNET_FPS_LIMIT 44
+#endif
 
-uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, uint8_t *buffer, uint8_t bri, bool isRGBW)  {
+static       size_t sequenceNumber = 0; // this needs to be shared across all outputs
+static const byte   ART_NET_HEADER[] PROGMEM = {0x41,0x72,0x74,0x2d,0x4e,0x65,0x74,0x00,0x00,0x50,0x00,0x0e};
+static uint_fast16_t artnetlimiter  = millis()+(1000/ARTNET_FPS_LIMIT);
+
+uint8_t IRAM_ATTR realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, uint8_t *buffer, uint8_t bri, bool isRGBW)  {
+
   if (!(apActive || interfacesInited) || !client[0] || !length) return 1;  // network not initialised or dummy/unset IP address  031522 ajn added check for ap
 
-  WiFiUDP ddpUdp;
+  // For some reason, this is faster outside of the case block...
+  //
+  static byte *packet_buffer = (byte *) calloc(530, sizeof(byte)); // don't care if RGB or RGBW, assume enough (18 header+512 data) for both. calloc zeros.
+  memcpy(packet_buffer, ART_NET_HEADER, 12); // copy in the Art-Net header.
 
   switch (type) {
     case 0: // DDP
     {
+      WiFiUDP ddpUdp; 
+
       // calculate the number of UDP packets we need to send
       size_t channelCount = length * (isRGBW? 4:3); // 1 channel for every R,G,B value
       size_t packetCount = ((channelCount-1) / DDP_CHANNELS_PER_PACKET) +1;
@@ -835,61 +848,191 @@ uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, uint8
     case 1: //E1.31
     {
     } break;
-
-    case 2: //ArtNet
+    case 2: //Art-Net
     {
-      // calculate the number of UDP packets we need to send
-      const size_t channelCount = length * (isRGBW?4:3); // 1 channel for every R,G,B,(W?) value
-      const size_t ARTNET_CHANNELS_PER_PACKET = isRGBW?512:510; // 512/4=128 RGBW LEDs, 510/3=170 RGB LEDs
-      const size_t packetCount = ((channelCount-1)/ARTNET_CHANNELS_PER_PACKET)+1;
+      while (artnetlimiter > micros()) {
+        #ifdef ARTNET_SKIP_FRAME
+          // delayMicroseconds(10); // do some tiny delay regardless
+          return 0; // Let WLED keep generating effect frames and we output an Art-Net frame when ARTNET_FPS_LIMIT is reached.
+        #else
+          delayMicroseconds(10); // Make WLED obey ARTNET_FPS_LIMIT and just delay here until we're ready to send a frame.
+        #endif
+      }
 
-      uint32_t channel = 0; 
-      size_t bufferOffset = 0;
+      /*
+      WLED rendering Art-Net data considers itself to be 1 hardware output with many universes - but
+      many Art-Net controllers like the H807SA can be manually set to "X universes per output" or in 
+      some cases "X channels per port" - which is the same thing, just expressed differently.
 
+      We need to know the LEDs per output so we can break the pixel data across physically attached universes.
+
+      The H807SA obeys the "510 channels for RGB" rule like WLED and xLights - some other controllers do not care,
+      but we're not supporting those here. If you run into one of these, override ARTNET_CHANNELS_PER_PACKET to 512.
+      */
+
+      #ifdef ARTNET_TIMER
+      uint_fast16_t datatotal = 0;
+      uint_fast16_t packetstotal = 0;
+      #endif
+      uint_fast16_t timer = micros();
+
+      AsyncUDP artnetudp;// AsyncUDP so we can just blast packets.
+
+      const uint_fast16_t ARTNET_CHANNELS_PER_PACKET = isRGBW?512:510; // 512/4=128 RGBW LEDs, 510/3=170 RGB LEDs
+      
+      #ifndef ARTNET_TROYHACKS
+      // Default WLED-to-WLED Art-Net output
+      //
+      const size_t hardware_outputs[1] = { length }; // specified in LED counts. "length" = all LEDs
+      const size_t hardware_outputs_universe_start[1] = { 0 }; // universe start # per output
+      #else
+      // Example of more than 1 hardware output, currently you can only hard-code this kind of setup here.
+      // You get 170 RGB LEDs per universe (128 RGBW) so the receiving hardware needs to be configured correctly.
+      // The H807SA, for example, only allows one global setting of Art-Net universes-per-output, but you
+      // can adjust how many pixels are on a particular output. In theory any hardware setup can be defined here
+      // but most Art-Net boxes I've seen have a fixed universes-per-output. 
+      // We will still only send X pixels, so 1 RGB pixel on a 6-universe outout would send only 1 packet with 3 RGB bytes, etc.
+      // There is a minimum of 1 packet per output tho, so don't define universes you're not using. 
+      // Sum of hardware_outputs[] should always match your LED counts for your Art-Net output bus.
+      //
+      // const uint_fast16_t hardware_outputs[] = { 1008,1008,1008,1008,1008,1008,1008,1008 }; // specified in LED counts
+      // const uint_fast16_t hardware_outputs_universe_start[] = { 0,6,12,18,24,30,36,42 }; // universe start # per output
+
+      const uint_fast16_t hardware_outputs[] = { 1024,1024,1024,1024,1024,1024,1024,1024 }; // specified in LED counts
+      const uint_fast16_t hardware_outputs_universe_start[] = { 0,7,14,21,28,35,42,49 }; // universe start # per output
+
+      // Example of two H807SA units ganged together:
+      //
+      // const uint_fast16_t hardware_outputs[] = { 512,512,512,512,512,512,512,512,512,512,512,512,512,512,512,512 }; // specified in LED counts
+      // const uint_fast16_t hardware_outputs_universe_start[] = { 0,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60 }; // universe start # per output
+      #endif
+      
+      uint_fast16_t bufferOffset = 0;
+      uint_fast16_t hardware_output_universe = 0;
+      
       sequenceNumber++;
 
-      for (size_t currentPacket = 0; currentPacket < packetCount; currentPacket++) {
-
-        if (sequenceNumber > 255) sequenceNumber = 0;
-
-        if (!ddpUdp.beginPacket(client, ARTNET_DEFAULT_PORT)) {
-          DEBUG_PRINTLN(F("Art-Net WiFiUDP.beginPacket returned an error"));
-          return 1; // borked
+      if (sequenceNumber == 0) sequenceNumber = 1; // just in case, as 0 is considered "Sequence not in use"
+      if (sequenceNumber > 255) sequenceNumber = 1;
+      
+      for (uint_fast16_t hardware_output = 0; hardware_output < sizeof(hardware_outputs)/sizeof(size_t); hardware_output++) {
+        
+        if (bufferOffset > length * (isRGBW?4:3)) {
+          // This stop is reached if we don't have enough pixels for the defined Art-Net output.
+          return 1; // stop when we hit end of LEDs
         }
 
-        size_t packetSize = ARTNET_CHANNELS_PER_PACKET;
+        hardware_output_universe = hardware_outputs_universe_start[hardware_output];
 
-        if (currentPacket == (packetCount - 1U)) {
-          // last packet
-          if (channelCount % ARTNET_CHANNELS_PER_PACKET) {
-            packetSize = channelCount % ARTNET_CHANNELS_PER_PACKET;
+        uint_fast16_t channels_remaining = hardware_outputs[hardware_output] * (isRGBW?4:3);
+
+        while (channels_remaining > 0) {
+          
+          uint_fast16_t packetSize = ARTNET_CHANNELS_PER_PACKET;
+
+          if (channels_remaining < ARTNET_CHANNELS_PER_PACKET) {
+            packetSize = channels_remaining;
+            channels_remaining = 0;
+          } else {
+            channels_remaining -= packetSize;
           }
+
+          #ifdef ARTNET_TIMER
+          packetstotal++;
+          datatotal += packetSize + 18;
+          #endif
+          
+          // set the parts of the Art-Net packet header that change:
+          packet_buffer[12] = sequenceNumber;
+          packet_buffer[14] = hardware_output_universe;
+          packet_buffer[16] = packetSize >> 8;
+          packet_buffer[17] = packetSize;
+
+          // bulk copy the buffer range to the packet buffer after the header 
+          memcpy(packet_buffer+18, buffer+bufferOffset, packetSize);
+
+          if (bri < 255) { // speed hack - don't adjust brightness if full brightness
+            for (uint_fast16_t i = 18; i < packetSize+18; i+=(isRGBW?4:3)) {
+              // set brightness all at once - seems slightly faster than scale8()?
+              // for some reason, doing 3/4 at a time is 200 micros faster than 1 at a time.
+              packet_buffer[i] = (packet_buffer[i] * bri) >> 8;
+              packet_buffer[i+1] = (packet_buffer[i+1] * bri) >> 8;
+              packet_buffer[i+2] = (packet_buffer[i+2] * bri) >> 8; 
+              if (isRGBW) packet_buffer[i+3] = (packet_buffer[i+3] * bri) >> 8; 
+            }
+          }
+
+          bufferOffset += packetSize;
+          
+          if (!artnetudp.writeTo(packet_buffer,packetSize+18, client, ARTNET_DEFAULT_PORT)) {
+            DEBUG_PRINTLN(F("Art-Net artnetudp.writeTo() returned an error"));
+            return 1; // borked
+          }
+          hardware_output_universe++;
         }
+      }
 
-        byte header_buffer[ART_NET_HEADER_SIZE];
-        memcpy_P(header_buffer, ART_NET_HEADER, ART_NET_HEADER_SIZE);
-        ddpUdp.write(header_buffer, ART_NET_HEADER_SIZE); // This doesn't change. Hard coded ID, OpCode, and protocol version.
-        ddpUdp.write(sequenceNumber & 0xFF); // sequence number. 1..255
-        ddpUdp.write(0x00); // physical - more an FYI, not really used for anything. 0..3
-        ddpUdp.write((currentPacket) & 0xFF); // Universe LSB. 1 full packet == 1 full universe, so just use current packet number.
-        ddpUdp.write(0x00); // Universe MSB, unused.
-        ddpUdp.write(0xFF & (packetSize >> 8)); // 16-bit length of channel data, MSB
-        ddpUdp.write(0xFF & (packetSize     )); // 16-bit length of channel data, LSB
+      // Send Art-Net sync. Just reuse the packet and adjust.
+      // This should get re-written on the next run.
+      // After the first sync packet, and assuming 1 sync packet every 4 
+      // seconds at least, should keep Art-Net nodes in synchronous mode.
 
-        for (size_t i = 0; i < packetSize; i += (isRGBW?4:3)) {
-          ddpUdp.write(scale8(buffer[bufferOffset++], bri)); // R
-          ddpUdp.write(scale8(buffer[bufferOffset++], bri)); // G
-          ddpUdp.write(scale8(buffer[bufferOffset++], bri)); // B
-          if (isRGBW) ddpUdp.write(scale8(buffer[bufferOffset++], bri)); // W
-        }
+      // This is very much untested and generally not needed unless you 
+      // have several Art-Net devices being broadcast to, and should only
+      // be called in that situation. 
+      
+      // Art-Net broadcast mode (setting Art-Net to 255.255.255.255) should ONLY
+      // be used if you know what you're doing, as that is a lot of pixels being 
+      // sent to EVERYTHING on your network, including WiFi devices - and can 
+      // overwhelm them if you have a lot of Art-Net data being broadcast.
 
-        if (!ddpUdp.endPacket()) {
-          DEBUG_PRINTLN(F("Art-Net WiFiUDP.endPacket returned an error"));
+      #ifdef ARTNET_SYNC_ENABLED
+        
+        // This block sends Art-Net "ArtSync" packets. Can't do this with AsyncUDP because it doesn't support source port binding.
+        // Tested on Art-Net qualifier software but not on real hardware with known support for ArtSync.
+        // Doesn't seem to do anything on my gear, so it's disabled. 
+
+        // packet_buffer[8]  = 0x00; // ArtSync opcode low byte (low byte is same as ArtDmx, 0x00)
+        packet_buffer[9]  = 0x52; // ArtSync opcode high byte
+        packet_buffer[12] = 0x00; // Aux1 - Transmit as 0. This is normally the sequence number in ArtDMX packets.
+        // packet_buffer[13] = 0x00; // Aux2 - Transmit as 0 - this should be 0 anyway in the packet already
+        
+        #ifdef ARTNET_SYNC_STRICT
+        WiFiUDP artnetsync;
+        artnetsync.begin(ETH.localIP(), ARTNET_DEFAULT_PORT);
+        artnetsync.beginPacket(IPADDR_BROADCAST,ARTNET_DEFAULT_PORT);
+        artnetsync.write(packet_buffer,14);
+
+        if (!artnetsync.endPacket()) {
+          DEBUG_PRINTLN(F("Art-Net Sync Broadcast Strict returned an error"));
           return 1; // borked
         }
-        channel += packetSize;
-      }
-    } break;
+        #else
+        if (!artnetudp.broadcastTo(packet_buffer,14,ARTNET_DEFAULT_PORT)) {
+          DEBUG_PRINTLN(F("Art-Net Sync Broadcast returned an error"));
+          return 1; // borked
+        }
+        #endif
+
+        #ifdef ARTNET_TIMER
+        packetstotal++;
+        datatotal += 14;
+        #endif
+      
+      #endif
+
+      artnetlimiter = micros()+(1000000/ARTNET_FPS_LIMIT)-(micros()-timer);
+
+      // This is the proper stop if pixels = Art-Net output.
+      
+      #ifdef ARTNET_TIMER
+      float mbps = (datatotal*8)/((micros()-timer)*1000000.0f/1024.0f/1024.0f);
+      // the "micros()" calc is just to limit the print to a more random debug output so it doesn't overwhelm the terminal
+      if (micros() % 100 < 5) USER_PRINTF("UDP for %u pixels took %lu micros. %u data in %u total packets. %2.2f mbit/sec at %u FPS.\n",length, micros()-timer, datatotal, packetstotal, mbps, strip.getFps());
+      #endif
+    
+      break;
+    }
   }
   return 0;
 }

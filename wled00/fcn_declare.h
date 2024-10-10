@@ -5,6 +5,11 @@
  * All globally accessible functions are declared here
  */
 
+#if !defined(FASTLED_VERSION) // only pull in FastLED if we don't have it yet
+  #define FASTLED_INTERNAL
+  #include <FastLED.h>
+#endif
+
 //alexa.cpp
 #ifndef WLED_DISABLE_ALEXA
 void onAlexaChange(EspalexaDevice* dev);
@@ -50,6 +55,9 @@ bool getJsonValue(const JsonVariant& element, DestType& destination, const Defau
 
 
 //colors.cpp
+CRGB ColorFromPaletteWLED(const CRGBPalette16& pal, unsigned index, uint8_t brightness=255, TBlendType blendType=LINEARBLEND);
+#define ColorFromPalette ColorFromPaletteWLED // override fastled version
+
 uint32_t __attribute__((const)) color_blend(uint32_t,uint32_t,uint_fast16_t,bool b16=false);  // WLEDMM: added attribute const
 uint32_t __attribute__((const)) color_add(uint32_t,uint32_t, bool fast=false);                // WLEDMM: added attribute const
 uint32_t __attribute__((const)) color_fade(uint32_t c1, uint8_t amount, bool video=false);

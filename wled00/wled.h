@@ -106,9 +106,15 @@
 #else // ESP32
   #include <HardwareSerial.h>  // ensure we have the correct "Serial" on new MCUs (depends on ARDUINO_USB_MODE and ARDUINO_USB_CDC_ON_BOOT)
   #include <WiFi.h>
-  #include <ETH.h>
+  #if defined (CONFIG_IDF_TARGET_ESP32S3) && defined (WLED_USE_ETHERNET)
+    #include <ETHClass2.h>
+  #else // ESP32
+    #include <ETH.h>
+  #endif
   #include "esp_wifi.h"
-  #include <ESPmDNS.h>
+  #ifndef WLED_DISABLE_MDNS 
+    #include <ESPmDNS.h>
+  #endif                     // WLEDMM end
   #include <AsyncTCP.h>
   #if LOROL_LITTLEFS
     #ifndef CONFIG_LITTLEFS_FOR_IDF_3_2
@@ -397,6 +403,12 @@ WLED_GLOBAL bool fadeTransition      _INIT(false);  // enable crossfading color 
 WLED_GLOBAL uint16_t transitionDelay _INIT(750);    // default crossfade duration in ms
 
 WLED_GLOBAL uint_fast16_t briMultiplier _INIT(100);          // % of brightness to set (to limit power, if you set it to 50 and set bri to 255, actual brightness will be 127)
+
+WLED_GLOBAL bool TROYHACKS_HPF   _INIT(true); // WLED-MM/TroyHacks: Turn HPF from ESP-DSP on/off
+WLED_GLOBAL bool TROYHACKS_LPF   _INIT(true); // WLED-MM/TroyHacks: Turn LPF from ESP-DSP on/off
+WLED_GLOBAL bool TROYHACKS_NOTCH _INIT(true); // WLED-MM/TroyHacks: Turn other filter from ESP-DSP on/off
+WLED_GLOBAL bool TROYHACKS_PINKY _INIT(false); // WLED-MM/TroyHacks: Internally calibrate audio against white noise
+WLED_GLOBAL float fftBinAverage[16] _INIT_N(({ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }));
 
 // User Interface CONFIG
 #ifndef SERVERNAME
@@ -884,7 +896,7 @@ WLED_GLOBAL volatile uint8_t jsonBufferLock _INIT(0);
   WLED_GLOBAL unsigned long loops _INIT(0);
 #endif
 
-#ifdef ARDUINO_ARCH_ESP32
+#if defined ARDUINO_ARCH_ESP32 || defined ARDUINO_ARCH_ESP32S3
   #define WLED_CONNECTED (WiFi.status() == WL_CONNECTED || ETH.localIP()[0] != 0)
 #else
   #define WLED_CONNECTED (WiFi.status() == WL_CONNECTED)

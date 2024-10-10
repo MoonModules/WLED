@@ -154,7 +154,15 @@ public:
     if (_onRequest) {
       _contentLength = total;
       if (total > 0 && request->_tempObject == NULL && (int)total < _maxContentLength) {
+        #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
+        if (psramFound()) {
+          request->_tempObject = ps_malloc(total);
+        } else {
+          request->_tempObject = malloc(total);
+        }
+        #else
         request->_tempObject = malloc(total);
+        #endif
       }
       if (request->_tempObject != NULL) {
         memcpy((uint8_t*)(request->_tempObject) + index, data, len);

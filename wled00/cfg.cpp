@@ -747,6 +747,7 @@ void serializeConfig() {
     if (ethernetBoards[ethernetType].eth_power>=0)     pins.add(ethernetBoards[ethernetType].eth_power);
     if (ethernetBoards[ethernetType].eth_mdc>=0)       pins.add(ethernetBoards[ethernetType].eth_mdc);
     if (ethernetBoards[ethernetType].eth_mdio>=0)      pins.add(ethernetBoards[ethernetType].eth_mdio);
+    #ifndef CONFIG_IDF_TARGET_ESP32S3
     switch (ethernetBoards[ethernetType].eth_clk_mode) {
       case ETH_CLOCK_GPIO0_IN:
       case ETH_CLOCK_GPIO0_OUT:
@@ -759,6 +760,7 @@ void serializeConfig() {
         pins.add(17);
         break;
     }
+    #endif
   }
   #endif
 

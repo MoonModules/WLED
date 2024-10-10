@@ -133,7 +133,15 @@ void Segment::allocLeds() {
   if ((size > 0) && (!ledsrgb || size > ledsrgbSize)) {    //softhack dont allocate zero bytes
     USER_PRINTF("allocLeds (%d,%d to %d,%d), %u from %u\n", start, startY, stop, stopY, size, ledsrgb?ledsrgbSize:0);
     if (ledsrgb) free(ledsrgb);   // we need a bigger buffer, so free the old one first
+    #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
+    if (psramFound()){
+      ledsrgb = (CRGB*)ps_calloc(size, 1);
+    } else {
+      ledsrgb = (CRGB*)calloc(size, 1);
+    }
+    #else
     ledsrgb = (CRGB*)calloc(size, 1);
+    #endif
     ledsrgbSize = ledsrgb?size:0;
     if (ledsrgb == nullptr) {
       USER_PRINTLN("allocLeds failed!!");
@@ -246,17 +254,19 @@ bool Segment::allocateData(size_t len) {
   //DEBUG_PRINTF("allocateData(%u) start %d, stop %d, vlen %d\n", len, start, stop, virtualLength());
   deallocateData();
   if (len == 0) return false; // nothing to do
+  #if defined(ARDUINO_ARCH_ESP32) && !defined(WLED_USE_PSRAM)
   if (Segment::getUsedSegmentData() + len > MAX_SEGMENT_DATA) {
     //USER_PRINTF("Segment::allocateData: Segment data quota exceeded! used:%u request:%u max:%d\n", Segment::getUsedSegmentData(), len, MAX_SEGMENT_DATA);
     if (len > 0) errorFlag = ERR_LOW_SEG_MEM;  // WLEDMM raise errorflag
     return false; //not enough memory
   }
+  #endif
   // do not use SPI RAM on ESP32 since it is slow
-  //#if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
-  //if (psramFound())
-  //  data = (byte*) ps_malloc(len);
-  //else
-  //#endif
+  #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
+  if (psramFound())
+   data = (byte*) ps_malloc(len);
+  else
+  #endif
     data = (byte*) malloc(len);
   if (!data) {
       _dataLen = 0; // WLEDMM reset dataLen
@@ -311,11 +321,11 @@ void Segment::setUpLeds() {
     ledsrgbSize = length() * sizeof(CRGB); // also set this when using global leds.
     #endif
   } else if (length() > 0) { //WLEDMM we always want a new buffer //softhack007 quickfix - avoid malloc(0) which is undefined behaviour (should not happen, but i've seen it)
-    //#if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
-    //if (psramFound())
-    //  ledsrgb = (CRGB*)ps_malloc(sizeof(CRGB)*length()); // softhack007 disabled; putting leds into psram leads to horrible slowdown on WROVER boards
-    //else
-    //#endif
+    #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
+    if (psramFound())
+     ledsrgb = (CRGB*)ps_malloc(sizeof(CRGB)*length()); // softhack007 disabled; putting leds into psram leads to horrible slowdown on WROVER boards
+    else
+    #endif
     allocLeds(); //WLEDMM
     //USER_PRINTF("\nsetUpLeds() local LEDs: startX=%d stopx=%d startY=%d stopy=%d maxwidth=%d; length=%d, size=%d\n\n", start, stop, startY, stopY, Segment::maxWidth, length(), ledsrgbSize/3);
   }
@@ -1833,11 +1843,11 @@ void WS2812FX::finalizeInit(void)
   if (useLedsArray && getLengthTotal()>0) { // WLEDMM avoid malloc(0)
     size_t arrSize = sizeof(CRGB) * getLengthTotal();
     // softhack007 disabled; putting leds into psram leads to horrible slowdown on WROVER boards (see setUpLeds())
-    //#if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
-    //if (psramFound())
-    //  Segment::_globalLeds = (CRGB*) ps_malloc(arrSize);
-    //else
-    //#endif
+    #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
+    if (psramFound())
+     Segment::_globalLeds = (CRGB*) ps_malloc(arrSize);
+    else
+    #endif
       if (arrSize > 0) Segment::_globalLeds = (CRGB*) malloc(arrSize); // WLEDMM avoid malloc(0)
     if ((Segment::_globalLeds != nullptr) && (arrSize > 0)) memset(Segment::_globalLeds, 0, arrSize); // WLEDMM avoid dereferencing nullptr
     if ((Segment::_globalLeds == nullptr) && (arrSize > 0)) errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
@@ -2608,11 +2618,27 @@ bool WS2812FX::deserializeMap(uint8_t n) {
 
     // don't use new / delete
     if ((size > 0) && (customMappingTable != nullptr)) {
+      #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
+      if (psramFound()) {
+        customMappingTable = (uint16_t*) ps_realloc(customMappingTable, sizeof(uint16_t) * size); // TroyHacks: This should work? We always have tons of PSRAM
+      } else {
+        customMappingTable = (uint16_t*) reallocf(customMappingTable, sizeof(uint16_t) * size);  // reallocf will free memory if it cannot resize
+      }
+      #else
       customMappingTable = (uint16_t*) reallocf(customMappingTable, sizeof(uint16_t) * size);  // reallocf will free memory if it cannot resize
+      #endif
     }
     if ((size > 0) && (customMappingTable == nullptr)) { // second try
       DEBUG_PRINTLN("deserializeMap: trying to get fresh memory block.");
+      #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
+      if (psramFound()) {
+        customMappingTable = (uint16_t*) ps_calloc(size, sizeof(uint16_t));
+      } else {
+        customMappingTable = (uint16_t*) calloc(size, sizeof(uint16_t));
+      }
+      #else
       customMappingTable = (uint16_t*) calloc(size, sizeof(uint16_t));
+      #endif
       if (customMappingTable == nullptr) { 
         DEBUG_PRINTLN("deserializeMap: alloc failed!");
         errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag

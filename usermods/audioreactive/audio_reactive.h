@@ -18,9 +18,12 @@
      You should have received a copy of the GNU General Public License along with WLED-MM. If not, see <https://www.gnu.org/licenses/>.
 */
 
-
 #include "wled.h"
-
+#ifdef UM_AUDIOREACTIVE_USE_ESPDSP_FFT
+  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
+    #include "esp_dsp.h"
+  #endif
+#endif
 #ifdef ARDUINO_ARCH_ESP32
 
 #include <driver/i2s.h>
@@ -59,7 +62,7 @@
 #define FFTTASK_PRIORITY 1 // standard: looptask prio
 //#define FFTTASK_PRIORITY 2 // above looptask, below async_tcp
 #endif
-#endif
+#endif  
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 // this applies "pink noise scaling" to FFT results before computing the major peak for effects.
@@ -292,7 +295,7 @@ static void postProcessFFTResults(bool noiseGateOpen, int numberOfChannels, bool
 static TaskHandle_t FFT_Task = nullptr;
 
 // Table of multiplication factors so that we can even out the frequency response.
-#define MAX_PINK 10  // 0 = standard, 1= line-in (pink noise only), 2..4 = IMNP441, 5..6 = ICS-43434, ,7=SPM1423, 8..9 = userdef, 10= flat (no pink noise adjustment)
+#define MAX_PINK 11  // 0 = standard, 1= line-in (pink noise only), 2..4 = IMNP441, 5..6 = ICS-43434, ,7=SPM1423, 8..9 = userdef, 10= flat (no pink noise adjustment)
 static const float fftResultPink[MAX_PINK+1][NUM_GEQ_CHANNELS] = { 
           { 1.70f, 1.71f, 1.73f, 1.78f, 1.68f, 1.56f, 1.55f, 1.63f, 1.79f, 1.62f, 1.80f, 2.06f, 2.47f, 3.35f, 6.83f, 9.55f },  //  0 default from SR WLED
       //  { 1.30f, 1.32f, 1.40f, 1.46f, 1.52f, 1.57f, 1.68f, 1.80f, 1.89f, 2.00f, 2.11f, 2.21f, 2.30f, 2.39f, 3.09f, 4.34f },  //  - Line-In Generic -> pink noise adjustment only
@@ -310,7 +313,8 @@ static const float fftResultPink[MAX_PINK+1][NUM_GEQ_CHANNELS] = {
           { 2.25f, 1.60f, 1.30f, 1.60f, 2.20f, 3.20f, 3.06f, 2.60f, 2.85f, 3.50f, 4.10f, 4.80f, 5.70f, 6.05f,10.50f,14.85f },  //  8 userdef #1 for ewowi (enhance median/high freqs)
           { 4.75f, 3.60f, 2.40f, 2.46f, 3.52f, 1.60f, 1.68f, 3.20f, 2.20f, 2.00f, 2.30f, 2.41f, 2.30f, 1.25f, 4.55f, 6.50f },  //  9 userdef #2 for softhack (mic hidden inside mini-shield)
 
-          { 2.38f, 2.18f, 2.07f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.95f, 1.70f, 2.13f, 2.47f }   // 10 almost FLAT (IMNP441 but no PINK noise adjustments)
+          { 2.38f, 2.18f, 2.07f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.95f, 1.70f, 2.13f, 2.47f },   // 10 almost FLAT (IMNP441 but no PINK noise adjustments)
+          { 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f, 1.70f }    // DEAD FLAT
 };
 
   /* how to make your own profile:
@@ -393,8 +397,15 @@ constexpr uint16_t samplesFFT_2 = 256;          // meaningful part of FFT result
 #define LOG_256  5.54517744f                            // log(256)
 
 // These are the input and output vectors.  Input vectors receive computed results from FFT.
-static float vReal[samplesFFT] = {0.0f};       // FFT sample inputs / freq output -  these are our raw result bins
-static float vImag[samplesFFT] = {0.0f};       // imaginary parts
+__attribute__((aligned(16))) static float vReal[samplesFFT] = {0.0f};       // FFT sample inputs / freq output -  these are our raw result bins
+__attribute__((aligned(16))) static float vImag[samplesFFT] = {0.0f};       // imaginary parts
+
+// making it easier to use biquad filter calculator from https://www.earlevel.com/main/2013/10/13/biquad-calculator-v2/
+float a0 = 0.0f;
+float a1 = 0.0f;
+float a2 = 0.0f;
+float b1 = 0.0f;
+float b2 = 0.0f;
 
 #ifdef FFT_MAJORPEAK_HUMAN_EAR
 static float pinkFactors[samplesFFT] = {0.0f};              // "pink noise" correction factors
@@ -404,6 +415,7 @@ constexpr float binWidth = SAMPLE_RATE / (float)samplesFFT; // frequency range o
 
 
 // Create FFT object
+#if defined(UM_AUDIOREACTIVE_USE_NEW_FFT) || defined(UM_AUDIOREACTIVE_USE_ESPDSP_FFT)
 // lib_deps += https://github.com/kosme/arduinoFFT#develop @ 1.9.2
 #if  !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 // these options actually cause slow-down on -S2 (-S2 doesn't have floating point hardware)
@@ -412,15 +424,26 @@ constexpr float binWidth = SAMPLE_RATE / (float)samplesFFT; // frequency range o
 #endif
 #define sqrt(x) sqrtf(x)             // little hack that reduces FFT time by 10-50% on ESP32 (as alternative to FFT_SQRT_APPROXIMATION)
 #define sqrt_internal sqrtf          // see https://github.com/kosme/arduinoFFT/pull/83
-#include <arduinoFFT.h>
-
-#if defined(FFT_LIB_REV) && FFT_LIB_REV > 0x19
-  // arduinoFFT 2.x has a slightly different API
-  static ArduinoFFT<float> FFT = ArduinoFFT<float>( vReal, vImag, samplesFFT, SAMPLE_RATE, true);
 #else
-  // recommended version optimized by @softhack007 (API version 1.9)
-  static float windowWeighingFactors[samplesFFT] = {0.0f}; // cache for FFT windowing factors
-  static ArduinoFFT<float> FFT = ArduinoFFT<float>( vReal, vImag, samplesFFT, SAMPLE_RATE, windowWeighingFactors);
+  // around 50% slower on -S2
+// lib_deps += https://github.com/blazoncek/arduinoFFT.git
+#endif
+#ifndef UM_AUDIOREACTIVE_USE_ESPDSP_FFT
+  #include <arduinoFFT.h>
+
+  #if defined(UM_AUDIOREACTIVE_USE_NEW_FFT)
+
+  #if defined(FFT_LIB_REV) && FFT_LIB_REV > 0x19
+    // arduinoFFT 2.x has a slightly different API
+    static ArduinoFFT<float> FFT = ArduinoFFT<float>( vReal, vImag, samplesFFT, SAMPLE_RATE, true);
+  #else
+    // recommended version optimized by @softhack007 (API version 1.9)
+    static float windowWeighingFactors[samplesFFT] = {0.0f}; // cache for FFT windowing factors
+    static ArduinoFFT<float> FFT = ArduinoFFT<float>( vReal, vImag, samplesFFT, SAMPLE_RATE, windowWeighingFactors);
+  #endif
+  #else
+  static arduinoFFT FFT = arduinoFFT(vReal, vImag, samplesFFT, SAMPLE_RATE);
+  #endif
 #endif
 
 // Helper functions
@@ -467,7 +490,7 @@ static void runDCBlocker(uint_fast16_t numSamples, float *sampleBuffer) {
   static float xm1 = 0.0f;
   static SR_HIRES_TYPE ym1 = 0.0f;
 
-  for (unsigned i=0; i < numSamples; i++) {
+  for (uint_fast16_t i=0; i < numSamples; i++) {
     float value = sampleBuffer[i];
     SR_HIRES_TYPE filtered = (SR_HIRES_TYPE)(value-xm1) + filterR*ym1;
     xm1 = value;
@@ -481,6 +504,7 @@ static void runDCBlocker(uint_fast16_t numSamples, float *sampleBuffer) {
 //
 void FFTcode(void * parameter)
 {
+
   #ifdef SR_DEBUG
     USER_FLUSH();
     USER_PRINT("AR: "); USER_PRINT(pcTaskGetTaskName(NULL));
@@ -512,9 +536,81 @@ void FFTcode(void * parameter)
   pinkFactors[0] *= 0.5;  // suppress 0-42hz bin
   #endif
 
+  #ifdef UM_AUDIOREACTIVE_USE_ESPDSP_FFT
+  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
+
+  esp_err_t myerr = dsps_fft4r_init_fc32(NULL, samplesFFT >> 1);
+  if (myerr  != ESP_OK) {
+      USER_PRINTF("Not possible to initialize FFT. Error = %i", myerr);
+      return;
+  }
+  __attribute__((aligned(16))) float window[samplesFFT];
+  dsps_wind_blackman_harris_f32(window, samplesFFT);
+
+  // lowpass, 22050 Hz, 9963 Hz, 0.734 Q, gain ignored - https://www.earlevel.com/main/2013/10/13/biquad-calculator-v2/
+  a0 = 0.8123610015069542;
+  a1 = 1.6247220030139085;
+  a2 = 0.8123610015069542;
+  b1 = 1.5869495720054403;
+  b2 = 0.6624944340223766;
+
+  float coeffs_lpf[5] = { a0, a1, a2, b1, b2 };
+  float w_lpf[5] = {0, 0};
+
+  // highpass, 22050 Hz, 35 Hz, 0.734 Q, gain ignored - https://www.earlevel.com/main/2013/10/13/biquad-calculator-v2/
+  a0 = 0.9932274488431106;
+  a1 = -1.9864548976862213;
+  a2 = 0.9932274488431106;
+  b1 = -1.9864055002334067;
+  b2 = 0.9865042951390358;
+
+  float coeffs_hpf[5] = { a0, a1, a2, b1, b2 }; 
+  float w_hpf[5] = {0, 0};
+
+  // // peak, 22050 Hz, 4659 Hz, 0.646 Q, 6 Gain - https://www.earlevel.com/main/2013/10/13/biquad-calculator-v2/
+  // a0 = 1.4269358395668883;
+  // a1 = -0.27502696828149037;
+  // a2 = -0.2848721507196676;
+  // b1 = -0.27502696828149037;
+  // b2 = 0.14206368884722057;
+
+  // // peak, 22050 Hz, 4659 Hz, 0.646 Q, 12 Gain - https://www.earlevel.com/main/2013/10/13/biquad-calculator-v2/
+  // a0 = 2.2787848311643;
+  // a1 = -0.27502696828149037;
+  // a2 = -1.136721142317079;
+  // b1 = -0.27502696828149037;
+  // b2 = 0.14206368884722057;
+
+  // // peak, 22050 Hz, 4659 Hz, 0.646 Q, 18 Gain - https://www.earlevel.com/main/2013/10/13/biquad-calculator-v2/
+  // a0 = 3.9784470221428574;
+  // a1 = -0.27502696828149037;
+  // a2 = -2.836383333295637;
+  // b1 = -0.27502696828149037;
+  // b2 = 0.14206368884722057;
+  
+  // // peak, 22050 Hz, 4659 Hz, 0.646 Q, 30 Gain - https://www.earlevel.com/main/2013/10/13/biquad-calculator-v2/
+  // a0 = 14.136195997452123;
+  // a1 = -0.27502696828149037;
+  // a2 = -12.994132308604902;
+  // b1 = -0.27502696828149037;
+  // b2 = 0.14206368884722057;
+
+  // peak, 22050 Hz, 4659 Hz, 0.646 Q, 24 Gain - https://www.earlevel.com/main/2013/10/13/biquad-calculator-v2/
+  a0 = 7.369718939979809;
+  a1 = -0.27502696828149037;
+  a2 = -6.227655251132589;
+  b1 = -0.27502696828149037;
+  b2 = 0.14206368884722057;
+
+  float coeffs_notch[5] = { a0, a1, a2, b1, b2 }; 
+  float w_notch[5] = {0, 0};
+
+  #endif
+  #endif
+
   TickType_t xLastWakeTime = xTaskGetTickCount();
   for(;;) {
-    delay(1);           // DO NOT DELETE THIS LINE! It is needed to give the IDLE(0) task enough time and to keep the watchdog happy.
+     delay(1);           // DO NOT DELETE THIS LINE! It is needed to give the IDLE(0) task enough time and to keep the watchdog happy.
                         // taskYIELD(), yield(), vTaskDelay() and esp_task_wdt_feed() didn't seem to work.
 
     // Don't run FFT computing code if we're in Receive mode or in realtime mode
@@ -599,9 +695,11 @@ void FFTcode(void * parameter)
 
 #if defined(WLEDMM_FASTPATH) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && defined(ARDUINO_ARCH_ESP32)
     // experimental - be nice to LED update task (trying to avoid flickering) - dual core only
-#if FFTTASK_PRIORITY > 1
-    if (strip.isServicing()) delay(1);
-#endif
+    #ifndef UM_AUDIOREACTIVE_USE_ESPDSP_FFT
+      #if FFTTASK_PRIORITY > 1
+        if (strip.isServicing()) delay(1);
+      #endif
+    #endif
 #endif
 
     // normal mode: filter everything
@@ -619,8 +717,10 @@ void FFTcode(void * parameter)
    bool doDCRemoval = false; // DCRemove is only necessary if we don't use any kind of low-cut filtering
    if ((useInputFilter > 0) && (useInputFilter < 99)) {
       switch(useInputFilter) {
-        case 1: runMicFilter(sampleCount, samplesStart); break;                   // PDM microphone bandpass
-        case 2: runDCBlocker(sampleCount, samplesStart); break;                   // generic Low-Cut + DC blocker (~40hz cut-off)
+        case 1: runMicFilter(samplesFFT, vReal); break;                   // PDM microphone bandpass
+        #ifndef UM_AUDIOREACTIVE_USE_ESPDSP_FFT
+        case 2: runDCBlocker(samplesFFT, vReal); break;                   // generic Low-Cut + DC blocker (~40hz cut-off)
+        #endif
         default: doDCRemoval = true; break;
       }
     } else doDCRemoval = true;
@@ -661,6 +761,11 @@ void FFTcode(void * parameter)
         if (__builtin_signbit(vReal[i]) != __builtin_signbit(vReal[i+1]))  // test sign bit: sign changed -> zero crossing
             newZeroCrossingCount++;
       }
+      #ifdef UM_AUDIOREACTIVE_USE_ESPDSP_FFT
+      #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
+      vReal[i] *= window[i]; // FFT windowing for ESP-DSP
+      #endif
+      #endif
     }
     newZeroCrossingCount = (newZeroCrossingCount*2)/3; // reduce value so it typically stays below 256
     zeroCrossingCount = newZeroCrossingCount; // update only once, to avoid that effects pick up an intermediate value
@@ -693,6 +798,7 @@ void FFTcode(void * parameter)
     if (fabsf(volumeSmth) > 0.25f) { // noise gate open
       if ((skipSecondFFT == false) || (isFirstRun == true)) {
         // run FFT (takes 2-3ms on ESP32, ~12ms on ESP32-S2, ~30ms on -C3)
+        #ifndef UM_AUDIOREACTIVE_USE_ESPDSP_FFT
         if (doDCRemoval) FFT.dcRemoval();                                            // remove DC offset
         switch(fftWindow) {                                                          // apply FFT window
           case 1:
@@ -726,10 +832,54 @@ void FFTcode(void * parameter)
 
         FFT.compute( FFTDirection::Forward );                       // Compute FFT
         FFT.complexToMagnitude();                                   // Compute magnitudes
+        #else
+        wc = 1.0f; // use Blackman_Harris value from ESP-DSP code
+        #endif
         vReal[0] = 0;   // The remaining DC offset on the signal produces a strong spike on position 0 that should be eliminated to avoid issues.
 
         float last_majorpeak = FFT_MajorPeak;
         float last_magnitude = FFT_Magnitude;
+        #if defined(UM_AUDIOREACTIVE_USE_ESPDSP_FFT)
+          if (TROYHACKS_LPF) {
+            dsps_biquad_f32(vReal, vImag, samplesFFT, coeffs_lpf, w_lpf); // you can't dump this back into itself, needs a destination
+            memcpy(vReal, vImag, samplesFFT); // dump it back
+          }          
+          if (TROYHACKS_HPF) {
+            dsps_biquad_f32(vReal, vImag, samplesFFT, coeffs_hpf, w_hpf); // you can't dump this back into itself, needs a destination
+            memcpy(vReal, vImag, samplesFFT); // dump it back
+          }
+          if (TROYHACKS_NOTCH) {
+            dsps_biquad_f32(vReal, vImag, samplesFFT, coeffs_notch, w_notch); // you can't dump this back into itself, needs a destination
+            memcpy(vReal, vImag, samplesFFT); // dump it back
+          }
+
+          dsps_fft4r_fc32(vReal,samplesFFT >> 1);
+          dsps_bit_rev4r_fc32(vReal,samplesFFT >> 1);
+          dsps_cplx2real_fc32(vReal,samplesFFT >> 1);
+          
+          FFT_MajorPeak = 0;
+          FFT_Magnitude = 0;
+
+          int x=0;
+          for (int i=0; i<samplesFFT;i+=2) { // I'm pretty sure this FFT function has interleaved results... because otherwise vReal[1] is "empty"
+            vReal[x] = vReal[i];
+            if (vReal[x] > FFT_Magnitude) {
+              FFT_Magnitude = vReal[x];
+              FFT_MajorPeak = x*(SAMPLE_RATE/samplesFFT);
+            }
+            x++;
+          }
+        #elif defined(UM_AUDIOREACTIVE_USE_NEW_FFT)
+          if (doDCRemoval) FFT.dcRemoval();                                            // remove DC offset
+          #if !defined(FFT_PREFER_EXACT_PEAKS)
+            FFT.windowing( FFTWindow::Flat_top, FFTDirection::Forward);        // Weigh data using "Flat Top" function - better amplitude accuracy
+          #else
+            FFT.windowing(FFTWindow::Blackman_Harris, FFTDirection::Forward);  // Weigh data using "Blackman- Harris" window - sharp peaks due to excellent sideband rejection
+          #endif
+          FFT.compute( FFTDirection::Forward );                       // Compute FFT
+          FFT.complexToMagnitude();                                   // Compute magnitudes
+          vReal[0] = 0;   // The remaining DC offset on the signal produces a strong spike on position 0 that should be eliminated to avoid issues.
+        #endif
 
         #ifdef FFT_MAJORPEAK_HUMAN_EAR
         // scale FFT results
@@ -737,12 +887,16 @@ void FFTcode(void * parameter)
           vReal[binInd] *= pinkFactors[binInd];
         #endif
 
-        #if defined(FFT_LIB_REV) && FFT_LIB_REV > 0x19
-          // arduinoFFT 2.x has a slightly different API
-          FFT.majorPeak(&FFT_MajorPeak, &FFT_Magnitude);
-        #else
-          FFT.majorPeak(FFT_MajorPeak, FFT_Magnitude);                // let the effects know which freq was most dominant
-        #endif
+        // #else
+          #ifndef UM_AUDIOREACTIVE_USE_ESPDSP_FFT
+            #if defined(FFT_LIB_REV) && FFT_LIB_REV > 0x19
+              // arduinoFFT 2.x has a slightly different API
+              FFT.majorPeak(&FFT_MajorPeak, &FFT_Magnitude);
+            #else
+              FFT.majorPeak(FFT_MajorPeak, FFT_Magnitude);                // let the effects know which freq was most dominant
+            #endif
+          #endif
+        // #endif
         FFT_Magnitude *= wc;  // apply correction factor
 
         if (FFT_MajorPeak < (SAMPLE_RATE /  samplesFFT)) {FFT_MajorPeak = 1.0f; FFT_Magnitude = 0;}                  // too low - use zero
@@ -940,8 +1094,17 @@ static void postProcessFFTResults(bool noiseGateOpen, int numberOfChannels, bool
     for (int i=0; i < numberOfChannels; i++) {
 
       if (noiseGateOpen) { // noise gate open
+
+        if (TROYHACKS_PINKY) {
+          fftBinAverage[i] = fftBinAverage[i] * 0.99 + (0.01 * fftCalc[i] * FFT_DOWNSCALE * (soundAgc ? multAgc : ((float)sampleGain/40.0f * (float)inputLevel/128.0f + 1.0f/16.0f)));
+        }
         // Adjustment for frequency curves.
-        fftCalc[i] *= fftResultPink[pinkIndex][i];
+        if (fftBinAverage[0] != 0 && !TROYHACKS_PINKY) {
+          fftCalc[i] *= fftBinAverage[i];
+        } else {
+          fftCalc[i] *= fftResultPink[pinkIndex][i];
+        }
+        
         if (FFTScalingMode > 0) fftCalc[i] *= FFT_DOWNSCALE;  // adjustment related to FFT windowing function
         // Manual linear adjustment of gain using sampleGain adjustment for different input types.
         fftCalc[i] *= soundAgc ? multAgc : ((float)sampleGain/40.0f * (float)inputLevel/128.0f + 1.0f/16.0f); //apply gain, with inputLevel adjustment
@@ -2645,11 +2808,23 @@ class AudioReactive : public Usermod {
         infoArr.add(roundf(sampleTime)/100.0f);
         infoArr.add(" ms");
 
+        #ifdef UM_AUDIOREACTIVE_USE_ESPDSP_FFT
+          infoArr = user.createNestedArray(F("FFT time (ESP-DSP)"));
+        #else
+          infoArr = user.createNestedArray(F("FFT time"));
+        #endif
+        infoArr.add(roundf(fftTime)/100.0f);
+        if ((fftTime/100) >= FFT_MIN_CYCLE) // FFT time over budget -> I2S buffer will overflow 
+          infoArr.add("<b style=\"color:red;\">! ms</b>");
+        else if ((fftTime/80 + sampleTime/80) >= FFT_MIN_CYCLE) // FFT time >75% of budget -> risk of instability
+          infoArr.add("<b style=\"color:orange;\"> ms!</b>");
+        else
+          infoArr.add(" ms");
+
         infoArr = user.createNestedArray(F("Filtering time"));
         infoArr.add(roundf(filterTime)/100.0f);
         infoArr.add(" ms");
 
-        infoArr = user.createNestedArray(F("FFT time"));
         infoArr.add(roundf(fftTime)/100.0f);
 
 #ifdef FFT_USE_SLIDING_WINDOW

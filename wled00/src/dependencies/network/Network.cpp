@@ -3,7 +3,7 @@
 IPAddress NetworkClass::localIP()
 {
   IPAddress localIP;
-#if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
+#if (defined(ARDUINO_ARCH_ESP32) || defined(ARDUINO_ARCH_ESP32S3)) && defined(WLED_USE_ETHERNET)
   localIP = ETH.localIP();
   if (localIP[0] != 0) {
     return localIP;
@@ -19,7 +19,7 @@ IPAddress NetworkClass::localIP()
 
 IPAddress NetworkClass::subnetMask()
 {
-#if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
+#if (defined(ARDUINO_ARCH_ESP32) || defined(ARDUINO_ARCH_ESP32S3)) && defined(WLED_USE_ETHERNET)
   if (ETH.localIP()[0] != 0) {
     return ETH.subnetMask();
   }
@@ -32,7 +32,7 @@ IPAddress NetworkClass::subnetMask()
 
 IPAddress NetworkClass::gatewayIP()
 {
-#if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
+#if (defined(ARDUINO_ARCH_ESP32) || defined(ARDUINO_ARCH_ESP32S3)) && defined(WLED_USE_ETHERNET)
   if (ETH.localIP()[0] != 0) {
       return ETH.gatewayIP();
   }
@@ -45,7 +45,7 @@ IPAddress NetworkClass::gatewayIP()
 
 void NetworkClass::localMAC(uint8_t* MAC)
 {
-#if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
+#if (defined(ARDUINO_ARCH_ESP32) || defined(ARDUINO_ARCH_ESP32S3)) && defined(WLED_USE_ETHERNET)
   // ETH.macAddress(MAC); // Does not work because of missing ETHClass:: in ETH.ccp
 
   // Start work around
@@ -73,7 +73,7 @@ void NetworkClass::localMAC(uint8_t* MAC)
 
 bool NetworkClass::isConnected()
 {
-#if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
+#if (defined(ARDUINO_ARCH_ESP32) || defined(ARDUINO_ARCH_ESP32S3)) && defined(WLED_USE_ETHERNET)
   return (WiFi.localIP()[0] != 0 && WiFi.status() == WL_CONNECTED) || ETH.localIP()[0] != 0;
 #else
   return (WiFi.localIP()[0] != 0 && WiFi.status() == WL_CONNECTED);

@@ -245,6 +245,7 @@ void appendGPIOinfo() {
     if (ethernetBoards[ethernetType].eth_power>=0)     { oappend(","); oappend(itoa(ethernetBoards[ethernetType].eth_power,nS,10)); }
     if (ethernetBoards[ethernetType].eth_mdc>=0)       { oappend(","); oappend(itoa(ethernetBoards[ethernetType].eth_mdc,nS,10)); }
     if (ethernetBoards[ethernetType].eth_mdio>=0)      { oappend(","); oappend(itoa(ethernetBoards[ethernetType].eth_mdio,nS,10)); }
+    #ifndef CONFIG_IDF_TARGET_ESP32S3
     switch (ethernetBoards[ethernetType].eth_clk_mode) {
       case ETH_CLOCK_GPIO0_IN:
       case ETH_CLOCK_GPIO0_OUT:
@@ -257,6 +258,7 @@ void appendGPIOinfo() {
         oappend(SET_F(",17"));
         break;
     }
+    #endif
   }
   #endif
 
