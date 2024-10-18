@@ -82,6 +82,9 @@ static int wledmm_get_tcp_stacksize(void) {
 }
 #endif
 
+
+extern "C" void usePWMFixedNMI();  // PWM bugfix for 8266
+
 /*
  * Main WLED class implementation. Mostly initialization and connection logic
  */
@@ -637,6 +640,11 @@ void WLED::setup()
   #else
     DEBUG_PRINTLN(F("PSRAM not used."));
   #endif
+
+#ifdef ESP8266
+  usePWMFixedNMI(); // link the 8266 NMI fix
+#endif
+
 #endif
 #if defined(ARDUINO_ARCH_ESP32)
   if (strncmp("ESP32-PICO", ESP.getChipModel(), 10) == 0) { // WLEDMM detect pico board at runtime

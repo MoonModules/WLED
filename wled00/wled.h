@@ -337,8 +337,6 @@ WLED_GLOBAL int8_t irPin _INIT(IRPIN);
   constexpr uint8_t hardwareTX = 1;
 #endif
 
-//WLED_GLOBAL byte presetToApply _INIT(0);
-
 WLED_GLOBAL char ntpServerName[33] _INIT("0.wled.pool.ntp.org");   // NTP server to use
 
 // WiFi CONFIG (all these can be changed via web UI, no need to set them here)
@@ -374,7 +372,11 @@ WLED_GLOBAL byte bootPreset   _INIT(0);                   // save preset to load
 //if true, a segment per bus will be created on boot and LED settings save
 //if false, only one segment spanning the total LEDs is created,
 //but not on LED settings save if there is more than one segment currently
+#ifdef WLED_AUTOSEGMENTS
+WLED_GLOBAL bool autoSegments    _INIT(true);
+#else
 WLED_GLOBAL bool autoSegments    _INIT(false);
+#endif
 WLED_GLOBAL bool correctWB       _INIT(false); // CCT color correction of RGB color
 WLED_GLOBAL bool cctFromRgb      _INIT(false); // CCT is calculated from RGB instead of using seg.cct
 WLED_GLOBAL bool gammaCorrectCol _INIT(true ); // use gamma correction on colors // WLEDMM that's what you would think, but the code tells a different story.
@@ -821,6 +823,10 @@ WLED_GLOBAL int8_t spi_sclk  _INIT(HW_PIN_CLOCKSPI);
 WLED_GLOBAL StaticJsonDocument<JSON_BUFFER_SIZE> doc;
 #endif // WLEDMM end
 WLED_GLOBAL volatile uint8_t jsonBufferLock _INIT(0);
+
+#if defined(ARDUINO_ARCH_ESP32)
+WLED_GLOBAL SemaphoreHandle_t jsonBufferLockMutex _INIT(xSemaphoreCreateRecursiveMutex());
+#endif
 
 // enable additional debug output
 //WLEDMM: switch between netdebug and serial
