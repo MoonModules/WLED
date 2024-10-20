@@ -267,11 +267,11 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   // lx parser
   #ifdef WLED_ENABLE_LOXONE
   int lx = elem[F("lx")] | -1;
-  if (lx > 0) {
+  if (lx >= 0) {
     parseLxJson(lx, id, false);
   }
   int ly = elem[F("ly")] | -1;
-  if (ly > 0) {
+  if (ly >= 0) {
     parseLxJson(ly, id, true);
   }
   #endif
@@ -573,7 +573,6 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     ps = presetCycCurr;
     if (root["win"].isNull() && getVal(root["ps"], &ps, 0, 0) && ps > 0 && ps < 251 && ps != currentPreset) {
       // b) preset ID only or preset that does not change state (use embedded cycling limits if they exist in getVal())
-      presetCycCurr = ps;
       unloadPlaylist();          // applying a preset unloads the playlist
       applyPreset(ps, callMode); // async load from file system (only preset ID was specified)
       if (iAmGroot) suspendStripService = false; // WLEDMM release lock

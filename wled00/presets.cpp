@@ -125,11 +125,21 @@ void initPresetsFile()
   f.close();
 }
 
+#if 0 // not used in WLEDMM
+bool applyPresetFromPlaylist(byte index)
+{
+  DEBUG_PRINTF_P(PSTR("Request to apply preset: %d\n"), index);
+  presetToApply = presetCycCurr = index;
+  callModeToApply = CALL_MODE_DIRECT_CHANGE;
+  return true;
+}
+#endif
+
 bool applyPreset(byte index, byte callMode)
 {
   DEBUG_PRINT(F("Request to apply preset: "));
   DEBUG_PRINTLN(index);
-  presetToApply = index;
+  presetToApply = presetCycCurr = index;
   callModeToApply = callMode;
   return true;
 }
