@@ -97,6 +97,38 @@ static um_data_t* getAudioData() {
   }
   return um_data;
 }
+
+
+static uint8_t getMax(uint8_t* myArray, int arraySize) {
+  uint8_t maxV = 0;
+  for (int i = 0; i < arraySize; i++) {
+      maxV = max(myArray[i], maxV);
+   }
+   return maxV;
+}
+
+static uint8_t decayValue(uint8_t last, uint8_t newValue) {
+  if(last == 0 || SEGMENT.check2 == false) {
+    return newValue;
+  }
+  return max((uint8_t) (last * 0.8), newValue);
+}
+
+static uint8_t* getSmallFFT(uint8_t* fftresult) {
+  static uint8_t data[3] = {0};
+
+  uint8_t group1[3] = {fftresult[0],  fftresult[1]/2,  fftresult[2]/2};
+  data[0] = decayValue(data[0], getMax(group1, 3));
+
+  uint8_t group2[3] = {fftresult[4]/2, fftresult[5], fftresult[6]/6};
+  data[1] = decayValue(data[1], getMax(group2, 3));
+  
+  uint8_t group3[3] = {fftresult[13]/2, fftresult[14], fftresult[15]/2};
+  data[2] = decayValue(data[2], getMax(group3, 5));
+  
+  // USER_PRINTF("%u %u %u\n", data[0], data[1], data[2]);
+  return data;
+} 
 // effect functions
 
 /*
@@ -7504,6 +7536,7 @@ uint16_t mode_DJLight(void) {                   // Written by Stefan Petrick, Ad
 
   um_data_t *um_data = getAudioData();
   uint8_t *fftResult = (uint8_t*)um_data->u_data[2];
+  uint8_t *fftSmall = getSmallFFT(fftResult);
   float volumeSmth    = *(float*)um_data->u_data[0];
 
   if (SEGENV.call == 0) {
@@ -7517,8 +7550,11 @@ uint16_t mode_DJLight(void) {                   // Written by Stefan Petrick, Ad
 
     CRGB color = CRGB(0,0,0);
     // color = CRGB(fftResult[15]/2, fftResult[5]/2, fftResult[0]/2);   // formula from 0.13.x (10Khz): R = 3880-5120, G=240-340, B=60-100
-    if (!SEGENV.check1) {
-      color = CRGB(fftResult[12]/2, fftResult[3]/2, fftResult[1]/2);    // formula for 0.14.x  (22Khz): R = 3015-3704, G=216-301, B=86-129
+    if (SEGENV.check1) {
+      color = CRGB(fftSmall[2]/2, fftSmall[1]/2, fftSmall[0]/3);
+    }
+    else if(true) {
+      color = CRGB(fftResult[15], fftResult[5]/2, fftResult[0]/2);   // formula from 0.13.x (10Khz): R = 3880-5120, G=240-340, B=60-100
     } else {
       // candy factory: an attempt to get more colors
       color = CRGB(fftResult[11]/2 + fftResult[12]/4 + fftResult[14]/4, // red  : 2412-3704 + 4479-7106 
@@ -7538,11 +7574,11 @@ uint16_t mode_DJLight(void) {                   // Written by Stefan Petrick, Ad
     if (color.getLuma() > 32) {                                      // don't change "dark" pixels
       CHSV hsvColor = rgb2hsv_approximate(color);
       hsvColor.v = min(max(hsvColor.v, (uint8_t)48), (uint8_t)204);  // 48 < brightness < 204
-      if (SEGENV.check1)
-        hsvColor.s = max(hsvColor.s, (uint8_t)204);                  // candy factory mode: strongly turn up color saturation (> 192)
-      else
+      // if (SEGENV.check1)
+      //   hsvColor.s = max(hsvColor.s, (uint8_t)204);                  // candy factory mode: strongly turn up color saturation (> 192)
+      // else
         hsvColor.s = max(hsvColor.s, (uint8_t)108);                  // normal mode: turn up color saturation to avoid pastels
-      color = hsvColor;
+      // color = hsvColor;
     }
     //if (color.getLuma() > 12) color.maximizeBrightness();          // for testing
 
@@ -7558,7 +7594,7 @@ uint16_t mode_DJLight(void) {                   // Written by Stefan Petrick, Ad
 
   return FRAMETIME;
 } // mode_DJLight()
-static const char _data_FX_MODE_DJLIGHT[] PROGMEM = "DJ Light@Speed,,,,,Candy Factory;;;01f;m12=2,si=0"; // Arc, Beatsin
+static const char _data_FX_MODE_DJLIGHT[] PROGMEM = "DJ Light@Speed,,,,,Small FFT,Decay;;;01f;m12=2,si=0"; // Arc, Beatsin
 
 
 ////////////////////
