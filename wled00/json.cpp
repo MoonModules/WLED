@@ -165,6 +165,7 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   uint16_t of  = seg.offset;
   uint8_t  soundSim = elem["si"] | seg.soundSim;
   uint8_t  map1D2D  = elem["m12"] | seg.map1D2D;
+  if (map1D2D > 7) map1D2D = M12_pBar; // WLEDMM fix for "waterfall" mapping which is out of range 0-7
 
   //WLEDMM jMap
   if (map1D2D == M12_jMap && !seg.jMap)
@@ -327,6 +328,8 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   JsonArray iarr = elem[F("i")]; //set individual LEDs
   if (!iarr.isNull()) {
     uint8_t oldMap1D2D = seg.map1D2D;
+    if (oldMap1D2D > 7) oldMap1D2D = M12_pBar; // WLEDMM fix for "waterfall" mapping which is out of range 0-7
+
     seg.map1D2D = M12_Pixels; // no mapping
     // WLEDMM begin - we need to init segment caches before putting any pixels
     if (strip.isServicing()) {

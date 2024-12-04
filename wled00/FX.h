@@ -347,7 +347,8 @@ typedef enum mapping1D2D {
   M12_jMap = 4, //WLEDMM jMap
   M12_sCircle = 5, //WLEDMM Circle
   M12_sBlock = 6, //WLEDMM Block
-  M12_sPinwheel = 7 //WLEDMM Pinwheel
+  M12_sPinwheel = 7, //WLEDMM Pinwheel
+  M12_sWaterfall = 8 //WLEDMM Waterfall
 } mapping1D2D_t;
 
 // segment, 72 bytes
@@ -425,6 +426,8 @@ typedef struct Segment {
 
     bool _isSimpleSegment = false;      // simple = no grouping or spacing - mirror, transpose or reverse allowed
     bool _isSuperSimpleSegment = false; // superSimple = no grouping or spacing, no mirror - only transpose or reverse allowed
+    bool _is2Deffect = false;           // tells us if the strip is running a real 2D effect
+
 #ifdef WLEDMM_FASTPATH
     // WLEDMM cache some values that won't change while drawing a frame
     bool _isValid2D = false;

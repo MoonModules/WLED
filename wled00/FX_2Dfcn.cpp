@@ -262,7 +262,29 @@ void Segment::startFrame(void) {
   #if 0 && defined(WLED_ENABLE_HUB75MATRIX)
     _firstFill = true; // dirty HACK
   #endif
+#else
+  uint16_t _2dHeight   = calc_virtualHeight();
+  uint16_t _2dWidth    = is2D() ? calc_virtualWidth() : calc_virtualLength();
 #endif
+
+  // WLEDMM Make sure we don't scroll any real 2D effect
+  if (!isActive()) _is2Deffect = is2D();
+  else {
+    _is2Deffect = (strstr(strip.getModeData(mode), ";2") != nullptr);                    // effect data string contains ";2" --> 2d
+    if (is2D() && (strstr(strip.getModeData(mode),";12") != nullptr)) _is2Deffect = true;// effect data string contains ";12" --> 1d 2d --> maybe 2D
+    if (is2D() && ((mode == 0) || (mode >= strip.getModeCount()))) _is2Deffect = true;
+    if (is2D() && nrOfVStrips() > 1) _is2Deffect = true;                                // 1.5d effect on virtual strips => 2D
+    if (!strip.isMatrix) _is2Deffect = false;                                            // not running in 2D mode
+  }
+
+  // WLEDMM Waterfall mapping
+  if (!_is2Deffect && (map1D2D == M12_pBar) && reverse) { // WLEDMM Waterfall = bar + reverse
+    if (!ledsrgb || (ledsrgbSize == 0)) setUpLeds();      // create segment buffer if not set up already ==> 30% faster, and prevents interference with other segments.
+    for (unsigned myRow = _2dHeight-1; myRow > 0; myRow--)
+      for (unsigned myCol = 0; myCol < _2dWidth; myCol++) {
+        setPixelColorXY(myCol, myRow, getPixelColorXY(int(myCol), int(myRow)-1));
+      }
+  }
 }
 // WLEDMM end
 

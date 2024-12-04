@@ -644,7 +644,11 @@ uint16_t Segment::nrOfVStrips() const {
   uint16_t vLen = 1;
 #ifndef WLED_DISABLE_2D
   if (is2D()) {
-    switch (map1D2D) {
+
+    mapping1D2D_t map1d2d = mapping1D2D_t(map1D2D);
+    if ((map1d2d == M12_pBar) && reverse) map1d2d = M12_sWaterfall; // WLEDMM hack to support waterfall mapping (= "Bar" + "reverse")
+
+    switch (map1d2d) {
       case M12_pBar:
         vLen = calc_virtualWidth();
         break;
@@ -654,6 +658,9 @@ uint16_t Segment::nrOfVStrips() const {
       case M12_sBlock: //WLEDMM
         vLen = (calc_virtualWidth() + calc_virtualHeight()) / 8; // take half of the average width
         break;
+      default:
+        vLen = 1;  // WLEDMM other modes do not support virtual strips
+      break;
     }
   }
 #endif
@@ -865,7 +872,14 @@ uint16_t Segment::calc_virtualLength() const {
     uint16_t vW = calc_virtualWidth();
     uint16_t vH = calc_virtualHeight();
     uint16_t vLen = vW * vH; // use all pixels from segment
-    switch (map1D2D) {
+
+    mapping1D2D_t map1d2d = mapping1D2D_t(map1D2D);
+    if ((map1d2d == M12_pBar) && reverse) map1d2d = M12_sWaterfall; // WLEDMM hack to support waterfall mapping (= "Bar" + "reverse")
+
+    switch (map1d2d) {
+      case M12_sWaterfall:
+        vLen = vW;
+      break;
       case M12_pBar:
         vLen = vH;
         break;
@@ -896,6 +910,9 @@ uint16_t Segment::calc_virtualLength() const {
       case M12_sPinwheel:
         vLen = getPinwheelLength(vW, vH);
         break;
+      default: // M12_Pixels uses all available pixels
+        vLen = vW * vH; // use all pixels from segment
+      break;
     }
     return vLen;
   }
@@ -946,7 +963,14 @@ void IRAM_ATTR_YN __attribute__((hot)) Segment::setPixelColor(int i, uint32_t co
   if (is2D()) {
     uint16_t vH = virtualHeight();  // segment height in logical pixels
     uint16_t vW = virtualWidth();
-    switch (map1D2D) {
+
+    mapping1D2D_t map1d2d = mapping1D2D_t(map1D2D);
+    if ((map1d2d == M12_pBar) && reverse) map1d2d = M12_sWaterfall; // WLEDMM hack to support waterfall mapping (= "Bar" + "reverse")
+
+    switch (map1d2d) {
+      case M12_sWaterfall:
+        setPixelColorXY(i % vW, 0, col);  // only set first row
+      break;
       case M12_Pixels:
         // use all available pixels as a long strip
         setPixelColorXY(i % vW, i / vW, col);
@@ -1218,7 +1242,14 @@ uint32_t __attribute__((hot)) Segment::getPixelColor(int i) const
   if (is2D()) {
     uint16_t vH = virtualHeight();  // segment height in logical pixels
     uint16_t vW = virtualWidth();
-    switch (map1D2D) {
+
+    mapping1D2D_t map1d2d = mapping1D2D_t(map1D2D);
+    if ((map1d2d == M12_pBar) && reverse) map1d2d = M12_sWaterfall; // WLEDMM hack to support waterfall mapping (= "Bar" + "reverse")
+
+    switch (map1d2d) {
+      case M12_sWaterfall:
+        return getPixelColorXY(i % vW, 0);  // only use first row
+      break;
       case M12_Pixels:
         return getPixelColorXY(i % vW, i / vW);
         break;
@@ -1414,7 +1445,8 @@ void __attribute__((hot)) Segment::fill(uint32_t c) {
   const uint_fast16_t cols = is2D() ? virtualWidth() : virtualLength();             // WLEDMM use fast int types
   const uint_fast16_t rows = virtualHeight(); // will be 1 for 1D
 
-  if (is2D()) {
+  bool reallyIs2D = _is2Deffect || (is2D() && !(map1D2D == M12_pBar && reverse));  // WLEDMM switch to "1D" mode for Waterfall
+  if (is2D() && reallyIs2D) {
     // pre-calculate scaled color
     uint32_t scaled_col = c;
     bool simpleSegment = (grouping == 1) && (spacing == 0);
@@ -1470,8 +1502,9 @@ void Segment::fadePixelColor(uint16_t n, uint8_t fade) {
  */
 void __attribute__((hot)) Segment::fade_out(uint8_t rate) {
   if (!isActive()) return; // not active
-  const uint_fast16_t cols = is2D() ? virtualWidth() : virtualLength();           // WLEDMM use fast int types
-  const uint_fast16_t rows = virtualHeight(); // will be 1 for 1D
+  bool reallyIs2D = _is2Deffect || (is2D() && !(map1D2D == M12_pBar && reverse));  // WLEDMM switch to "1D" mode for Bar or waterfall
+  const uint_fast16_t cols = reallyIs2D ? virtualWidth() : virtualLength();        // WLEDMM use fast int types
+  const uint_fast16_t rows = reallyIs2D ? virtualHeight() : 1;                     // must be 1 for 1D
 
   uint_fast8_t fadeRate = (255-rate) >> 1;
   float mappedRate_r = 1.0f / (float(fadeRate) +1.1f); // WLEDMM use reciprocal  1/mappedRate -> faster on non-FPU chips
@@ -1483,7 +1516,7 @@ void __attribute__((hot)) Segment::fade_out(uint8_t rate) {
   int b2 = B(color2);
 
   for (unsigned y = 0; y < rows; y++) for (unsigned x = 0; x < cols; x++) {
-    uint32_t color = is2D() ? getPixelColorXY(int(x), int(y)) : getPixelColor(int(x));
+    uint32_t color = reallyIs2D ? getPixelColorXY(int(x), int(y)) : getPixelColor(int(x));
     if (color == color2) continue;  // WLEDMM speedup - pixel color = target color, so nothing to do
     int w1 = W(color);
     int r1 = R(color);
@@ -1503,7 +1536,7 @@ void __attribute__((hot)) Segment::fade_out(uint8_t rate) {
     uint32_t colorNew = RGBW32(r1 + rdelta, g1 + gdelta, b1 + bdelta, w1 + wdelta); // WLEDMM
 
     if (colorNew != color) {                                                        // WLEDMM speedup - do not repaint the same color
-      if (is2D()) setPixelColorXY(int(x), int(y), colorNew);
+      if (reallyIs2D) setPixelColorXY(int(x), int(y), colorNew);
       else        setPixelColor(int(x), colorNew);
     }
   }
@@ -1512,12 +1545,14 @@ void __attribute__((hot)) Segment::fade_out(uint8_t rate) {
 // fades all pixels to black using nscale8()
 void __attribute__((hot)) Segment::fadeToBlackBy(uint8_t fadeBy) {
   if (!isActive() || fadeBy == 0) return;   // optimization - no scaling to apply
-  const uint_fast16_t cols = is2D() ? virtualWidth() : virtualLength();      // WLEDMM use fast int types
-  const uint_fast16_t rows = virtualHeight(); // will be 1 for 1D
+  bool reallyIs2D = _is2Deffect || (is2D() && !(map1D2D == M12_pBar && reverse));  // WLEDMM switch to "1D" mode for Bar or waterfall
+  const uint_fast16_t cols = reallyIs2D ? virtualWidth() : virtualLength();        // WLEDMM use fast int types
+  const uint_fast16_t rows = reallyIs2D ? virtualHeight() : 1;                     // must be 1 for 1D
+
   const uint_fast8_t scaledown = 255-fadeBy;  // WLEDMM faster to pre-compute this
 
   // WLEDMM minor optimization
-  if(is2D()) {
+  if(reallyIs2D) {
     for (unsigned y = 0; y < rows; y++) for (unsigned x = 0; x < cols; x++) {
       uint32_t cc = getPixelColorXY(int(x),int(y));                            // WLEDMM avoid RGBW32 -> CRGB -> RGBW32 conversion
       uint32_t cc2 = color_fade(cc, scaledown);                      // fade
@@ -1539,7 +1574,8 @@ void __attribute__((hot)) Segment::fadeToBlackBy(uint8_t fadeBy) {
 void __attribute__((hot)) Segment::blur(uint8_t blur_amount, bool smear) {
   if (!isActive() || blur_amount == 0) return; // optimization: 0 means "don't blur"
 #ifndef WLED_DISABLE_2D
-  if (is2D()) {
+  bool reallyIs2D = _is2Deffect || (is2D() && !(map1D2D == M12_pBar && reverse));  // WLEDMM switch to "1D" mode for Bar or waterfall
+  if (reallyIs2D) {
     // compatibility with 2D
     const uint_fast32_t cols = virtualWidth();
     const uint_fast32_t rows = virtualHeight();
