@@ -287,6 +287,9 @@ void Segment::resetIfRequired() {
       needsBlank = false;
     }
   }
+  #ifdef WLED_ENABLE_GIF
+  endImagePlayback(this);
+  #endif
 }
 
 void Segment::setUpLeds() {
