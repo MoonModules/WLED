@@ -104,7 +104,7 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   Segment& seg = strip.getSegment(id);
   Segment prev = seg; //make a backup so we can tell if something changed // WLEDMM fixMe: copy constructor = waste of memory
 
-  uint16_t start = elem["start"] | seg.start;
+  uint32_t start = elem["start"] | seg.start;
   if (stop < 0) {
     int len = elem["len"]; // WLEDMM bugfix for broken presets with len < 0
     stop = (len > 0) ? start + len : seg.stop;

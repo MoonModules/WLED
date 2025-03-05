@@ -204,9 +204,12 @@ static bool sendLiveLedsWs(uint32_t wsClient)  // WLEDMM added "static"
     if (strip.isMatrix) {
       used = Segment::maxWidth * Segment::maxHeight;
       if (used > MAX_LIVE_LEDS_WS*4)
-        n = 4;
+        // WLEDMM/TroyHacks: Pick the best scaling factor for uneven matrix sizes. 
+        // Optimized for preview accuracy but may increase preview resolution leading to some performance loss. 
+        // Best practice is to not live preview if you need maximum real-time performance.
+        n = Segment::maxWidth % 4 == 0 ? 4 : (Segment::maxWidth % 3 == 0 ? 3 : (Segment::maxWidth % 2 == 0 ? 2 : 1));
       else if (used > MAX_LIVE_LEDS_WS)
-        n = 2;
+        n = Segment::maxWidth % 2 == 0 ? 2 : 1;
       else
         n = 1;
     } else {

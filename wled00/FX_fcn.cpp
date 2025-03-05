@@ -944,7 +944,7 @@ static void xyFromBlock(uint16_t &x,uint16_t &y, uint16_t i, uint16_t vW, uint16
 
 }
 
-void IRAM_ATTR_YN __attribute__((hot)) Segment::setPixelColor(int i, uint32_t col) //WLEDMM: IRAM_ATTR conditionally
+void IRAM_ATTR_YN __attribute__((hot)) Segment::setPixelColor(uint32_t i, uint32_t col) //WLEDMM: IRAM_ATTR conditionally
 {
   if (!isActive()) return; // not active
 #ifndef WLED_DISABLE_2D
@@ -961,7 +961,7 @@ void IRAM_ATTR_YN __attribute__((hot)) Segment::setPixelColor(int i, uint32_t co
     switch (map1D2D) {
       case M12_Pixels:
         // use all available pixels as a long strip
-        setPixelColorXY(i % vW, i / vW, col);
+        setPixelColorXY(uint16_t(i % vW), i / vW, col);
         break;
       case M12_pBar:
         // expand 1D effect vertically or have it play on virtual strips
@@ -1022,8 +1022,8 @@ void IRAM_ATTR_YN __attribute__((hot)) Segment::setPixelColor(int i, uint32_t co
         }
         break;
       case M12_pCorner: {
-          int x = min(i, vW-1);
-          int y = min(i, vH-1);
+          uint32_t x = min(i, uint32_t(vW-1));
+          uint32_t y = min(i, uint32_t(vH-1));
           if (i <= y) drawLine(0,y, x,y, col, false);  // botton line (if visible)
           if (i <= x) drawLine(x,0, x,y, col, false);  // right line (if visible)
         }
@@ -1051,12 +1051,12 @@ void IRAM_ATTR_YN __attribute__((hot)) Segment::setPixelColor(int i, uint32_t co
           setPixelColorXY(x, y, col);
         }
         else { // pCorner -> block
-          int centerX = (vW+1)/2 - 1;
-          int centerY = (vH+1)/2 - 1;
-          int xLeft   = max(centerX-i, 0);
-          int yTop    = max(centerY-i, 0);
-          int xRight  = min(centerX+i+1, vW-1);
-          int yBottom = min(centerY+i+1, vH-1);
+          uint32_t centerX = (vW+1)/2 - 1;
+          uint32_t centerY = (vH+1)/2 - 1;
+          uint32_t xLeft   = max(centerX-i, uint32_t(0));
+          uint32_t yTop    = max(centerY-i, uint32_t(0));
+          uint32_t xRight  = min(centerX+i+uint32_t(1), uint32_t(vW-1));
+          uint32_t yBottom = min(centerY+i+uint32_t(1), uint32_t(vH-1));
 
           if (yTop == centerY-i)      drawLine(xLeft,yTop, xRight, yTop, col);       // top and bottom horizontal lines, if visible
           if (yBottom == centerY+i+1) drawLine(xLeft,yBottom, xRight, yBottom, col);
@@ -1196,8 +1196,8 @@ void Segment::setPixelColor(float i, uint32_t col, bool aa)
 
   float fC = i * (virtualLength()-1);
   if (aa) {
-    uint16_t iL = roundf(fC-0.49f);
-    uint16_t iR = roundf(fC+0.49f);
+    uint32_t iL = roundf(fC-0.49f);
+    uint32_t iR = roundf(fC+0.49f);
     float    dL = (fC - iL)*(fC - iL);
     float    dR = (iR - fC)*(iR - fC);
     uint32_t cIL = getPixelColor(iL | (vStrip<<16));
@@ -1214,11 +1214,11 @@ void Segment::setPixelColor(float i, uint32_t col, bool aa)
       setPixelColor(iL | (vStrip<<16), col);
     }
   } else {
-    setPixelColor(uint16_t(roundf(fC)) | (vStrip<<16), col);
+    setPixelColor(uint32_t(roundf(fC)) | (vStrip<<16), col);
   }
 }
 
-uint32_t __attribute__((hot)) Segment::getPixelColor(int i) const
+uint32_t __attribute__((hot)) Segment::getPixelColor(uint32_t i) const
 {
   if (!isActive()) return 0; // not active
 #ifndef WLED_DISABLE_2D
@@ -1430,18 +1430,18 @@ void __attribute__((hot)) Segment::fill(uint32_t c) {
       else setPixelColorXY_slow(x, y, c);
     }
   } else { // fill 1D strip
-    for (unsigned x = 0; x < cols; x++) setPixelColor(int(x), c);
+    for (uint32_t x = 0; x < cols; x++) setPixelColor(uint32_t(x), c);
   }
 }
 
 // Blends the specified color with the existing pixel color.
-void Segment::blendPixelColor(int n, uint32_t color, uint8_t blend) {
+void Segment::blendPixelColor(uint32_t n, uint32_t color, uint8_t blend) {
   if (blend == UINT8_MAX) setPixelColor(n, color); 
   else setPixelColor(n, color_blend(getPixelColor(n), color, blend));
 }
 
 // Adds the specified color with the existing pixel color perserving color balance.
-void Segment::addPixelColor(int n, uint32_t color, bool fast) {
+void Segment::addPixelColor(uint32_t n, uint32_t color, bool fast) {
   if (!isActive()) return; // not active
   uint32_t col = getPixelColor(n);
   uint8_t r = R(col);
@@ -1460,7 +1460,7 @@ void Segment::addPixelColor(int n, uint32_t color, bool fast) {
   setPixelColor(n, col);
 }
 
-void Segment::fadePixelColor(uint16_t n, uint8_t fade) {
+void Segment::fadePixelColor(uint32_t n, uint8_t fade) {
   if (!isActive()) return; // not active
   CRGB pix = CRGB(getPixelColor(n)).nscale8_video(fade);
   setPixelColor(n, pix);
@@ -1504,8 +1504,8 @@ void __attribute__((hot)) Segment::fade_out(uint8_t rate) {
     uint32_t colorNew = RGBW32(r1 + rdelta, g1 + gdelta, b1 + bdelta, w1 + wdelta); // WLEDMM
 
     if (colorNew != color) {                                                        // WLEDMM speedup - do not repaint the same color
-      if (is2D()) setPixelColorXY(int(x), int(y), colorNew);
-      else        setPixelColor(int(x), colorNew);
+      if (is2D()) setPixelColorXY(uint32_t(x), int(y), colorNew);
+      else        setPixelColor(uint32_t(x), colorNew);
     }
   }
 }
@@ -1528,8 +1528,8 @@ void __attribute__((hot)) Segment::fadeToBlackBy(uint8_t fadeBy) {
         setPixelColorXY(int(x), int(y), cc2);
     }
   } else {
-    for (uint_fast16_t x = 0; x < cols; x++) {
-      setPixelColor((uint16_t)x, CRGB(getPixelColor((uint16_t)x)).nscale8(scaledown));
+    for (uint32_t x = 0; x < cols; x++) {
+      setPixelColor((uint32_t)x, CRGB(getPixelColor((uint16_t)x)).nscale8(scaledown));
     }
   }
 }
@@ -1565,15 +1565,15 @@ void __attribute__((hot)) Segment::blur(uint8_t blur_amount, bool smear) {
         curnew = color_add(curnew, carryover, !smear);  // WLEDMM
       uint32_t prev = color_add(lastnew, part, !smear); // WLEDMM
       if (last != prev) // optimization: only set pixel if color has changed
-        setPixelColor(int(i - 1), prev);
+        setPixelColor(uint32_t(i - 1), prev);
     }
     else // first pixel
-      setPixelColor(int(i), curnew);
+      setPixelColor(uint32_t(i), curnew);
     lastnew = curnew;
     last = cur; // save original value for comparison on next iteration
     carryover = part;
   }
-  setPixelColor(int(vlength - 1), curnew);
+  setPixelColor(uint32_t(vlength - 1), curnew);
 }
 
 /*

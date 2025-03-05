@@ -651,7 +651,7 @@ void handleNotifications()
 
 void setRealtimePixel(uint16_t i, byte r, byte g, byte b, byte w)
 {
-  uint16_t pix = i + arlsOffset;
+  uint32_t pix = i + arlsOffset;
   if (pix < strip.getLengthTotal()) {
     if (!arlsDisableGammaCorrection && gammaCorrectCol) {
       r = gamma8(r);
@@ -789,7 +789,7 @@ extern "C" {
 }
 #endif
 
-uint8_t IRAM_ATTR_YN realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, uint8_t *buffer_in, uint8_t bri, bool isRGBW, uint8_t outputs, uint16_t leds_per_output, uint8_t fps_limit)  {
+uint8_t IRAM_ATTR_YN realtimeBroadcast(uint8_t type, IPAddress client, uint32_t length, uint8_t *buffer_in, uint8_t bri, bool isRGBW, uint8_t outputs, uint16_t leds_per_output, uint8_t fps_limit)  {
 
   if (!(apActive || interfacesInited) || !client[0] || !length) return 1;  // network not initialised or dummy/unset IP address  031522 ajn added check for ap
 
@@ -929,7 +929,7 @@ uint8_t IRAM_ATTR_YN realtimeBroadcast(uint8_t type, IPAddress client, uint16_t 
 
       const uint_fast16_t ARTNET_CHANNELS_PER_PACKET = isRGBW?512:510; // 512/4=128 RGBW LEDs, 510/3=170 RGB LEDs
       
-      uint_fast16_t bufferOffset = 0;
+      uint_fast32_t bufferOffset = 0;
       uint_fast16_t hardware_output_universe = 0;
       
       sequenceNumber++;

@@ -907,9 +907,9 @@ bool Segment::jsonToPixels(char * name, uint8_t fileNr) {
 
   if (!map.isNull() && map.size()) {  // not an empty map
 
-    for (uint16_t i=0; i<map.size(); i+=3) {
+    for (uint32_t i=0; i<map.size(); i+=3) {
       CRGB color = CRGB(map[i+2][0], map[i+2][1], map[i+2][2]);
-      for (uint16_t j=map[i]; j<=map[i+1]; j++) {
+      for (uint32_t j=map[i]; j<=map[i+1]; j++) {
         setPixelColor(j, color);
       }
     }

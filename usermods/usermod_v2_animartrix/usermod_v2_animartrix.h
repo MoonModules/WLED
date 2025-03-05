@@ -106,7 +106,7 @@ class ANIMartRIXMod:public ANIMartRIX {
 	void setPixelColor(int x, int y, rgb pixel) {
 		SEGMENT.setPixelColorXY(x, y, CRGB(pixel.red, pixel.green, pixel.blue));
 	}
-	void setPixelColor(int index, rgb pixel) {
+	void setPixelColor(uint32_t index, rgb pixel) {
 		SEGMENT.setPixelColor(index, CRGB(pixel.red, pixel.green, pixel.blue));
   	}
 

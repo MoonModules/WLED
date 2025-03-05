@@ -41,9 +41,9 @@ var ctx = null; // WLEDMM
 var ledmapNr = -1; //WLEDMM
 var ledmapFileNames = []; //WLEDMM
 let nodesData = []; //WLEDMM
-let ibtglChecked = true; //WLEDMM
-let sbtglChecked = true; //WLEDMM
-let sbchkChecked = false; //WLEDMM
+let ibtglChecked = false; //WLEDMM include brightness checkbox default state
+let sbtglChecked = false; //WLEDMM segment bounds checkbox default state
+let sbchkChecked = false; //WLEDMM checked segments only checkbox default state 
 
 function handleVisibilityChange() {if (!d.hidden && new Date () - lastUpdate > 3000) requestJson();}
 function sCol(na, col) {d.documentElement.style.setProperty(na, col);}

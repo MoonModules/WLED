@@ -421,7 +421,15 @@ void WLED::loop()
 void WLED::enableWatchdog() {
 #if WLED_WATCHDOG_TIMEOUT > 0
 #ifdef ARDUINO_ARCH_ESP32
+  #if ESP_IDF_VERSION_MAJOR >= 5
+  esp_task_wdt_config_t wdtConfig;
+  wdtConfig.timeout_ms = WLED_WATCHDOG_TIMEOUT * 1000;  // convert to milliseconds
+  wdtConfig.idle_core_mask = (1 << CONFIG_FREERTOS_NUMBER_OF_CORES) - 1;
+  wdtConfig.trigger_panic = false; // TroyHacks P4: Stop panics temporarily until we sort the WDT out.
+  esp_err_t watchdog = esp_task_wdt_reconfigure(&wdtConfig);
+  #else
   esp_err_t watchdog = esp_task_wdt_init(WLED_WATCHDOG_TIMEOUT, true);
+  #endif
   DEBUG_PRINT(F("Watchdog enabled: "));
   if (watchdog == ESP_OK) {
     DEBUG_PRINTLN(F("OK"));

@@ -94,7 +94,7 @@ bool strip_uses_global_leds(void) __attribute__((pure));  // WLEDMM implemented 
 #define SEGCOLOR(x)      strip.segColor(x) /* saves us a few kbytes of code */
 #define SEGPALETTE       Segment::getCurrentPalette()
 #define SEGLEN           strip._virtualSegmentLength /* saves us a few kbytes of code */
-#define SPEED_FORMULA_L  (4U + (50U*(255U - SEGMENT.speed))/min(SEGLEN, uint16_t(512)))  // WLEDMM limiting the formula to 512 virtual pixels
+#define SPEED_FORMULA_L  (4U + (50U*(255U - SEGMENT.speed))/min(SEGLEN, uint32_t(512)))  // WLEDMM limiting the formula to 512 virtual pixels
 
 // some common colors
 #define RED        (uint32_t)0xFF0000
@@ -638,24 +638,24 @@ typedef struct Segment {
 #else
     inline uint16_t virtualLength(void) const {return _virtuallength;}
 #endif
-    void setPixelColor(int n, uint32_t c); // set relative pixel within segment with color
-    inline void setPixelColor(int n, byte r, byte g, byte b, byte w = 0) { setPixelColor(n, RGBW32(r,g,b,w)); } // automatically inline
-    inline void setPixelColor(int n, CRGB c)                             { setPixelColor(n, RGBW32(c.r,c.g,c.b,0)); } // automatically inline
+    void setPixelColor(uint32_t n, uint32_t c); // set relative pixel within segment with color
+    inline void setPixelColor(uint32_t n, byte r, byte g, byte b, byte w = 0) { setPixelColor(n, RGBW32(r,g,b,w)); } // automatically inline
+    inline void setPixelColor(uint32_t n, CRGB c)                             { setPixelColor(n, RGBW32(c.r,c.g,c.b,0)); } // automatically inline
     void setPixelColor(float i, uint32_t c, bool aa = true);
     inline void setPixelColor(float i, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0, bool aa = true) { setPixelColor(i, RGBW32(r,g,b,w), aa); }
     inline void setPixelColor(float i, CRGB c, bool aa = true)                                         { setPixelColor(i, RGBW32(c.r,c.g,c.b,0), aa); }
-    uint32_t __attribute__((pure)) getPixelColor(int i) const;  // WLEDMM attribute added
+    uint32_t __attribute__((pure)) getPixelColor(uint32_t i) const;  // WLEDMM attribute added
     // 1D support functions (some implement 2D as well)
     void blur(uint8_t, bool smear = false);
     void fill(uint32_t c);
     void fade_out(uint8_t r);
     void fadeToBlackBy(uint8_t fadeBy);
-    void blendPixelColor(int n, uint32_t color, uint8_t blend);
-    inline void blendPixelColor(int n, CRGB c, uint8_t blend)            { blendPixelColor(n, RGBW32(c.r,c.g,c.b,0), blend); }
-    void addPixelColor(int n, uint32_t color, bool fast = false);
-    inline void addPixelColor(int n, byte r, byte g, byte b, byte w = 0, bool fast = false) { addPixelColor(n, RGBW32(r,g,b,w), fast); } // automatically inline
-    inline void addPixelColor(int n, CRGB c, bool fast = false)          { addPixelColor(n, RGBW32(c.r,c.g,c.b,0), fast); } // automatically inline
-    void fadePixelColor(uint16_t n, uint8_t fade);
+    void blendPixelColor(uint32_t n, uint32_t color, uint8_t blend);
+    inline void blendPixelColor(uint32_t n, CRGB c, uint8_t blend)            { blendPixelColor(n, RGBW32(c.r,c.g,c.b,0), blend); }
+    void addPixelColor(uint32_t n, uint32_t color, bool fast = false);
+    inline void addPixelColor(uint32_t n, byte r, byte g, byte b, byte w = 0, bool fast = false) { addPixelColor(n, RGBW32(r,g,b,w), fast); } // automatically inline
+    inline void addPixelColor(uint32_t n, CRGB c, bool fast = false)          { addPixelColor(n, RGBW32(c.r,c.g,c.b,0), fast); } // automatically inline
+    void fadePixelColor(uint32_t n, uint8_t fade);
     uint8_t get_random_wheel_index(uint8_t pos)  const;
 	  uint32_t __attribute__((pure)) color_from_palette(uint_fast16_t, bool mapping, bool wrap, uint8_t mcol, uint8_t pbri = 255);
     uint32_t __attribute__((pure)) color_wheel(uint8_t pos);
@@ -1081,7 +1081,7 @@ class WS2812FX {  // 96 bytes
     // using public variables to reduce code size increase due to inline function getSegment() (with bounds checking)
     // and color transitions
     uint32_t _colors_t[3]; // color used for effect (includes transition)
-    uint16_t _virtualSegmentLength;
+    uint32_t _virtualSegmentLength;
 #ifdef WLEDMM_FASTPATH
     segment* _currentSeg = nullptr;  // WLEDMM speed up SEGMENT access
 #endif
@@ -1092,7 +1092,7 @@ class WS2812FX {  // 96 bytes
     uint32_t getPixelColorXYRestored(uint16_t x, uint16_t y)  const;  // WLEDMM gets the original color from the driver (without downscaling by _bri)
 
   private:
-    uint16_t _length;
+    uint32_t _length;
     uint8_t  _brightness;
     uint16_t _transitionDur;
 
