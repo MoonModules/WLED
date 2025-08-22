@@ -882,7 +882,7 @@ uint16_t Segment::calc_virtualLength() const {
         { unsigned vLen2 = vW * vW + vH * vH;            // length ^2
           if (vLen2 < UINT16_MAX) vLen = sqrt16(vLen2);  // use faster function for 16bit values
           else vLen = sqrtf(vLen2);                      // fall-back to float if bigger
-          if (vW != vH) vLen++; // round up
+          // if (vW != vH) vLen++; // round up
         }
         break;
       case M12_jMap: //WLEDMM jMap
@@ -962,59 +962,36 @@ void IRAM_ATTR_YN __attribute__((hot)) Segment::setPixelColor(int i, uint32_t co
         if (vStrip>0) setPixelColorXY(vStrip - 1, vH - i - 1, col);
         else drawLine(0,vH-i-1, vW-1,vH-i-1, col, false); // WLEDMM draw line instead of plotting each pixel
         break;
-      case M12_pArc:
-        // expand in circular fashion from center
-        if (i==0)
-          setPixelColorXY(0, 0, col);
-        else {
-          if (i == virtualLength() - 1) setPixelColorXY(vW-1, vH-1, col); // Last i always fill corner
-          if (!_isSuperSimpleSegment) { 
-            // WLEDMM: drawArc() is faster if it's NOT "super simple" as the regular M12_pArc
-            // can do "useSymmetry" to speed things along, but a more complicated segment likey
-            // uses mirroring which generates a symmetry speed-up, or other things which mean
-            // less pixels are calculated.
-            drawArc(0, 0, i, col); 
-          } else {
-            //WLEDMM: some optimizations for the drawing loop
-            //  pre-calculate loop limits, exploit symmetry at 45deg
-            float radius = float(i);
-            
-            // float step = HALF_PI / (2.85f * radius);  // upstream uses this
-            float step = HALF_PI / (M_PI * radius);      // WLEDMM we use the correct circumference
-            bool useSymmetry = (max(vH, vW) > 20);       // for segments wider than 20 pixels, we exploit symmetry
-            unsigned numSteps;
-            if (useSymmetry) numSteps = 1 + ((HALF_PI/2.0f + step/2.0f) / step); // with symmetry
-            else             numSteps = 1 + ((HALF_PI      + step/2.0f) / step); // without symmetry
+      case M12_pArc: {
+        if (i < 3) { // mimic old behavior 
+          if      (i == 0) { setPixelColorXY(0, 0, col); break; }
+          else if (i == 1) { setPixelColorXY(0, 1, col); setPixelColorXY(1, 0, col); break; } // avoid square
+          else               setPixelColorXY(1, 1, col); // don't break
+        }
 
-            float rad = 0.0f;
-            for (unsigned count = 0; count < numSteps; count++) {
-              // may want to try float version as well (with or without antialiasing)
-              // int x = max(0, min(vW-1, (int)roundf(sinf(rad) * radius)));
-              // int y = max(0, min(vH-1, (int)roundf(cosf(rad) * radius)));
-              int x = roundf(sinf(rad) * radius);
-              int y = roundf(cosf(rad) * radius);
-              setPixelColorXY(x, y, col);
-              if(useSymmetry) setPixelColorXY(y, x, col);// WLEDMM
-              rad += step;
-            }
+        // WLEDMM shortcut when no grouping/spacing used
+        bool simpleSegment = (grouping == 1) && (spacing == 0);
+        uint32_t scaled_col = col;
+        if (simpleSegment) {
+          // segment brightness must be pre-calculated for the "fast" setPixelColorXY variant!
+          uint8_t _bri_t = currentBri(on ? opacity : 0);
+          if (!_bri_t && !transitional) return;
+          if (_bri_t < 255) scaled_col = color_fade(col, _bri_t);
+        }
 
-            // // Bresenham’s Algorithm (may not fill every pixel)
-            // int d = 3 - (2*i);
-            // int y = i, x = 0;
-            // while (y >= x) {
-            //  setPixelColorXY(x, y, col);
-            //  setPixelColorXY(y, x, col);
-            //  x++;
-            //  if (d > 0) {
-            //    y--;
-            //    d += 4 * (x - y) + 10;
-            //  } else {
-            //    d += 4 * x + 6;
-            //  }
-            // }
-          }
+        int x = 0, y = i; // i is the radius
+        int d = -(i >> 1); // Initial decision parameter
+
+        // Barrera's circle algorithm
+        while (x <= y) {
+          if (y < vH && x < vW) simpleSegment ? setPixelColorXY_fast(x, y, col, scaled_col, vW, vH) : setPixelColorXY(x, y, col);
+          if (y < vW && x < vH) simpleSegment ? setPixelColorXY_fast(y, x, col, scaled_col, vW, vH) : setPixelColorXY(y, x, col);
+
+          if (d <= 0) d += ++x;
+          else d -= --y;
         }
         break;
+      }
       case M12_pCorner: {
           int x = min(i, vW-1);
           int y = min(i, vH-1);
@@ -1232,28 +1209,25 @@ uint32_t __attribute__((hot)) Segment::getPixelColor(int i) const
         if (vStrip>0) return getPixelColorXY(vStrip - 1, vH - i -1);
         else          return getPixelColorXY(0, vH - i -1);
         break;
-      case M12_pCorner:
-      case M12_pArc: {
-        if (i < max(vW, vH)) { 
-          return vW>vH ? getPixelColorXY(i, 0) : getPixelColorXY(0, i); // Corner and Arc
+      case M12_pArc:
+        if (i >= max(vW, vH)) { // use corner if possible
+          int x = 0, y = i;  // i is the radius
+          int d = -(i >> 1); // Initial decision parameter
+  
+          // Barrera's circle algorithm
+          while (x <= y) {
+              if (x < vW && y < vH) return getPixelColorXY(x, y);
+              if (y < vW && x < vH) return getPixelColorXY(y, x);
+  
+              if (d <= 0) d += ++x;
+              else d -= --y;
+          }
+          return getPixelColorXY(vW-1, vH-1); // Last pixel
           break;
         }
-        float minradius = float(i) - 0.1f;
-        const int minradius2 = roundf(minradius * minradius);
-        int startX, startY;
-        if (vW >= vH) {startX = vW - 1; startY = 1;} // Last Column
-        else          {startX = 1; startY = vH - 1;} // Last Row
-        // Loop through only last row/column depending on orientation
-        for (int x = startX; x < vW; x++) {
-          int newX2 = x * x;
-          for (int y = startY; y < vH; y++) {
-            int newY2 = y * y;
-            if (newX2 + newY2 >= minradius2) return getPixelColorXY(x, y);        
-          }
-        }
-        return getPixelColorXY(vW-1, vH-1); // Last pixel
-        break;
-      }
+      case M12_pCorner:
+        return vW>vH ? getPixelColorXY(i, 0) : getPixelColorXY(0, i); // Corner and Arc
+        break;     
       case M12_jMap: //WLEDMM jMap
         if (jMap)
           return ((JMapC *)jMap)->getPixelColor(i);
