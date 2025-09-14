@@ -1068,34 +1068,6 @@ void __attribute__((hot)) IRAM_ATTR BusHub75Matrix::setPixelColor(uint16_t pix, 
       setBitInArray(_ledsDirty, pix, true);  // flag pixel as "dirty"
     }
   }
-  #if 0
-  // !! this code is not used any more !!
-  //   BusHub75Matrix::BusHub75Matrix will fail if allocating _ledBuffer fails.
-  //   The fallback code below created lots of flickering so it does not make sense to keep it enabled.
-  else {
-    // no double buffer allocated --> directly draw pixel
-    MatrixPanel_I2S_DMA* display = BusHub75Matrix::activeDisplay;
-    VirtualMatrixPanel*  fourScanPanel = BusHub75Matrix::activeFourScanPanel;
-    #ifndef NO_CIE1931
-    c = unGamma24(c); // to use the driver linear brightness feature, we first need to undo WLED gamma correction
-    #endif
-    uint8_t r = R(c);
-    uint8_t g = G(c);
-    uint8_t b = B(c);
-
-    if(fourScanPanel != nullptr) {
-      int width = _panelWidth;
-      int x = pix % width;
-      int y = pix / width;
-      fourScanPanel->drawPixelRGB888(int16_t(x), int16_t(y), r, g, b);
-    } else {
-      int width = _panelWidth;
-      int x = pix % width;
-      int y = pix / width;
-      display->drawPixelRGB888(int16_t(x), int16_t(y), r, g, b);
-    }
-  }
-  #endif
 }
 
 uint32_t IRAM_ATTR BusHub75Matrix::getPixelColor(uint16_t pix) const {
