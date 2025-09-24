@@ -750,6 +750,7 @@ void serializeConfig() {
     if (ethernetBoards[ethernetType].eth_power>=0)     pins.add(ethernetBoards[ethernetType].eth_power);
     if (ethernetBoards[ethernetType].eth_mdc>=0)       pins.add(ethernetBoards[ethernetType].eth_mdc);
     if (ethernetBoards[ethernetType].eth_mdio>=0)      pins.add(ethernetBoards[ethernetType].eth_mdio);
+    #ifndef CONFIG_IDF_TARGET_ESP32S3
     switch (ethernetBoards[ethernetType].eth_clk_mode) {
       case ETH_CLOCK_GPIO0_IN:
       case ETH_CLOCK_GPIO0_OUT:
@@ -762,6 +763,7 @@ void serializeConfig() {
         pins.add(17);
         break;
     }
+    #endif
   }
   #endif
 
@@ -1108,6 +1110,9 @@ void serializeConfig() {
   DEBUG_PRINTF("serializeConfig\n");
 
   File f = WLED_FS.open("/cfg.json", "w");
+  #if ESP_IDF_VERSION_MAJOR >= 4
+  f.setBufferSize(FS_BUFSIZE);
+  #endif
   if (f) serializeJson(doc, f);
   f.close();
   releaseJSONBufferLock();
@@ -1196,6 +1201,9 @@ void serializeConfigSec() {
   ota[F("aota")] = aOtaEnabled;
 
   File f = WLED_FS.open("/wsec.json", "w");
+  #if ESP_IDF_VERSION_MAJOR >= 4
+  f.setBufferSize(FS_BUFSIZE);
+  #endif
   if (f) serializeJson(doc, f);
   f.close();
   releaseJSONBufferLock();

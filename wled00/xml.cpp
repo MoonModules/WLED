@@ -196,11 +196,7 @@ void appendGPIOinfo() {
   size_t roLen = strlen(ro_gpio);
   char pinString[10];
   for(int pinNr = 0; pinNr < WLED_NUM_PINS; pinNr++) { // 49 = highest PIN on ESP32-S3
-  #if defined(ARDUINO_ARCH_ESP32) && !defined(BOARD_HAS_PSRAM)
     if ((!pinManager.isPinOk(pinNr, false)) || (pinManager.getPinOwner(pinNr) == PinOwner::SPI_RAM)) {  // WLEDMM add SPIRAM pins as "reserved" (pico boards)
-  #else
-    if (!pinManager.isPinOk(pinNr, false)) {
-  #endif
       sprintf(pinString, "%s%d", strlen(rsvd)==rsLen?"":",", pinNr);
       strcat(rsvd, pinString);
     }
@@ -231,11 +227,11 @@ void appendGPIOinfo() {
 
   //Note: Using pin 3 (RX) disables Adalight / Serial JSON
 
-  #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+  #if defined(ARDUINO_ARCH_ESP32)
     #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(CONFIG_IDF_TARGET_ESP32C3)
     if (psramFound()) oappend(SET_F(",16,17")); // GPIO16 & GPIO17 reserved for SPI RAM on ESP32 (not on S2, S3 or C3)
-    #elif defined(CONFIG_IDF_TARGET_ESP32S3)
-    if (psramFound()) oappend(SET_F(",33,34,35,36,37")); // in use for "octal" PSRAM or "octal" FLASH -seems that octal PSRAM is very common on S3.
+    #elif defined(CONFIG_IDF_TARGET_ESP32S3) && (CONFIG_ESPTOOLPY_FLASHMODE_OPI || CONFIG_SPIRAM_MODE_OCT)
+    if (psramFound() && ESP.getPsramSize() > 0) oappend(SET_F(",33,34,35,36,37")); // in use for "octal" PSRAM or "octal" FLASH -seems that octal PSRAM is very common on S3.
     #endif
   #endif
 
@@ -245,6 +241,7 @@ void appendGPIOinfo() {
     if (ethernetBoards[ethernetType].eth_power>=0)     { oappend(","); oappend(itoa(ethernetBoards[ethernetType].eth_power,nS,10)); }
     if (ethernetBoards[ethernetType].eth_mdc>=0)       { oappend(","); oappend(itoa(ethernetBoards[ethernetType].eth_mdc,nS,10)); }
     if (ethernetBoards[ethernetType].eth_mdio>=0)      { oappend(","); oappend(itoa(ethernetBoards[ethernetType].eth_mdio,nS,10)); }
+    #ifndef CONFIG_IDF_TARGET_ESP32S3
     switch (ethernetBoards[ethernetType].eth_clk_mode) {
       case ETH_CLOCK_GPIO0_IN:
       case ETH_CLOCK_GPIO0_OUT:
@@ -257,6 +254,7 @@ void appendGPIOinfo() {
         oappend(SET_F(",17"));
         break;
     }
+    #endif
   }
   #endif
 

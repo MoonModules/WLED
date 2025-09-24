@@ -8301,7 +8301,7 @@ uint16_t mode_2DGEQ(void) { // By Will Tatam. Code reduction by Ewoud Wijma. Fla
       uint8_t nextband = (remaining < 1)? band +1: band;
       nextband = constrain(nextband, 0, 15);  // just to be sure
       frBand = ((NUM_BANDS < 16) && (NUM_BANDS > 1)) ? map(nextband, 0, NUM_BANDS - 1, 0, 15):nextband; // always use full range. comment out this line to get the previous behaviour.
-      uint16_t nextBandHeight = fftResult[frBand];
+      uint16_t nextBandHeight = fftResult[frBand]; 
       // smooth Band height
       bandHeight = (7*bandHeight + 3*lastBandHeight + 3*nextBandHeight) / 12;   // yeees, its 12 not 13 (10% amplification)
       bandHeight = constrain(bandHeight, 0, 255);   // remove potential over/underflows
@@ -8800,6 +8800,12 @@ static const char _data_FX_MODE_2DWAVINGCELL[] PROGMEM = "Waving Cell@!,,Amplitu
 /////////////////////////
 uint16_t mode_GEQLASER(void) {
 
+  #ifdef WLED_ENABLE_HUB75MATRIX
+  uint8_t side_color_scale = 64;
+  #else
+  uint8_t side_color_scale = 32;
+  #endif
+
   // Author: @TroyHacks
   // @license GNU GENERAL PUBLIC LICENSE Version 3, 29 June 2007
 
@@ -8849,7 +8855,7 @@ uint16_t mode_GEQLASER(void) {
     int linex = i*(cols/NUM_BANDS);
 
     if (heights[i] > 1) {
-      ledColorTemp = color_fade(ledColor,32,true);
+      ledColorTemp = color_fade(ledColor,side_color_scale,true);
       int pPos = max(0, linex+(cols/NUM_BANDS)-1);
       for (int y = (i<NUM_BANDS-1) ? heights[i+1] : 0; y <= heights[i]; y++) { // don't bother drawing what we'll hide anyway
         if (rows-y > 0) SEGMENT.drawLine(pPos,rows-y-1,*projector,horizon,ledColorTemp,false,depth); // right side perspective
@@ -8875,7 +8881,7 @@ uint16_t mode_GEQLASER(void) {
     int pPos = max(0, linex+(cols/NUM_BANDS)-1);
 
     if (heights[i] > 1) {
-      ledColorTemp = color_fade(ledColor,32,true);
+      ledColorTemp = color_fade(ledColor,side_color_scale,true);
       for (uint_fast8_t y = (i>0) ? heights[i-1] : 0; y <= heights[i]; y++) { // don't bother drawing what we'll hide anyway
         if (rows-y > 0) SEGMENT.drawLine(linex,rows-y-1,*projector,horizon,ledColorTemp,false,depth); // left side perspective
       }
@@ -8917,7 +8923,7 @@ uint16_t mode_GEQLASER(void) {
       }
 
       if (!SEGMENT.check1 && heights[i] > rows-horizon) {
-        if (SEGMENT.intensity == 0) ledColorTemp = color_fade(ledColor,32,true); // match side fill if we're in blackout mode
+        if (SEGMENT.intensity == 0) ledColorTemp = color_fade(ledColor,side_color_scale,true); // match side fill if we're in blackout mode
         SEGMENT.drawLine(linex,rows-heights[i]-1,linex+(cols/NUM_BANDS)-1,rows-heights[i]-1,ledColorTemp); // top line to simulate hidden top fill
       }
 
@@ -8977,10 +8983,12 @@ uint16_t mode_2DPaintbrush() {
   bool color_chaos = SEGMENT.check1;
   CRGB color;
 
-  byte numLines = map8(SEGMENT.intensity,1,16);
-
+  // byte numLines = map8(SEGMENT.intensity,1,64);
+  byte numLines = SEGMENT.intensity;
+  if (numLines < 2) numLines = 2;
+  
   SEGENV.aux0++;  // hue
-  SEGMENT.fadeToBlackBy(map8(SEGENV.custom1,10,128));
+  SEGMENT.fadeToBlackBy(map8(SEGENV.custom1,0,128));
 
   um_data_t *um_data = getAudioData();
   uint8_t *fftResult = (uint8_t*)um_data->u_data[2];

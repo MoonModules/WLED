@@ -2565,7 +2565,11 @@ public:
     uint16_t programFileSize;
     #if ARTI_PLATFORM == ARTI_ARDUINO
       programFileSize = programFile.size();
+      #if ESP32
+      programText = (char *) heap_caps_malloc_prefer(programFileSize+1, 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+      #else
       programText = (char *)malloc(programFileSize+1);
+      #endif
       programFile.read((byte *)programText, programFileSize);
       programText[programFileSize] = '\0';
     #else

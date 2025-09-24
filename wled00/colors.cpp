@@ -44,34 +44,40 @@ IRAM_ATTR_YN __attribute__((hot)) uint32_t color_blend(uint32_t color1, uint32_t
 
 /*
  * color add function that preserves ratio
- * idea: https://github.com/Aircoookie/WLED/pull/2465 by https://github.com/Proto-molecule
+ * original idea: https://github.com/Aircoookie/WLED/pull/2465 by https://github.com/Proto-molecule
+ * speed optimisations by @dedehai
  */
-IRAM_ATTR_YN uint32_t color_add(uint32_t c1, uint32_t c2, bool fast)   // WLEDMM added IRAM_ATTR_YN
+IRAM_ATTR_YN uint32_t color_add(uint32_t c1, uint32_t c2, bool preserveCR)   // WLEDMM added IRAM_ATTR_YN
 {
-  if (c2 == 0) return c1;  // WLEDMM shortcut
-  if (c1 == 0) return c2;  // WLEDMM shortcut
+  if (c1 == BLACK) return c2;
+  if (c2 == BLACK) return c1;
+  uint32_t rb = (c1 & 0x00FF00FF) + (c2 & 0x00FF00FF); // mask and add two colors at once
+  uint32_t wg = ((c1>>8) & 0x00FF00FF) + ((c2>>8) & 0x00FF00FF);
+  uint32_t r = rb >> 16; // extract single color values
+  uint32_t b = rb & 0xFFFF;
+  uint32_t w = wg >> 16;
+  uint32_t g = wg & 0xFFFF;
 
-  if (fast) {
-    uint8_t r = R(c1);
-    uint8_t g = G(c1);
-    uint8_t b = B(c1);
-    uint8_t w = W(c1);
-    r = qadd8(r, R(c2));
-    g = qadd8(g, G(c2));
-    b = qadd8(b, B(c2));
-    w = qadd8(w, W(c2));
-    return RGBW32(r,g,b,w);
+  if (preserveCR) { // preserve color ratios
+    uint32_t max = std::max(r,g); // check for overflow note
+    max = std::max(max,b);
+    max = std::max(max,w);
+    //unsigned max = r; // check for overflow note
+    //max = g > max ? g : max;
+    //max = b > max ? b : max;
+    //max = w > max ? w : max;
+    if (max > 255) {
+      uint32_t scale = (uint32_t(255)<<8) / max; // division of two 8bit (shifted) values does not work -> use bit shifts and multiplaction instead
+      rb = ((rb * scale) >> 8) & 0x00FF00FF; //
+      wg = (wg * scale) & 0xFF00FF00;
+    } else wg = wg << 8; //shift white and green back to correct position
+    return rb | wg;
   } else {
-    uint32_t r = R(c1) + R(c2);
-    uint32_t g = G(c1) + G(c2);
-    uint32_t b = B(c1) + B(c2);
-    uint32_t w = W(c1) + W(c2);
-    uint32_t max = r;
-    if (g > max) max = g;
-    if (b > max) max = b;
-    if (w > max) max = w;
-    if (max < 256) return RGBW32(r, g, b, w);
-    else           return RGBW32(r * 255 / max, g * 255 / max, b * 255 / max, w * 255 / max);
+    r = r > 255 ? 255 : r;
+    g = g > 255 ? 255 : g;
+    b = b > 255 ? 255 : b;
+    w = w > 255 ? 255 : w;
+    return RGBW32(r,g,b,w);
   }
 }
 
@@ -110,6 +116,36 @@ IRAM_ATTR_YN __attribute__((hot)) uint32_t color_fade(uint32_t c1, uint8_t amoun
   }
 }
 #endif
+
+
+// 1:1 replacement of fastled function optimized for ESP, slightly faster, more accurate and uses less flash (~ -200bytes)
+// CRGB ColorFromPaletteWLED(const CRGBPalette16& pal, unsigned index, uint8_t brightness, TBlendType blendType)
+// {
+//    if (blendType == LINEARBLEND_NOWRAP) {
+//      index = (index*240) >> 8; // Blend range is affected by lo4 blend of values, remap to avoid wrapping
+//   }
+//     unsigned hi4 = byte(index) >> 4;
+//     const CRGB* entry = (CRGB*)( (uint8_t*)(&(pal[0])) + (hi4 * sizeof(CRGB)));
+//     unsigned red1   = entry->r;
+//     unsigned green1 = entry->g;
+//     unsigned blue1  = entry->b;
+//     if (blendType != NOBLEND) {
+//       if (hi4 == 15) entry = &(pal[0]);
+//       else ++entry;
+//       unsigned f2 = ((index & 0x0F) << 4) + 1; // +1 so we scale by 256 as a max value, then result can just be shifted by 8
+//       unsigned f1 = (257 - f2); // f2 is 1 minimum, so this is 256 max
+//       red1   = (red1 * f1 + (unsigned)entry->r * f2) >> 8;
+//       green1 = (green1 * f1 + (unsigned)entry->g * f2) >> 8;
+//       blue1  = (blue1 * f1 + (unsigned)entry->b * f2) >> 8;
+//     }
+//     if (brightness < 255) { // note: zero checking could be done to return black but that is hardly ever used so it is omitted
+//       uint32_t scale = brightness + 1; // adjust for rounding (bitshift)
+//       red1   = (red1 * scale) >> 8;
+//       green1 = (green1 * scale) >> 8;
+//       blue1  = (blue1 * scale) >> 8;
+//   }
+//     return CRGB(red1,green1,blue1);
+// }
 
 void setRandomColor(byte* rgb)
 {

@@ -114,7 +114,11 @@ void Segment::allocLeds() {
   if ((size > 0) && (!ledsrgb || size > ledsrgbSize)) {    //softhack dont allocate zero bytes
     USER_PRINTF("allocLeds (%d,%d to %d,%d), %u from %u\n", start, startY, stop, stopY, size, ledsrgb?ledsrgbSize:0);
     if (ledsrgb) free(ledsrgb);   // we need a bigger buffer, so free the old one first
+    #ifdef ESP32
+    ledsrgb = (CRGB*)heap_caps_calloc_prefer(size, 1, 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+    #else
     ledsrgb = (CRGB*)calloc(size, 1);
+    #endif
     ledsrgbSize = ledsrgb?size:0;
     if (ledsrgb == nullptr) {
       USER_PRINTLN("allocLeds failed!!");
@@ -227,18 +231,26 @@ bool Segment::allocateData(size_t len) {
   //DEBUG_PRINTF("allocateData(%u) start %d, stop %d, vlen %d\n", len, start, stop, virtualLength());
   deallocateData();
   if (len == 0) return false; // nothing to do
+  #if ESP32
+  if (!psramFound()) {
+    if (Segment::getUsedSegmentData() + len > MAX_SEGMENT_DATA) {
+      //USER_PRINTF("Segment::allocateData: Segment data quota exceeded! used:%u request:%u max:%d\n", Segment::getUsedSegmentData(), len, MAX_SEGMENT_DATA);
+      if (len > 0) errorFlag = ERR_LOW_SEG_MEM;  // WLEDMM raise errorflag
+      return false; //not enough memory
+    }
+  }
+  #else 
   if (Segment::getUsedSegmentData() + len > MAX_SEGMENT_DATA) {
     //USER_PRINTF("Segment::allocateData: Segment data quota exceeded! used:%u request:%u max:%d\n", Segment::getUsedSegmentData(), len, MAX_SEGMENT_DATA);
     if (len > 0) errorFlag = ERR_LOW_SEG_MEM;  // WLEDMM raise errorflag
     return false; //not enough memory
   }
-  // do not use SPI RAM on ESP32 since it is slow
-  //#if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
-  //if (psramFound())
-  //  data = (byte*) ps_malloc(len);
-  //else
-  //#endif
-    data = (byte*) malloc(len);
+  #endif
+  #ifdef ESP32
+  data = (byte*) heap_caps_calloc_prefer(len, 1, 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+  #else
+  data = (byte*) calloc(len, 1);
+  #endif
   if (!data) {
       _dataLen = 0; // WLEDMM reset dataLen
       errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
@@ -248,7 +260,7 @@ bool Segment::allocateData(size_t len) {
   } //allocation failed
   Segment::addUsedSegmentData(len);
   _dataLen = len;
-  memset(data, 0, len);
+  // memset(data, 0, len); // already done with calloc
   if (errorFlag == ERR_LOW_SEG_MEM) errorFlag = ERR_NONE; // WLEDMM reset errorflag on success
   return true;
 }
@@ -304,11 +316,11 @@ void Segment::setUpLeds() {
     ledsrgbSize = length() * sizeof(CRGB); // also set this when using global leds.
     #endif
   } else if (length() > 0) { //WLEDMM we always want a new buffer //softhack007 quickfix - avoid malloc(0) which is undefined behaviour (should not happen, but i've seen it)
-    //#if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
-    //if (psramFound())
-    //  ledsrgb = (CRGB*)ps_malloc(sizeof(CRGB)*length()); // softhack007 disabled; putting leds into psram leads to horrible slowdown on WROVER boards
-    //else
-    //#endif
+    #ifdef ESP32
+    ledsrgb = (CRGB*) heap_caps_malloc_prefer(sizeof(CRGB)*length(), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+    #else
+    ledsrgb = (CRGB*)malloc(sizeof(CRGB)*length()); 
+    #endif
     allocLeds(); //WLEDMM
     //USER_PRINTF("\nsetUpLeds() local LEDs: startX=%d stopx=%d startY=%d stopy=%d maxwidth=%d; length=%d, size=%d\n\n", start, stop, startY, stopY, Segment::maxWidth, length(), ledsrgbSize/3);
   }
@@ -1836,13 +1848,11 @@ void WS2812FX::finalizeInit(void)
   }
   if (useLedsArray && getLengthTotal()>0) { // WLEDMM avoid malloc(0)
     size_t arrSize = sizeof(CRGB) * getLengthTotal();
-    // softhack007 disabled; putting leds into psram leads to horrible slowdown on WROVER boards (see setUpLeds())
-    //#if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
-    //if (psramFound())
-    //  Segment::_globalLeds = (CRGB*) ps_malloc(arrSize);
-    //else
-    //#endif
-      if (arrSize > 0) Segment::_globalLeds = (CRGB*) malloc(arrSize); // WLEDMM avoid malloc(0)
+    #ifdef ESP32
+    Segment::_globalLeds = (CRGB*) heap_caps_calloc_prefer(arrSize, 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+    #else
+    if (arrSize > 0) Segment::_globalLeds = (CRGB*) malloc(arrSize); // WLEDMM avoid malloc(0)
+    #endif
     if ((Segment::_globalLeds != nullptr) && (arrSize > 0)) memset(Segment::_globalLeds, 0, arrSize); // WLEDMM avoid dereferencing nullptr
     if ((Segment::_globalLeds == nullptr) && (arrSize > 0)) errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
   }
@@ -2650,11 +2660,19 @@ bool WS2812FX::deserializeMap(uint8_t n) {
 
     // don't use new / delete
     if ((size > 0) && (customMappingTable != nullptr)) {
+      #if ESP32
+      customMappingTable = (uint16_t*) heap_caps_realloc_prefer(customMappingTable, sizeof(uint16_t) * size, 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_INTERNAL); // TroyHacks: This should work? We always have tons of PSRA
+      #else
       customMappingTable = (uint16_t*) reallocf(customMappingTable, sizeof(uint16_t) * size);  // reallocf will free memory if it cannot resize
+      #endif
     }
     if ((size > 0) && (customMappingTable == nullptr)) { // second try
       DEBUG_PRINTLN("deserializeMap: trying to get fresh memory block.");
+      #ifdef ESP32
+      customMappingTable = (uint16_t*) heap_caps_calloc_prefer(size, sizeof(uint16_t), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+      #else
       customMappingTable = (uint16_t*) calloc(size, sizeof(uint16_t));
+      #endif
       if (customMappingTable == nullptr) { 
         DEBUG_PRINTLN("deserializeMap: alloc failed!");
         errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag

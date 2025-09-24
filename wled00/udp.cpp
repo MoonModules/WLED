@@ -727,6 +727,8 @@ void sendSysInfoUDP()
   data[38] = NODE_TYPE_ID_ESP32S3;
   #elif defined(CONFIG_IDF_TARGET_ESP32S2)
   data[38] = NODE_TYPE_ID_ESP32S2;
+  #elif defined(CONFIG_IDF_TARGET_ESP32P4)
+  data[38] = NODE_TYPE_ID_ESP32P4;
   #elif defined(ARDUINO_ARCH_ESP32)
   data[38] = NODE_TYPE_ID_ESP32;
   #else
@@ -787,30 +789,18 @@ extern "C" {
 }
 #endif
 
-uint8_t IRAM_ATTR_YN realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, uint8_t *buffer, uint8_t bri, bool isRGBW, uint8_t outputs, uint16_t leds_per_output, uint8_t fps_limit)  {
+uint8_t IRAM_ATTR_YN realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, uint8_t *buffer_in, uint8_t bri, bool isRGBW, uint8_t outputs, uint16_t leds_per_output, uint8_t fps_limit)  {
 
   if (!(apActive || interfacesInited) || !client[0] || !length) return 1;  // network not initialised or dummy/unset IP address  031522 ajn added check for ap
 
   // For some reason, this is faster outside of the case block...
   //
   #ifdef ESP32
-  static byte *packet_buffer = (byte *) heap_caps_calloc_prefer(530, sizeof(byte), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_SPIRAM);
+  static byte *packet_buffer = (byte *) heap_caps_calloc_prefer(530, sizeof(byte), 2, MALLOC_CAP_INTERNAL, MALLOC_CAP_SPIRAM);
   #else
   static byte *packet_buffer = (byte *) calloc(530, sizeof(byte));
   #endif
   if (packet_buffer[0] != 0x41) memcpy(packet_buffer, ART_NET_HEADER, 12); // copy in the Art-Net header if it isn't there already
-
-  // Volumetric test code
-  // static byte *buffer = (byte *) heap_caps_calloc_prefer(length*3*72, sizeof(byte), 3, MALLOC_CAP_IRAM_8BIT, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT); // MALLOC_CAP_TCM seems to have alignment issues.
-  // memmove(buffer+(length*3),buffer,length*3*7);
-  // memcpy(buffer,buffer_in,length*3);
-  // framenumber++;
-  // if (framenumber >= 8) {
-  //   framenumber = 0;
-  // } else {
-  //   // return 0;
-  // }
-  // length *= 8;
 
   switch (type) {
     case 0: // DDP
@@ -864,10 +854,10 @@ uint8_t IRAM_ATTR_YN realtimeBroadcast(uint8_t type, IPAddress client, uint16_t 
         // write the colors, the write write(const uint8_t *buffer, size_t size)
         // function is just a loop internally too
         for (size_t i = 0; i < packetSize; i += (isRGBW?4:3)) {
-          ddpUdp.write(scale8(buffer[bufferOffset++], bri)); // R
-          ddpUdp.write(scale8(buffer[bufferOffset++], bri)); // G
-          ddpUdp.write(scale8(buffer[bufferOffset++], bri)); // B
-          if (isRGBW) ddpUdp.write(scale8(buffer[bufferOffset++], bri)); // W
+          ddpUdp.write(scale8(buffer_in[bufferOffset++], bri)); // R
+          ddpUdp.write(scale8(buffer_in[bufferOffset++], bri)); // G
+          ddpUdp.write(scale8(buffer_in[bufferOffset++], bri)); // B
+          if (isRGBW) ddpUdp.write(scale8(buffer_in[bufferOffset++], bri)); // W
         }
 
         if (!ddpUdp.endPacket()) {
@@ -886,7 +876,11 @@ uint8_t IRAM_ATTR_YN realtimeBroadcast(uint8_t type, IPAddress client, uint16_t 
     {
       static unsigned long artnetlimiter = micros()+(1000000/fps_limit);
       while (artnetlimiter > micros()) {
-        delayMicroseconds(100); // Make WLED obey fps_limit and just delay here until we're ready to send a frame.
+        if (ArtNetSkipFrame) {
+          return 0; // Let WLED keep generating effect frames and we output an Art-Net frame when fps_limit is reached.
+        } else {
+          delayMicroseconds(100); // Make WLED obey fps_limit and just delay here until we're ready to send a frame.
+        }
       }
 
       /*
@@ -905,6 +899,31 @@ uint8_t IRAM_ATTR_YN realtimeBroadcast(uint8_t type, IPAddress client, uint16_t 
       uint_fast16_t packetstotal = 0;
       #endif
       unsigned long timer = micros();
+
+      // Volumetric test code
+      #ifdef ESP32 // Older ESP boards should not attempt this.
+      uint8_t volume_depth = outputs*leds_per_output/length;
+      static byte* buffer = nullptr; // Declare static buffer
+      static size_t buffer_size = 0; // Track the buffer size
+
+      if (volume_depth > 1) { // always assume to buffer output
+        size_t new_size = (length * (isRGBW ? 4 : 3) * volume_depth);
+        if (buffer == nullptr || buffer_size < new_size) {
+          if (buffer != nullptr) {
+            heap_caps_free(buffer);
+          }
+          buffer = (byte *) heap_caps_calloc_prefer(new_size+15, sizeof(byte), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+          buffer_size = new_size;
+        }
+        memmove(buffer + (length * 3), buffer, length * 3 * (volume_depth - 1));
+        memcpy(buffer, buffer_in, length * 3);
+        length *= volume_depth;
+      } else {
+        buffer = buffer_in;
+      }
+      #else
+      static byte* buffer = buffer_in;
+      #endif
 
       AsyncUDP artnetudp;// AsyncUDP so we can just blast packets.
 
@@ -990,11 +1009,6 @@ uint8_t IRAM_ATTR_YN realtimeBroadcast(uint8_t type, IPAddress client, uint16_t 
       // have several Art-Net devices being broadcast to, and should only
       // be called in that situation. 
       
-      // Art-Net broadcast mode (setting Art-Net to 255.255.255.255) should ONLY
-      // be used if you know what you're doing, as that is a lot of pixels being 
-      // sent to EVERYTHING on your network, including WiFi devices - and can 
-      // overwhelm them if you have a lot of Art-Net data being broadcast.
-
       #ifdef ARTNET_SYNC_ENABLED
         
         // This block sends Art-Net "ArtSync" packets. Can't do this with AsyncUDP because it doesn't support source port binding.

@@ -114,8 +114,10 @@ String PinManagerClass::getPinSpecialText(int gpio) {  // special purpose PIN in
     #if defined(CONFIG_IDF_TARGET_ESP32S3)
       // ESP32-S3
       if (gpio > 18 && gpio < 21) return (F("USB (CDC) or JTAG"));
-      #if CONFIG_ESPTOOLPY_FLASHMODE_OPI || (CONFIG_SPIRAM_MODE_OCT && defined(BOARD_HAS_PSRAM))
-        if (gpio > 32 && gpio < 38)  return (F("(reserved) Octal PSRAM or Octal Flash"));
+      #if CONFIG_ESPTOOLPY_FLASHMODE_OPI || CONFIG_SPIRAM_MODE_OCT
+        if (psramFound() && ESP.getPsramSize() > 0) {
+          if (gpio > 32 && gpio < 38)  return (F("(reserved) Octal PSRAM or Octal Flash"));
+        }
       #endif
       //if (gpio == 0 || gpio == 3 || gpio == 45 || gpio == 46) return (F("(strapping pin)"));
       #ifdef ARDUINO_TTGO_T7_S3
@@ -143,15 +145,17 @@ String PinManagerClass::getPinSpecialText(int gpio) {  // special purpose PIN in
       //if (gpio == 12) return (F("(strapping pin - MTDI)"));
       //if (gpio == 15) return (F("(strapping pin - MTDO)"));
       //if (gpio > 11 && gpio < 16) return (F("(optional) JTAG debug probe"));
-      #if defined(BOARD_HAS_PSRAM)
+      if (psramFound()) {
         if (gpio == 16 || gpio == 17) return (F("(reserved) PSRAM"));
-      #endif
+      }
       #if defined(ARDUINO_TTGO_T7_V14_Mini32) || defined(ARDUINO_LOLIN_D32_PRO) || defined(ARDUINO_ADAFRUIT_FEATHER_ESP32_V2)
         if (gpio == 35) return (F("(reserved) _VBAT voltage monitoring"));  // WLEDMM experimental
       #endif
-      #if (defined(ARDUINO_TTGO_T7_V14_Mini32) || defined(ARDUINO_TTGO_T7_V15_Mini32)) && defined(BOARD_HAS_PSRAM)
-        if (gpio == 25) return (F("cross-connected to pin 16")); // WLEDMM experimental
-        if (gpio == 27) return (F("Cross-connected to pin 17")); // WLEDMM experimental
+      #if (defined(ARDUINO_TTGO_T7_V14_Mini32) || defined(ARDUINO_TTGO_T7_V15_Mini32))
+        if (psramFound()) {
+          if (gpio == 25) return (F("cross-connected to pin 16")); // WLEDMM experimental
+          if (gpio == 27) return (F("Cross-connected to pin 17")); // WLEDMM experimental
+        }
       #endif
     #endif
   #else
@@ -744,10 +748,6 @@ bool PinManagerClass::isPinOk(byte gpio, bool output) const
     if (gpio > 18 && gpio < 21) return false;     // 19 + 20 = USB-JTAG. Not recommended for other uses.
     #endif
     if (gpio > 21 && gpio < 33) return false;     // 22 to 32: not connected + SPI FLASH
-    // #if CONFIG_SPIRAM_MODE_OCT && defined(BOARD_HAS_PSRAM)
-    //   if (gpio > 32 && gpio < 38) return !psramFound(); // 33 to 37: not available if using _octal_ SPI Flash or _octal_ PSRAM
-    // #endif
-    // 38 to 48 are for general use. Be careful about straping pins GPIO45 and GPIO46 - these may be pull-up or pulled-down on your board.
   #elif defined(CONFIG_IDF_TARGET_ESP32S2)
     // strapping pins: 0, 45 & 46
     if (gpio > 18 && gpio < 21) return false;     // WLEDMM: 19 + 20 = USB HWCDC. Not recommended for other uses.

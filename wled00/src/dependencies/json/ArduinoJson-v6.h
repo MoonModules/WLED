@@ -3667,13 +3667,21 @@ class BasicJsonDocument : AllocatorOwner<TAllocator>, public JsonDocument {
 namespace ARDUINOJSON_NAMESPACE {
 struct DefaultAllocator {
   void* allocate(size_t size) {
+    #ifdef ESP32
+    return heap_caps_calloc_prefer(size, 3, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT, MALLOC_CAP_INTERNAL);
+    #else
     return malloc(size);
+    #endif
   }
   void deallocate(void* ptr) {
     free(ptr);
   }
   void* reallocate(void* ptr, size_t new_size) {
+    #ifdef ESP32
+    return heap_caps_realloc_prefer(ptr,new_size, 3, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT, MALLOC_CAP_INTERNAL);
+    #else
     return realloc(ptr, new_size);
+    #endif
   }
 };
 typedef BasicJsonDocument<DefaultAllocator> DynamicJsonDocument;

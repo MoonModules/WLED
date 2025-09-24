@@ -105,9 +105,15 @@
 #else // ESP32
   #include <HardwareSerial.h>  // ensure we have the correct "Serial" on new MCUs (depends on ARDUINO_USB_MODE and ARDUINO_USB_CDC_ON_BOOT)
   #include <WiFi.h>
-  #include <ETH.h>
+  #if defined (CONFIG_IDF_TARGET_ESP32S3) && defined (WLED_USE_ETHERNET)
+    #include <ETHClass2.h>
+  #else // ESP32
+    #include <ETH.h>
+  #endif
   #include "esp_wifi.h"
-  #include <ESPmDNS.h>
+  #ifndef WLED_DISABLE_MDNS 
+    #include <ESPmDNS.h>
+  #endif                     // WLEDMM end
   #include <AsyncTCP.h>
   #if LOROL_LITTLEFS
     #ifndef CONFIG_LITTLEFS_FOR_IDF_3_2
@@ -177,36 +183,26 @@
 #include "src/dependencies/json/AsyncJson-v6.h"
 #include "src/dependencies/json/ArduinoJson-v6.h"
 
-// ESP32-WROVER features SPI RAM (aka PSRAM) which can be allocated using ps_malloc()
-// we can create custom PSRAMDynamicJsonDocument to use such feature (replacing DynamicJsonDocument)
-// The following is a construct to enable code to compile without it.
-// There is a code that will still not use PSRAM though:
-//    AsyncJsonResponse is a derived class that implements DynamicJsonDocument (AsyncJson-v6.h)
-#if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && (defined(WLED_USE_PSRAM) || defined(WLED_USE_PSRAM_JSON))         // WLEDMM
-// WLEDMM the JSON_TO_PSRAM feature works, so use it by default
-#undef  WLED_USE_PSRAM_JSON
-#define WLED_USE_PSRAM_JSON
-#undef  ALL_JSON_TO_PSRAM
-#define ALL_JSON_TO_PSRAM
-
 struct PSRAM_Allocator {
   void* allocate(size_t size) {
-    if (psramFound()) return ps_malloc(size); // use PSRAM if it exists
-    else              return malloc(size);    // fallback
+    #if ESP32
+    return heap_caps_malloc_prefer(size,3,MALLOC_CAP_SPIRAM,MALLOC_CAP_DEFAULT,MALLOC_CAP_INTERNAL);
+    #else
+    return malloc(size);
+    #endif
   }
   void* reallocate(void* ptr, size_t new_size) {
-    if (psramFound()) return ps_realloc(ptr, new_size); // use PSRAM if it exists
-    else              return realloc(ptr, new_size);    // fallback
+    #if ESP32
+    return heap_caps_realloc_prefer(ptr,new_size,3,MALLOC_CAP_SPIRAM,MALLOC_CAP_DEFAULT,MALLOC_CAP_INTERNAL);
+    #else
+    return realloc(ptr, new_size);
+    #endif
   }
   void deallocate(void* pointer) {
     free(pointer);
   }
 };
 using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
-//#define DynamicJsonDocument PSRAMDynamicJsonDocument  // WLEDMM experiment
-#else
-#define PSRAMDynamicJsonDocument DynamicJsonDocument
-#endif
 
 #include "const.h"
 #include "fcn_declare.h"
@@ -326,7 +322,7 @@ WLED_GLOBAL int8_t irPin _INIT(-1);
 WLED_GLOBAL int8_t irPin _INIT(IRPIN);
 #endif
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2) || (defined(RX) && defined(TX))
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3) ||  defined(CONFIG_IDF_TARGET_ESP32C6) ||  defined(CONFIG_IDF_TARGET_ESP32P4) ||defined(CONFIG_IDF_TARGET_ESP32S2) || (defined(RX) && defined(TX))
   // use RX/TX as set by the framework - these boards do _not_ have RX=3 and TX=1
   constexpr uint8_t hardwareRX = RX;
   constexpr uint8_t hardwareTX = TX;
@@ -365,7 +361,6 @@ WLED_GLOBAL bool force802_3g _INIT(false);
     WLED_GLOBAL int ethernetType _INIT(WLED_ETH_NONE);             // use none for ethernet board type if default not defined
   #endif
 #endif
-
 // LED CONFIG
 WLED_GLOBAL bool turnOnAtBoot _INIT(true);                // turn on LEDs at power-up
 WLED_GLOBAL byte bootPreset   _INIT(0);                   // save preset to load after power-up
@@ -396,6 +391,12 @@ WLED_GLOBAL bool fadeTransition      _INIT(true);   // enable crossfading color 
 WLED_GLOBAL uint16_t transitionDelay _INIT(750);    // default crossfade duration in ms
 
 WLED_GLOBAL uint_fast16_t briMultiplier _INIT(100);          // % of brightness to set (to limit power, if you set it to 50 and set bri to 255, actual brightness will be 127)
+
+WLED_GLOBAL bool TROYHACKS_HPF   _INIT(true); // WLED-MM/TroyHacks: Turn HPF from ESP-DSP on/off
+WLED_GLOBAL bool TROYHACKS_LPF   _INIT(true); // WLED-MM/TroyHacks: Turn LPF from ESP-DSP on/off
+WLED_GLOBAL bool TROYHACKS_NOTCH _INIT(true); // WLED-MM/TroyHacks: Turn other filter from ESP-DSP on/off
+WLED_GLOBAL bool TROYHACKS_PINKY _INIT(false); // WLED-MM/TroyHacks: Internally calibrate audio against white noise
+WLED_GLOBAL float fftBinAverage[16] _INIT_N(({ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }));
 
 // User Interface CONFIG
 #ifndef SERVERNAME
@@ -718,6 +719,12 @@ WLED_GLOBAL unsigned long presetsModifiedTime _INIT(0L);
 WLED_GLOBAL JsonDocument* fileDoc;
 WLED_GLOBAL bool doCloseFile _INIT(false);
 
+#ifdef ARTNET_SKIP_FRAME
+WLED_GLOBAL bool ArtNetSkipFrame _INIT(true);
+#else 
+WLED_GLOBAL bool ArtNetSkipFrame _INIT(false);
+#endif
+
 // presets
 WLED_GLOBAL byte currentPreset _INIT(0);
 
@@ -808,21 +815,17 @@ WLED_GLOBAL int8_t spi_sclk  _INIT(HW_PIN_CLOCKSPI);
 #endif
 
 // global ArduinoJson buffer
-#if defined(ALL_JSON_TO_PSRAM) && (defined(WLED_USE_PSRAM_JSON) || defined(WLED_USE_PSRAM))
 // WLEDMM experimental : always use dynamic JSON
-  #ifndef WLED_DEFINE_GLOBAL_VARS
-  WLED_GLOBAL PSRAMDynamicJsonDocument doc;
-  #else
-  #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || !defined(BOARD_HAS_PSRAM)
-    WLED_GLOBAL PSRAMDynamicJsonDocument doc(JSON_BUFFER_SIZE);       // S2 has very small RAM - lets not push our luck too far
-  #else
-    WLED_GLOBAL PSRAMDynamicJsonDocument doc(JSON_BUFFER_SIZE * 2 );  // initially "doc" is allocated in RAM, and later pushed into PSRAM when the drivers is ready
-  #endif
-  //#warning trying to always use dynamic JSON in PSRAM
-  #endif
+#ifndef WLED_DEFINE_GLOBAL_VARS
+WLED_GLOBAL PSRAMDynamicJsonDocument doc;
 #else
-WLED_GLOBAL StaticJsonDocument<JSON_BUFFER_SIZE> doc;
-#endif // WLEDMM end
+#if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) 
+  WLED_GLOBAL PSRAMDynamicJsonDocument doc(JSON_BUFFER_SIZE);       // S2 has very small RAM - lets not push our luck too far
+#else
+  WLED_GLOBAL PSRAMDynamicJsonDocument doc(JSON_BUFFER_SIZE * 2 );  // initially "doc" is allocated in RAM, and later pushed into PSRAM when the drivers is ready
+#endif
+//#warning trying to always use dynamic JSON in PSRAM
+#endif
 WLED_GLOBAL volatile uint8_t jsonBufferLock _INIT(0);
 
 // enable additional debug output
@@ -887,7 +890,7 @@ WLED_GLOBAL volatile uint8_t jsonBufferLock _INIT(0);
   WLED_GLOBAL unsigned long loops _INIT(0);
 #endif
 
-#ifdef ARDUINO_ARCH_ESP32
+#if defined ARDUINO_ARCH_ESP32 || defined ARDUINO_ARCH_ESP32S3
   #define WLED_CONNECTED (WiFi.status() == WL_CONNECTED || ETH.localIP()[0] != 0)
 #else
   #define WLED_CONNECTED (WiFi.status() == WL_CONNECTED)

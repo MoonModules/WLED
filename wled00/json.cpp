@@ -1075,7 +1075,7 @@ void serializeInfo(JsonObject root)
     root[F("freestack")] = uxTaskGetStackHighWaterMark(NULL); //WLEDMM
     root[F("minfreeheap")] = ESP.getMinFreeHeap();
   #endif
-  #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+  #ifdef ESP32
   if (psramFound()) {
     root[F("tpram")] = ESP.getPsramSize(); //WLEDMM
     root[F("psram")] = ESP.getFreePsram();
@@ -1088,12 +1088,11 @@ void serializeInfo(JsonObject root)
     #endif
     #endif
   }
-  #else
+  #endif
   // for testing
   //  root[F("tpram")] = 4194304; //WLEDMM
   //  root[F("psram")] = 4193000;
   //  root[F("psusedram")] = 3083000;
-  #endif
 
   // begin WLEDMM
   #ifdef ARDUINO_ARCH_ESP32
@@ -1138,14 +1137,14 @@ void serializeInfo(JsonObject root)
   root[F("e32speed")] = ESP.getCpuFreqMHz();
   root[F("e32flash")] = int((ESP.getFlashChipRealSize()/1024)/1024);
   root[F("e32flashspeed")] = int(ESP.getFlashChipSpeed()/1000000);
-  root[F("e32flashmode")] = int(ESP.getFlashChipMode());
-  switch (ESP.getFlashChipMode()) {
-    case FM_QIO:  root[F("e32flashtext")] = F(" (QIO)"); break;
-    case FM_QOUT: root[F("e32flashtext")] = F(" (QOUT)");break;
-    case FM_DIO:  root[F("e32flashtext")] = F(" (DIO)"); break;
-    case FM_DOUT: root[F("e32flashtext")] = F(" (DOUT)");break;
-    default: root[F("e32flashtext")] = F(" (other)"); break;
-  }
+  // root[F("e32flashmode")] = int(ESP.getFlashChipMode());
+  // switch (ESP.getFlashChipMode()) {
+  //   case FM_QIO:  root[F("e32flashtext")] = F(" (QIO)"); break;
+  //   case FM_QOUT: root[F("e32flashtext")] = F(" (QOUT)");break;
+  //   case FM_DIO:  root[F("e32flashtext")] = F(" (DIO)"); break;
+  //   case FM_DOUT: root[F("e32flashtext")] = F(" (DOUT)");break;
+  //   default: root[F("e32flashtext")] = F(" (other)"); break;
+  // }
   #endif
   #if defined(WLED_DEBUG) || defined(WLED_DEBUG_HOST) || defined(SR_DEBUG) || defined(SR_STATS)
   // WLEDMM add status of Serial, including pin alloc

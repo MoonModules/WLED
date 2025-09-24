@@ -5,7 +5,7 @@
 	<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
 	<title>LED Settings</title>
 	<script>
-		var d=document,laprev=55,maxB=1,maxV=0,maxM=4000,maxPB=18438,maxL=1333,maxLbquot=0; //maximum bytes for LED allocation: 4kB for 8266, 64kB for 32
+		var d=document,laprev=55,maxB=1,maxV=0,maxM=4000,maxPB=65535,maxL=1333,maxLbquot=0; //maximum bytes for LED allocation: 4kB for 8266, 32kB for 32
 		d.um_p = [];
 		d.rsvd = [];
 		d.ro_gpio = [];
@@ -400,7 +400,7 @@
 <hr class="sml">
 ${i+1}:
 <select name="LT${i}" onchange="UI(true)">${i>=maxB ? '' :
-'<option value="22" selected>WS281x</option>\
+'<option value="22">WS281x</option>\
 <option value="30">SK6812/WS2814 RGBW</option>\
 <option value="31">TM1814</option>\
 <option value="24">400kHz</option>\
@@ -446,8 +446,8 @@ ${i+1}:
 <div id="dig${i}w" style="display:none">Swap: <select name="WO${i}"><option value="0">None</option><option value="1">W & B</option><option value="2">W & G</option><option value="3">W & R</option></select></div>
 <div id="dig${i}l" style="display:none">Clock: <select name="SP${i}"><option value="0">Slowest</option><option value="1">Slow</option><option value="2">Normal</option><option value="3">Fast</option><option value="4">Fastest</option><option value="5">MAX</option><option value="6">overspeed</option></select></div>
 <div>
-<span id="psd${i}">Start:</span> <input type="number" name="LS${i}" id="ls${i}" class="l starts" min="0" max="8464" value="${lastEnd(i)}" oninput="startsDirty[${i}]=true;UI();" required />&nbsp;
-<div id="dig${i}c" style="display:inline">Length: <input type="number" name="LC${i}" class="l" min="1" max="${maxPB}" value="1" required oninput="UI()" /></div><br>
+<span id="psd${i}">Start:</span> <input type="number" name="LS${i}" id="ls${i}" class="l starts" min="0" max="65534" value="${lastEnd(i)}" oninput="startsDirty[${i}]=true;UI();" required />&nbsp;
+<div id="dig${i}c" style="display:inline">Length: <input type="number" name="LC${i}" class="xl" min="1" max="${maxPB}" value="1" required oninput="UI()" /></div><br>
 </div>
 <span id="p0d${i}">GPIO:</span> <input type="number" name="L0${i}" required class="s" onchange="UI()"/>
 <span id="p1d${i}"></span><input type="number" name="L1${i}" class="s" onchange="UI()"/>

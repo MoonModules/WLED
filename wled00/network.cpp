@@ -22,7 +22,7 @@ const ethernet_settings ethernetBoards[] = {
   // None
   {
   },
-
+  #ifndef CONFIG_IDF_TARGET_ESP32S3
   // WT32-EHT01
   // Please note, from my testing only these pins work for LED outputs:
   //   IO2, IO4, IO12, IO14, IO15
@@ -136,7 +136,7 @@ const ethernet_settings ethernetBoards[] = {
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO17_OUT	// eth_clk_mode
   }
-
+  #endif
 };
 #endif
 
@@ -168,15 +168,11 @@ int getSignalQuality(int rssi)
   #define SYSTEM_EVENT_ETH_GOT_IP ARDUINO_EVENT_ETH_GOT_IP
 #endif
 
-//handle Ethernet connection event
-void WiFiEvent(WiFiEvent_t event)
-{
+void WiFiEvent(WiFiEvent_t event) {
   switch (event) {
-#if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
-    case SYSTEM_EVENT_ETH_START:
-      DEBUG_PRINTLN(F("ETH Started"));
-      break;
-    case SYSTEM_EVENT_ETH_GOT_IP:
+    #ifndef ESP8266
+    #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
+    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
       if (Network.isEthernet()) {
         if (!apActive) {
           DEBUG_PRINTLN(F("WiFi Connected *and* ETH Connected. Disabling WIFi"));
@@ -184,6 +180,20 @@ void WiFiEvent(WiFiEvent_t event)
         } else {
           DEBUG_PRINTLN(F("WiFi Connected *and* ETH Connected. Leaving AP WiFi active"));
         }
+      } else {
+        DEBUG_PRINTLN(F("WiFi Connected. No ETH"));
+      }
+      break;
+    case SYSTEM_EVENT_ETH_GOT_IP:
+      if (Network.isEthernet()) {
+        if (!apActive) {
+          DEBUG_PRINTLN(F("WiFi Connec+ted *and* ETH Connected. Disabling WIFi"));
+          WiFi.disconnect(true);
+        } else {
+          DEBUG_PRINTLN(F("WiFi Connected *and* ETH Connected. Leaving AP WiFi active"));
+        }
+        USER_PRINT(F("Ethernet IP is now http://"));
+        USER_PRINTLN(ETH.localIP());
       } else {
         DEBUG_PRINTLN(F("WiFi Connected. No ETH"));
       }
@@ -201,10 +211,17 @@ void WiFiEvent(WiFiEvent_t event)
       prepareHostname(hostname);
       ETH.setHostname(hostname);
       showWelcomePage = false;
-      break;
+      USER_PRINTF("Ethernet link is up. Speed is %u mbit and link is %sfull duplex! (MAC: ", ETH.linkSpeed(), ETH.fullDuplex()?"":"not ");
+      USER_PRINT(ETH.macAddress());
+      USER_PRINTLN(")");
+      escapedMac = ETH.macAddress();
+      escapedMac.replace(":", "");
+      escapedMac.toLowerCase();
       }
-    case SYSTEM_EVENT_ETH_DISCONNECTED:
-      DEBUG_PRINTLN(F("ETH Disconnected"));
+      break;
+
+    case ARDUINO_EVENT_ETH_DISCONNECTED: // was SYSTEM_EVENT_ETH_DISCONNECTED:
+      DEBUG_PRINTLN(F("ETH Disconnected. Forcing reconnect"));
       // This doesn't really affect ethernet per se,
       // as it's only configured once.  Rather, it
       // may be necessary to reconnect the WiFi when
@@ -212,9 +229,13 @@ void WiFiEvent(WiFiEvent_t event)
       // alternative access to the device.
       forceReconnect = true;
       break;
-#endif
+    #endif
+    #endif
     default:
+      // DEBUG_PRINTLN(F("Network Event with no action"));
       break;
+
   }
+  
 }
 
