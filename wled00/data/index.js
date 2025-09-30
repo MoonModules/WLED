@@ -825,7 +825,7 @@ function populateSegments(s)
 				(cfg.comp.segpwr ? segp : '') +
 				`<div class="segin" id="seg${i}in">`+
 					`<input id="seg${i}fx" value="${inst.fx}" type="hidden"/>` + // <!--WLEDMM-->
-					`<input type="text" class="ptxt" id="seg${i}t" autocomplete="off" maxlength=32 value="${inst.n?inst.n:""}" placeholder="Enter name..."/>`+
+					`<input type="text" class="ptxt" id="seg${i}t" autocomplete="off" maxlength=128 value="${inst.n?inst.n:""}" placeholder="Enter name..."/>`+ // maxlength must match WLED_MAX_SEGNAME_LEN
 					`<table class="infot segt">`+
 					`<tr>`+
 						`<td>${isMSeg?'Start X':'Start LED'}</td>`+
@@ -2371,7 +2371,7 @@ function makeSeg()
 	});
 	var cn = `<div class="seg lstI expanded">`+
 		`<div class="segin">`+
-			`<input class="ptxt show" type="text" id="seg${lu}t" autocomplete="off" maxlength=32 value="" placeholder="New segment ${lu}"/>`+
+			`<input class="ptxt show" type="text" id="seg${lu}t" autocomplete="off" maxlength=128 value="" placeholder="New segment ${lu}"/>`+ // maxlength must match WLED_MAX_SEGNAME_LEN
 			`<table class="segt">`+
 				`<tr>`+
 					`<td width="38%">${isM?'Start X':'Start LED'}</td>`+
@@ -2553,7 +2553,8 @@ ${makePlSel(plJson[i].end?plJson[i].end:0, true)}
 		}
 	}
 
-	return `<input type="text" class="ptxt ${i==0?'show':''}" id="p${i}txt" autocomplete="off" maxlength=32 value="${(i>0)?pName(i):""}" placeholder="Enter name..."/>
+	return `<input type="text" class="ptxt ${i==0?'show':''}" id="p${i}txt" autocomplete="off" maxlength=128 value="${(i>0)?pName(i):""}" placeholder="Enter name..."/>`+ // maxlength must match WLED_MAX_SEGNAME_LEN
+`
 <div class="c">Quick load label: <input type="text" class="stxt" maxlength=2 value="${qlName(i)}" id="p${i}ql" autocomplete="off"/></div>
 <div class="h">(leave empty for no Quick load button)</div>
 <div ${pl&&i==0?"style='display:none'":""}>

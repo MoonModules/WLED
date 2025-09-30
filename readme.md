@@ -14,6 +14,30 @@
 
 <img width="400" alt="image" src="https://user-images.githubusercontent.com/91013628/230378884-5a0f15ee-1aa2-4998-9df7-ade9f32a3d0f.png">
 
+## ⚡ Custom Modifications in this Fork
+
+### Extended Segment Name Length (128 Characters)
+This fork extends the segment name length from the default **32 characters** to **128 characters**, allowing for much longer, more descriptive segment names.
+
+**What's Changed:**
+- Segment names can now be up to 128 characters long (previously 32)
+- Full support in text scroll LED effects
+- All backend buffers and validations updated
+- Frontend input fields support the extended length
+
+**Modified Files:**
+- `wled00/const.h` - Added `WLED_MAX_SEGNAME_LEN` constant (128)
+- `wled00/json.cpp` - Updated validation logic
+- `wled00/FX.cpp` - Fixed text scroll effect buffer for longer names
+- `wled00/FX_fcn.cpp` - Updated jMap filename buffer
+- `wled00/image_loader.cpp` - Updated filename buffers
+- `wled00/data/index.js` - Updated input field `maxlength` attribute
+
+**Use Case:**
+Perfect for installations with many segments where descriptive names are essential, or when using the text scroll effect to display longer messages on LED matrices.
+
+---
+
 MoonModules/WLED is a fork of [Aircoookie/WLED](https://github.com/Aircoookie/WLED) which contains latest merge of v0.14 of WLED with [additional features](https://mm.kno.wled.ge/moonmodules/what-is-moonmodules/).
 
 This fork is created by members of the [Atuline/WLED](https://github.com/atuline/WLED) team to make development against v0.14 possible while still preserving [Atuline/WLED v0.13.x](https://github.com/atuline/WLED/tree/dev) as a stable and supported version. The Atuline/WLED fork is also called WLED SR (Sound Reactive).

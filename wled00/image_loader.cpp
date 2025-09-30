@@ -10,7 +10,7 @@
  */
 
 File file;
-char lastFilename[34] = "/";
+char lastFilename[WLED_MAX_SEGNAME_LEN+10] = "/"; // segment name + "/" + ".gif" + null terminator
 GifDecoder<320,320,12,true> decoder;
 bool gifDecodeFailed = false;
 unsigned long lastFrameDisplayTime = 0, currentFrameDelay = 0;
@@ -82,8 +82,8 @@ byte renderImageToSegment(Segment &seg) {
   if (activeSeg && activeSeg != &seg) return IMAGE_ERROR_SEG_LIMIT; // only one segment at a time
   activeSeg = &seg;
 
-  if (strncmp(lastFilename +1, seg.name, 32) != 0) { // segment name changed, load new image
-    strncpy(lastFilename +1, seg.name, 32);
+  if (strncmp(lastFilename +1, seg.name, WLED_MAX_SEGNAME_LEN) != 0) { // segment name changed, load new image
+    strncpy(lastFilename +1, seg.name, WLED_MAX_SEGNAME_LEN);
     gifDecodeFailed = false;
     if (strcmp(lastFilename + strlen(lastFilename) - 4, ".gif") != 0) {
       gifDecodeFailed = true;

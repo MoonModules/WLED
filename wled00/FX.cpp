@@ -6781,8 +6781,8 @@ uint16_t mode_2Dscrollingtext(void) {
     case 5: letterWidth = 5; letterHeight = 12; break;
   }
   const int yoffset = map(SEGMENT.intensity, 0, 255, -rows/2, rows/2) + (rows-letterHeight)/2;
-  char text[33] = {'\0'};
-  unsigned maxLen = (SEGMENT.name) ? min(32, (int)strlen(SEGMENT.name)) : 0;  // WLEDMM make it robust against too long segment names
+  char text[WLED_MAX_SEGNAME_LEN+1] = {'\0'};
+  unsigned maxLen = (SEGMENT.name) ? min(WLED_MAX_SEGNAME_LEN, (int)strlen(SEGMENT.name)) : 0;  // WLEDMM make it robust against too long segment names
   if (SEGMENT.name) for (size_t i=0,j=0; i<maxLen; i++) if (SEGMENT.name[i]>31 && SEGMENT.name[i]<128) text[j++] = SEGMENT.name[i];
   const bool zero = strchr(text, '0') != nullptr;
   bool drawShadow = (SEGMENT.check2); // "shadow" is only needed for overlays to improve readability

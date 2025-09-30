@@ -730,7 +730,7 @@ class JMapC {
         uint32_t dataSize = 0;
         deletejVectorMap();
         DEBUG_PRINT("New "); DEBUG_PRINTLN(SEGMENT.name);
-        char jMapFileName[50];
+        char jMapFileName[WLED_MAX_SEGNAME_LEN+10]; // segment name + "/" + ".json" + null terminator
         strcpy(jMapFileName, "/");
         strcat(jMapFileName, SEGMENT.name);
         strcat(jMapFileName, ".json");
@@ -1682,7 +1682,7 @@ void WS2812FX::enumerateLedmaps() {
   ledmapMaxSize = 0;
   ledMaps = 1;
   for (int i=1; i<10; i++) {
-    char fileName[33] = {'\0'};       // WLEDMM ensure termination
+    char fileName[20] = {'\0'};       // WLEDMM ensure termination - sized for "/ledmapXX.json"
     snprintf_P(fileName, sizeof(fileName), PSTR("/ledmap%d.json"), i);
     bool isFile = WLED_FS.exists(fileName);
 
@@ -1754,7 +1754,7 @@ void WS2812FX::enumerateLedmaps() {
   uint8_t segment_index = 0;
   for (segment &seg : _segments) {
     if (seg.name != nullptr && strlen(seg.name) > 0) {
-      char fileName[33];
+      char fileName[WLED_MAX_SEGNAME_LEN+1];
       snprintf_P(fileName, sizeof(fileName), PSTR("/lm%s.json"), seg.name);
       bool isFile = WLED_FS.exists(fileName);
       if (isFile) ledMaps |= 1 << (10+segment_index);

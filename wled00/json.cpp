@@ -145,7 +145,7 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     const char * name = elem["n"].as<const char*>();
     size_t len = 0;
     if (name != nullptr) len = strlen(name);
-    if (len > 0 && len < 32) {
+    if (len > 0 && len <= WLED_MAX_SEGNAME_LEN) {
       seg.name = new(std::nothrow) char[len+1];
       if (seg.name) strlcpy(seg.name, name, len+1);
     } else {
