@@ -36,6 +36,9 @@ This fork extends the segment name length from the default **32 characters** to 
 **Use Case:**
 Perfect for installations with many segments where descriptive names are essential, or when using the text scroll effect to display longer messages on LED matrices.
 
+**⚠️ Disclaimer:**
+This modification was primarily developed and tested for the **text scroll LED effect** on matrices. While all related code paths have been updated to support 128-character names, not all features and effects have been extensively tested with very long segment names. Use at your own risk.
+
 ---
 
 MoonModules/WLED is a fork of [Aircoookie/WLED](https://github.com/Aircoookie/WLED) which contains latest merge of v0.14 of WLED with [additional features](https://mm.kno.wled.ge/moonmodules/what-is-moonmodules/).
