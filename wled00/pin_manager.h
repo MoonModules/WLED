@@ -106,6 +106,7 @@ class PinManagerClass {
   // Provided to simplify error condition handling in clients
   // using more than one pin, such as I2C, SPI, rotary encoders,
   // ethernet, etc..
+  bool allocateMultiplePins(const uint8_t * mptArray, byte arrayElementCount, PinOwner tag, boolean output);
   bool allocateMultiplePins(const managed_pin_type * mptArray, byte arrayElementCount, PinOwner tag );
 
   #if !defined(ESP8266) // ESP8266 compiler doesn't understand deprecated attribute

@@ -417,10 +417,7 @@ class BusHub75Matrix : public Bus {
 
     void setBrightness(uint8_t b, bool immediate) override;
 
-    uint8_t getPins(uint8_t* pinArray) const override {
-      pinArray[0] = activeMXconfig.chain_length;
-      return 1;
-    } // Fake value due to keep finaliseInit happy
+    uint8_t getPins(uint8_t* pinArray) const override;
 
     void deallocatePins();
 
@@ -434,6 +431,7 @@ class BusHub75Matrix : public Bus {
     unsigned _panelWidth = 0;
     CRGB *_ledBuffer = nullptr;
     byte *_ledsDirty = nullptr;
+    const int PIN_COUNT = 14;
     // C++ dirty trick: private static variables are actually _not_ part of the class (however only visibile to class instances). 
     // These variables persist when BusHub75Matrix gets deleted.
     static MatrixPanel_I2S_DMA *activeDisplay;         // active display object
