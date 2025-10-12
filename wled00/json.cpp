@@ -1,5 +1,6 @@
 #include "wled.h"
-
+#include "ImageCacheManager.h"
+#include "esp_vfs_fat.h"
 #include "palettes.h"
 
 #define JSON_PATH_STATE      1
@@ -95,11 +96,11 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   }
 
   // WLEDMM: before changing segments, make sure our strip is _not_ servicing effects in parallel
-  suspendStripService = true; // temporarily lock out strip updates
-  if (strip.isServicing()) {
-    USER_PRINTLN(F("deserializeSegment(): strip is still drawing effects."));
-    strip.waitUntilIdle();
-  }
+  // suspendStripService = true; // temporarily lock out strip updates
+  // if (strip.isServicing()) {
+  //   USER_PRINTLN(F("deserializeSegment(): strip is still drawing effects."));
+  //   strip.waitUntilIdle();
+  // }
 
   Segment& seg = strip.getSegment(id);
   Segment prev = seg; //make a backup so we can tell if something changed // WLEDMM fixMe: copy constructor = waste of memory
@@ -131,7 +132,8 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
       deserializeSegment(elem, i, presetId); // recursive call with new id // WLEDMM expect problems like heap overflow
       if (iAmGroot) inDeepCall = false;  // WLEDMM toplevel -> reset recursion flag
     }
-    if (iAmGroot) suspendStripService = false; // WLEDMM release lock
+    // if (iAmGroot) suspendStripService = false; // WLEDMM release lock
+    suspendStripService = false; // WLEDMM release lock
     return true;
   }
 
@@ -194,7 +196,8 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
 	if (newSeg) seg.refreshLightCapabilities(); // fix for #3403
 
   if (seg.reset && seg.stop == 0) {
-    if (iAmGroot) suspendStripService = false; // WLEDMM release lock
+    // if (iAmGroot) suspendStripService = false; // WLEDMM release lock
+    suspendStripService = false; // WLEDMM release lock
 
     if (id == strip.getMainSegmentId()) strip.setMainSegmentId(0); // fix for #3403
     return true; // segment was deleted & is marked for reset, no need to change anything else
@@ -329,10 +332,10 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     uint8_t oldMap1D2D = seg.map1D2D;
     seg.map1D2D = M12_Pixels; // no mapping
     // WLEDMM begin - we need to init segment caches before putting any pixels
-    if (strip.isServicing()) {
-      USER_PRINTLN(F("deserializeSegment() image: strip is still drawing effects."));
-      strip.waitUntilIdle();
-    }
+    // if (strip.isServicing()) {
+      // USER_PRINTLN(F("deserializeSegment() image: strip is still drawing effects."));
+      // strip.waitUntilIdle();
+    // }
     seg.startFrame();
     // WLEDMM end
 
@@ -393,7 +396,8 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     }
   }
 
-  if (iAmGroot) suspendStripService = false; // WLEDMM release lock
+  // if (iAmGroot) 
+  suspendStripService = false; // WLEDMM release lock
   return true;
 }
 
@@ -453,16 +457,16 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     }
   }
 
-#ifdef ARDUINO_ARCH_ESP32
-  delay(2); // WLEDMM experimental - de-serialize takes time, so allow other tasks to run
-#endif
+// #ifdef ARDUINO_ARCH_ESP32
+//   delay(2); // WLEDMM experimental - de-serialize takes time, so allow other tasks to run
+// #endif
 
   // WLEDMM: before changing strip, make sure our strip is _not_ servicing effects in parallel
-  suspendStripService = true; // temporarily lock out strip updates
-  if (strip.isServicing()) {
-    USER_PRINTLN(F("deserializeState(): strip is still drawing effects."));
-    strip.waitUntilIdle();
-  }
+  // suspendStripService = true; // temporarily lock out strip updates
+  // if (strip.isServicing()) {
+  //   USER_PRINTLN(F("deserializeState(): strip is still drawing effects."));
+  //   strip.waitUntilIdle();
+  // }
 
   // temporary transition (applies only once)
   tr = root[F("tt")] | -1;
@@ -588,7 +592,8 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
       presetCycCurr = ps;
       unloadPlaylist();          // applying a preset unloads the playlist
       applyPreset(ps, callMode); // async load from file system (only preset ID was specified)
-      if (iAmGroot) suspendStripService = false; // WLEDMM release lock
+      // if (iAmGroot) suspendStripService = false; // WLEDMM release lock
+      suspendStripService = false; // WLEDMM release lock
       return stateResponse;
     }
   }
@@ -724,6 +729,7 @@ void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segme
       case ERR_FS_PLOAD:  USER_PRINTLN(warnPrefix + F("Tried loading a preset that does not exist.")); break;
       case ERR_FS_IRLOAD: USER_PRINTLN(warnPrefix + F("Tried loading an IR JSON cmd, but \"ir.json\" file does not exist.")); break;
       case ERR_FS_RMLOAD: USER_PRINTLN(warnPrefix + F("Tried loading a remote JSON cmd, but \"remote.json\" file does not exist.")); break;
+      case ERR_SYS_REBOOT: USER_PRINTLN(errPrefix + F("A previous panic/abort caused a reboot.")); break;
       case ERR_FS_GENERAL: USER_PRINTLN(errPrefix + F("general unspecified filesystem error.")); break;
       default: USER_PRINT(errPrefix + F("error code = ")); USER_PRINTLN(errorFlag); break;
     }
@@ -973,11 +979,8 @@ void serializeInfo(JsonObject root)
     case REALTIME_MODE_INACTIVE: root["lm"] = ""; break;
     case REALTIME_MODE_GENERIC:  root["lm"] = ""; break;
     case REALTIME_MODE_UDP:      root["lm"] = F("UDP"); break;
-    case REALTIME_MODE_HYPERION: root["lm"] = F("Hyperion"); break;
     case REALTIME_MODE_E131:     root["lm"] = F("E1.31"); break;
-    case REALTIME_MODE_ADALIGHT: root["lm"] = F("USB Adalight/TPM2"); break;
     case REALTIME_MODE_ARTNET:   root["lm"] = F("Art-Net"); break;
-    case REALTIME_MODE_TPM2NET:  root["lm"] = F("tpm2.net"); break;
     case REALTIME_MODE_DDP:      root["lm"] = F("DDP"); break;
     case REALTIME_MODE_DMX:      root["lm"] = F("DMX"); break;
   }
@@ -1016,25 +1019,212 @@ void serializeInfo(JsonObject root)
     outputs.add(busses.getBus(b)->getLength());
   }
 
-  JsonObject wifi_info = root.createNestedObject("wifi");
-  #ifdef ARDUINO_ARCH_ESP32P4
-    wifi_info[F("bssid")] = CLIENT_SSID;
-    int qrssi = 69;
-    wifi_info[F("rssi")] = qrssi;
-    wifi_info[F("signal")] = getSignalQuality(qrssi);
-    wifi_info[F("channel")] = 99;
-  #else
-    wifi_info[F("bssid")] = WiFi.BSSIDstr();
-    int qrssi = WiFi.RSSI();
-    wifi_info[F("rssi")] = qrssi;
-    wifi_info[F("signal")] = getSignalQuality(qrssi);
-    wifi_info[F("channel")] = WiFi.channel();
-  #endif
+  JsonObject network_info = root.createNestedObject("network");
+  uint8_t mac[6];
+  esp_netif_ip_info_t ip_info;
+
+  // --- Get Interface Handles ---
+  esp_netif_t* wifi_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+  esp_netif_t* eth_netif = esp_netif_get_handle_from_ifkey("ETH_DEF");
+
+  // --- Wi-Fi Section ---
+  if (wifi_netif) {
+    JsonObject wifi_obj = network_info.createNestedObject("wifi");
+    // Get local Wi-Fi MAC
+    if (esp_wifi_get_mac(WIFI_IF_STA, mac) == ESP_OK) {
+      wifi_obj["mac"] = Network.format_mac_address(mac);
+    }
+    // Get local Wi-Fi IP
+    if (esp_netif_get_ip_info(wifi_netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0) {
+      char ip_str[16];
+      sprintf(ip_str, IPSTR, IP2STR(&ip_info.ip));
+      wifi_obj["ip"] = ip_str;
+    }
+
+    // --- Detailed Access Point (AP) Info ---
+    wifi_ap_record_t ap_info;
+    if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+      JsonObject ap_obj = wifi_obj.createNestedObject("ap");
+      ap_obj["ssid"] = (char*)ap_info.ssid;
+      ap_obj["bssid"] = Network.format_mac_address(ap_info.bssid);
+      ap_obj["rssi"] = ap_info.rssi;
+      ap_obj["signal"] = getSignalQuality(ap_info.rssi);
+      ap_obj["channel"] = ap_info.primary;
+
+      const char* authmode_str = "Unknown";
+      switch (ap_info.authmode) {
+      case WIFI_AUTH_OPEN: authmode_str = "Open"; break;
+      case WIFI_AUTH_WEP: authmode_str = "WEP"; break;
+      case WIFI_AUTH_WPA_PSK: authmode_str = "WPA-PSK"; break;
+      case WIFI_AUTH_WPA2_PSK: authmode_str = "WPA2-PSK"; break;
+      case WIFI_AUTH_WPA_WPA2_PSK: authmode_str = "WPA/WPA2-PSK"; break;
+      case WIFI_AUTH_WPA2_ENTERPRISE: authmode_str = "WPA2-Ent"; break;
+      case WIFI_AUTH_WPA3_PSK: authmode_str = "WPA3-PSK"; break;
+      case WIFI_AUTH_WPA2_WPA3_PSK: authmode_str = "WPA2/WPA3-PSK"; break;
+      default: break;
+      }
+      ap_obj["auth"] = authmode_str;
+
+      uint8_t protocol_bitmap = 0;
+      if (esp_wifi_get_protocol(WIFI_IF_STA, &protocol_bitmap) == ESP_OK) {
+        String protocols = "";
+        if (protocol_bitmap & WIFI_PROTOCOL_11B)  protocols += "B,";
+        if (protocol_bitmap & WIFI_PROTOCOL_11G)  protocols += "G,";
+        if (protocol_bitmap & WIFI_PROTOCOL_11N)  protocols += "N,";
+        if (protocol_bitmap & WIFI_PROTOCOL_LR)   protocols += "LR,";
+        if (protocol_bitmap & WIFI_PROTOCOL_11AX) protocols += "AX,";
+        // A and AC are 5GHz only.
+        if (protocol_bitmap & WIFI_PROTOCOL_11A)  protocols += "A,";
+        if (protocol_bitmap & WIFI_PROTOCOL_11AC) protocols += "AC,";
+
+        if (protocols.length() > 0) {
+          protocols.remove(protocols.length() - 1);
+        }
+        wifi_obj["protocols"] = protocols;
+      }
+
+      const char* bandwidth_str;
+      switch (ap_info.bandwidth) {
+      case WIFI_BW_HT40:   bandwidth_str = "40MHz"; break;
+      case WIFI_BW80:      bandwidth_str = "80MHz"; break;
+      case WIFI_BW160:     bandwidth_str = "160MHz"; break;
+      case WIFI_BW80_BW80: bandwidth_str = "80+80MHz"; break;
+      case WIFI_BW_HT20:
+      default:             bandwidth_str = "20MHz"; break;
+      }
+      ap_obj["bw"] = bandwidth_str;
+
+      String phy_modes = "";
+      if (ap_info.phy_11b) phy_modes += "B,";
+      if (ap_info.phy_11g) phy_modes += "G,";
+      if (ap_info.phy_11n) phy_modes += "N,";
+      if (ap_info.phy_11ax) phy_modes += "AX,";
+      if (phy_modes.length() > 0) {
+        phy_modes.remove(phy_modes.length() - 1);
+      }
+      ap_obj["phy"] = phy_modes;
+
+      #ifndef CONFIG_IDF_TARGET_ESP32P4
+      wifi_phy_mode_t phymode;
+
+      if (esp_wifi_sta_get_negotiated_phymode(&phymode) == ESP_OK) {
+        const char* mode_str = "Unknown";
+        switch (phymode) {
+        case WIFI_PHY_MODE_11B:  mode_str = "802.11b"; break;
+        case WIFI_PHY_MODE_11G:  mode_str = "802.11g"; break;
+          // HT modes are part of 802.11n (Wi-Fi 4)
+        case WIFI_PHY_MODE_HT20: mode_str = "802.11n (20MHz)"; break;
+        case WIFI_PHY_MODE_HT40: mode_str = "802.11n (40MHz)"; break;
+          // HE mode is part of 802.11ax (Wi-Fi 6)
+        case WIFI_PHY_MODE_HE20: mode_str = "802.11ax (20MHz)"; break;
+          // Add other modes as needed
+        case WIFI_PHY_MODE_LR:   mode_str = "Low Rate"; break;
+        default: break;
+        }
+        wifi_obj["mode"] = mode_str;
+      } else {
+        wifi_obj["mode"] = "Unknown Mode";
+      }
+      #else
+      #warning FIXME: Skipping over esp_wifi_sta_get_negotiated_phymode code on ESP32-P4 and making an informed assumption. Maybe update the embedded C6?
+      uint8_t local_protocol_bitmap = 0;
+      esp_wifi_get_protocol(WIFI_IF_STA, &local_protocol_bitmap);
+
+      const char* mode_str = "Unknown";
+
+      // Check from the best protocol downwards
+      if ((local_protocol_bitmap & WIFI_PROTOCOL_11AX) && ap_info.phy_11ax) {
+        mode_str = "802.11ax (Wi-Fi 6)";
+      } else if ((local_protocol_bitmap & WIFI_PROTOCOL_11N) && ap_info.phy_11n) {
+        mode_str = "802.11n (Wi-Fi 4)";
+      } else if ((local_protocol_bitmap & WIFI_PROTOCOL_11G) && ap_info.phy_11g) {
+        mode_str = "802.11g";
+      } else if ((local_protocol_bitmap & WIFI_PROTOCOL_11B) && ap_info.phy_11b) {
+        mode_str = "802.11b";
+      }
+      wifi_obj["mode"] = mode_str;
+      #endif
+
+      if (ap_info.country.cc[0] != 0) {
+        char country_str[3];
+        strncpy(country_str, (const char*)ap_info.country.cc, 2);
+        country_str[2] = '\0';
+        ap_obj["country"] = country_str;
+      }
+    }
+  }
+
+  // --- Ethernet Section ---
+  if (eth_netif && eth_handle) {
+    JsonObject eth_obj = network_info.createNestedObject("ethernet");
+    if (esp_netif_get_mac(eth_netif, mac) == ESP_OK) {
+      eth_obj["mac"] = Network.format_mac_address(mac);
+    }
+    if (esp_netif_get_ip_info(eth_netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0) {
+      char ip_str[16];
+      sprintf(ip_str, IPSTR, IP2STR(&ip_info.ip));
+      eth_obj["ip"] = ip_str;
+    }
+  }
+
+  // --- Routing Information Section ---
+  uint32_t wifi_metric = 999, eth_metric = 999; // Default to high values
+
+  if (wifi_netif) {
+    wifi_metric = esp_netif_get_route_prio(wifi_netif);
+  }
+  if (eth_netif) {
+    eth_metric = esp_netif_get_route_prio(eth_netif);
+  }
+
+  if (eth_netif && eth_metric < wifi_metric) {
+    network_info["default_route"] = "Ethernet";
+  }
+  else if (wifi_netif && wifi_metric < 999) {
+    network_info["default_route"] = "WiFi";
+  }
+  else {
+    network_info["default_route"] = "None";
+  }
 
   JsonObject fs_info = root.createNestedObject("fs");
   fs_info["u"] = fsBytesUsed / 1000;
   fs_info["t"] = fsBytesTotal / 1000;
   fs_info[F("pmt")] = presetsModifiedTime;
+
+  JsonObject cache_info = root.createNestedObject("cache");
+
+  CacheStatus status = ImageCacheManager::getInstance().getStatus();
+
+  switch (status) {
+  case CacheStatus::IDLE:
+    cache_info["s"] = "Idle";
+    break;
+  case CacheStatus::PRELOADING_BG:
+    cache_info["s"] = "Preloading";
+    break;
+  case CacheStatus::LOADING_DEMAND:
+    cache_info["s"] = "On-Demand Load";
+    break;
+  }
+
+  cache_info["f"] = ImageCacheManager::getInstance().getCurrentFile();
+  cache_info["p"] = (ImageCacheManager::getInstance().getCacheUsedBytes())/1024;
+
+  if (status == CacheStatus::IDLE) {
+    uint64_t usb_bytes_total = 0;
+    uint64_t usb_bytes_free = 0;
+    const char* mount_path = "/usb0";
+
+    esp_err_t result = esp_vfs_fat_info(mount_path, &usb_bytes_total, &usb_bytes_free);
+
+    if (result == ESP_OK) {
+      uint64_t usb_bytes_used = usb_bytes_total - usb_bytes_free;
+      JsonObject usb_info = root.createNestedObject("usb");
+      usb_info["u"] = usb_bytes_used;
+      usb_info["t"] = usb_bytes_total;
+    }
+  }
 
   root[F("ndc")] = nodeListEnabled ? (int)Nodes.size() : -1;
 
@@ -1061,8 +1251,8 @@ void serializeInfo(JsonObject root)
 
   #if defined(ARDUINO_ARCH_ESP32)
   unsigned long t_wait = millis();
-  while(strip.isUpdating() && (millis() - t_wait < 125)) delay(1); // WLEDMM try to catch a moment when strip is idle
-  while(strip.isUpdating() && (millis() - t_wait < 160)) yield();  //        try harder
+  // while(strip.isUpdating() && (millis() - t_wait < 125)) delay(1); // WLEDMM try to catch a moment when strip is idle
+  // while(strip.isUpdating() && (millis() - t_wait < 160)) yield();  //        try harder
   //if (strip.isUpdating()) USER_PRINTLN("serializeInfo: strip still updating.");
   #endif
 
@@ -1088,7 +1278,7 @@ void serializeInfo(JsonObject root)
     root[F("minfreeheap")] = ESP.getMinFreeHeap();
   #endif
   #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-  if (psramFound()) {
+  if (psramFound()) {  // OK use
     root[F("tpram")] = ESP.getPsramSize(); //WLEDMM
     root[F("psram")] = ESP.getFreePsram();
     root[F("psusedram")] = ESP.getMinFreePsram();
@@ -1201,12 +1391,6 @@ void serializeInfo(JsonObject root)
   #endif
   #ifndef WLED_DISABLE_FILESYSTEM
   os += 0x08;
-  #endif
-  #ifndef WLED_DISABLE_HUESYNC
-  os += 0x04;
-  #endif
-  #ifdef WLED_ENABLE_ADALIGHT
-  os += 0x02;
   #endif
   #ifndef WLED_DISABLE_OTA
   os += 0x01;

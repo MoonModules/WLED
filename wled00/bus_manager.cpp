@@ -273,7 +273,7 @@ BusPwm::BusPwm(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWhite) {
     deallocatePins(); return;
     }
     _pins[i] = currentPin; //store only after allocatePin() succeeds
-    #if defined(ESP8266) || defined (ARDUINO_ARCH_ESP32P4)
+  #if defined(ESP8266) || defined (CONFIG_IDF_TARGET_ESP32P4)
     pinMode(_pins[i], OUTPUT);
     #else
     ledcSetup(_ledcStart + i, _frequency, 8);
@@ -393,7 +393,7 @@ void BusPwm::deallocatePins() {
   for (uint8_t i = 0; i < numPins; i++) {
     pinManager.deallocatePin(_pins[i], PinOwner::BusPwm);
     if (!pinManager.isPinOk(_pins[i])) continue;
-    #if defined(ESP8266) || defined (ARDUINO_ARCH_ESP32P4)
+  #if defined(ESP8266) || defined (CONFIG_IDF_TARGET_ESP32P4)
     digitalWrite(_pins[i], LOW); //turn off PWM interrupt
     #else
     if (_ledcStart < 16) ledcDetachPin(_pins[i]);
@@ -473,20 +473,43 @@ BusNetwork::BusNetwork(BusConfig &bc, const ColorOrderMap &com) : Bus(bc.type, b
       break;
   }
   _UDPchannels = _rgbw ? 4 : 3;
-  #ifdef ESP32
-  _data = (byte*) heap_caps_calloc_prefer((bc.count * _UDPchannels)+15, sizeof(byte), 3, MALLOC_CAP_DEFAULT, MALLOC_CAP_SPIRAM);
-  #else
-  _data = (byte*) calloc((bc.count * _UDPchannels)+15, sizeof(byte));
-  #endif
+  // _data = (byte*)heap_caps_calloc_prefer((bc.count * _UDPchannels) + 15, sizeof(byte), 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+  _data = (byte*)heap_caps_calloc_prefer((bc.count * _UDPchannels) + 15, sizeof(byte), 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_32BIT | MALLOC_CAP_CACHE_ALIGNED | MALLOC_CAP_SIMD, MALLOC_CAP_DMA | MALLOC_CAP_32BIT | MALLOC_CAP_CACHE_ALIGNED | MALLOC_CAP_SIMD, MALLOC_CAP_INTERNAL);
   if (_data == nullptr) return;
   _len = bc.count;
   _colorOrder = bc.colorOrder;
-  _client = IPAddress(bc.pins[0],bc.pins[1],bc.pins[2],bc.pins[3]);
+  IPAddress local = Network.localIP();
+  IPAddress mask = Network.subnetMask();
+  IPAddress test_client(bc.pins[0], bc.pins[1], bc.pins[2], bc.pins[3]);
+
+  bool sameSubnet = (
+    (test_client[0] & mask[0]) == (local[0] & mask[0]) &&
+    (test_client[1] & mask[1]) == (local[1] & mask[1]) &&
+    (test_client[2] & mask[2]) == (local[2] & mask[2]) &&
+    (test_client[3] & mask[3]) == (local[3] & mask[3])
+    );
+
+  bool isRFC1918 =
+    (test_client[0] == 10) ||
+    (test_client[0] == 172 && test_client[1] >= 16 && test_client[1] <= 31) ||
+    (test_client[0] == 192 && test_client[1] == 168);
+
+  bool matchesLocalIP = (test_client == local);
+
+  // If it's not on our subnet, or matches our IP, or isn't private — reset
+  if (!sameSubnet || matchesLocalIP || !isRFC1918) {
+    bc.pins[0] = local[0];
+    bc.pins[1] = local[1];
+    bc.pins[2] = local[2];
+    bc.pins[3] = -1;
+  }
+
+  _client = IPAddress(bc.pins[0], bc.pins[1], bc.pins[2], bc.pins[3]);
   _broadcastLock = false;
   _valid = true;
-  _artnet_outputs = bc.artnet_outputs;
-  _artnet_leds_per_output = bc.artnet_leds_per_output;
-  _artnet_fps_limit = max(uint8_t(1), bc.artnet_fps_limit);
+  _outputs = bc.outputs;
+  _leds_per_output = bc.leds_per_output;
+  _fps_limit = max(uint8_t(1), bc.fps_limit);
   USER_PRINTF(" %u.%u.%u.%u]\n", bc.pins[0],bc.pins[1],bc.pins[2],bc.pins[3]);
 }
 
@@ -497,7 +520,7 @@ void IRAM_ATTR_YN BusNetwork::setPixelColor(uint32_t pix, uint32_t c) {
 
     uint32_t offset = pix * _UDPchannels;
     uint8_t co = _colorOrderMap.getPixelColorOrder(pix + _start, _colorOrder);
-
+    #ifndef WLEDMM_REMAP_AT_OUTPUT
     if (_colorOrder != co || _colorOrder != COL_ORDER_RGB) {
         switch (co) {
             case COL_ORDER_GRB:
@@ -524,6 +547,10 @@ void IRAM_ATTR_YN BusNetwork::setPixelColor(uint32_t pix, uint32_t c) {
         _data[offset] = R(c); _data[offset+1] = G(c); _data[offset+2] = B(c);
         if (_rgbw) _data[offset+3] = W(c);
     }
+    #else
+    _data[offset] = R(c); _data[offset + 1] = G(c); _data[offset + 2] = B(c);
+    if (_rgbw) _data[offset + 3] = W(c);
+    #endif
 }
 
 uint32_t IRAM_ATTR_YN BusNetwork::getPixelColor(uint32_t pix) const {
@@ -535,7 +562,7 @@ uint32_t IRAM_ATTR_YN BusNetwork::getPixelColor(uint32_t pix) const {
     uint8_t g = _data[offset + 1];
     uint8_t b = _data[offset + 2];
     uint8_t w = _rgbw ? _data[offset + 3] : 0;
-
+    #ifndef WLEDMM_REMAP_AT_OUTPUT
     switch (co) {
         case COL_ORDER_GRB: return RGBW32(g, r, b, w);
         case COL_ORDER_RGB: return RGBW32(r, g, b, w);
@@ -545,12 +572,15 @@ uint32_t IRAM_ATTR_YN BusNetwork::getPixelColor(uint32_t pix) const {
         case COL_ORDER_BGR: return RGBW32(b, g, r, w);
         default: return RGBW32(r, g, b, w); // default to RGB order
     }
+    #else
+    return RGBW32(r, g, b, w); // default to RGB order
+    #endif
 }
 
-void BusNetwork::show() {
+void IRAM_ATTR BusNetwork::show() {
   if (!_valid || !canShow()) return;
   _broadcastLock = true;
-  realtimeBroadcast(_UDPtype, _client, _len, _data, _bri, _rgbw, _artnet_outputs, _artnet_leds_per_output, _artnet_fps_limit);
+  realtimeBroadcast(_UDPtype, _client, _len, _data, _bri, _rgbw, _outputs, _leds_per_output, _fps_limit, _colorOrder);
   _broadcastLock = false;
 }
 
@@ -568,6 +598,139 @@ void BusNetwork::cleanup() {
   _data = nullptr;
   _len = 0;
 }
+
+// ***************************************************************************
+#ifdef SOC_PARLIO_SUPPORTED
+BusParallelIO::BusParallelIO(BusConfig& bc, const ColorOrderMap& com) : Bus(bc.type, bc.start, bc.autoWhite), _colorOrderMap(com) {
+  _valid = false;
+  USER_PRINT("[");
+  switch (bc.type) {
+  case TYPE_PARLIO_RGBW:
+    _rgbw = true;
+    USER_PRINT("TYPE_PARLIO_RGBW:");
+    break;
+  default:
+  case TYPE_PARLIO_RGB:
+    _rgbw = false;
+    USER_PRINT("TYPE_PARLIO_RGB:");
+    break;
+  }
+  _channels = _rgbw ? 4 : 3;
+  // _data = (byte*)heap_caps_calloc_prefer((bc.count * _UDPchannels) + 15, sizeof(byte), 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+  _data = (byte*)heap_caps_calloc_prefer((bc.count * _channels) + 15, sizeof(byte), 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_32BIT | MALLOC_CAP_CACHE_ALIGNED | MALLOC_CAP_SIMD, MALLOC_CAP_DMA | MALLOC_CAP_32BIT | MALLOC_CAP_CACHE_ALIGNED | MALLOC_CAP_SIMD, MALLOC_CAP_INTERNAL);
+  if (_data == nullptr) return;
+  _len = bc.count;
+  _colorOrder = bc.colorOrder;
+  _broadcastLock = false;
+  _valid = true;
+  memcpy(_pins, bc.pins, sizeof(_pins));
+  _outputs = bc.outputs;
+  _leds_per_output = bc.leds_per_output;
+  for (uint8_t i = 0; i < sizeof(_pins); i++) {
+    if (!pinManager.allocatePin(_pins[i], true, PinOwner::Parallel_IO)){
+      USER_PRINTF("Error owning GPIO %d\n", _pins[i]);
+    }
+    USER_PRINT(bc.pins[i]);
+    if (i != sizeof(_pins)-1) USER_PRINT(",");
+  }
+  USER_PRINTLN("]");
+}
+
+void IRAM_ATTR_YN BusParallelIO::setPixelColor(uint32_t pix, uint32_t c) {
+  if (pix >= _len) return;
+  if (_rgbw) c = autoWhiteCalc(c);
+  if (_cct >= 1900) c = colorBalanceFromKelvin(_cct, c); // color correction from CCT
+
+  uint32_t offset = pix * _channels;
+  uint8_t co = _colorOrderMap.getPixelColorOrder(pix + _start, _colorOrder);
+#ifndef WLEDMM_REMAP_AT_OUTPUT
+  if (_colorOrder != co || _colorOrder != COL_ORDER_RGB) {
+    switch (co) {
+    case COL_ORDER_GRB:
+      _data[offset] = G(c); _data[offset + 1] = R(c); _data[offset + 2] = B(c);
+      break;
+    case COL_ORDER_RGB:
+      _data[offset] = R(c); _data[offset + 1] = G(c); _data[offset + 2] = B(c);
+      break;
+    case COL_ORDER_BRG:
+      _data[offset] = B(c); _data[offset + 1] = R(c); _data[offset + 2] = G(c);
+      break;
+    case COL_ORDER_RBG:
+      _data[offset] = R(c); _data[offset + 1] = B(c); _data[offset + 2] = G(c);
+      break;
+    case COL_ORDER_GBR:
+      _data[offset] = G(c); _data[offset + 1] = B(c); _data[offset + 2] = R(c);
+      break;
+    case COL_ORDER_BGR:
+      _data[offset] = B(c); _data[offset + 1] = G(c); _data[offset + 2] = R(c);
+      break;
+    }
+    if (_rgbw) _data[offset + 3] = W(c);
+  } else {
+    _data[offset] = R(c); _data[offset + 1] = G(c); _data[offset + 2] = B(c);
+    if (_rgbw) _data[offset + 3] = W(c);
+  }
+#else
+  _data[offset] = R(c); _data[offset + 1] = G(c); _data[offset + 2] = B(c);
+  if (_rgbw) _data[offset + 3] = W(c);
+#endif
+}
+
+uint32_t IRAM_ATTR_YN BusParallelIO::getPixelColor(uint32_t pix) const {
+  if (pix >= _len) return 0;
+  uint32_t offset = pix * _channels;
+  uint8_t co = _colorOrderMap.getPixelColorOrder(pix + _start, _colorOrder);
+
+  uint8_t r = _data[offset + 0];
+  uint8_t g = _data[offset + 1];
+  uint8_t b = _data[offset + 2];
+  uint8_t w = _rgbw ? _data[offset + 3] : 0;
+#ifndef WLEDMM_REMAP_AT_OUTPUT
+  switch (co) {
+  case COL_ORDER_GRB: return RGBW32(g, r, b, w);
+  case COL_ORDER_RGB: return RGBW32(r, g, b, w);
+  case COL_ORDER_BRG: return RGBW32(b, r, g, w);
+  case COL_ORDER_RBG: return RGBW32(r, b, g, w);
+  case COL_ORDER_GBR: return RGBW32(g, b, r, w);
+  case COL_ORDER_BGR: return RGBW32(b, g, r, w);
+  default: return RGBW32(r, g, b, w); // default to RGB order
+  }
+#else
+  return RGBW32(r, g, b, w); // default to RGB order
+#endif
+}
+
+void IRAM_ATTR BusParallelIO::show() {
+  if (!_valid || !canShow()) return;
+  _broadcastLock = true;
+  show_parlio(_pins, _len, _data, _bri, _rgbw, _outputs, _leds_per_output, _colorOrder);
+  _broadcastLock = false;
+}
+
+uint8_t BusParallelIO::getPins(uint8_t* pinArray) const {
+  int parallelPins[SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH];
+  uint8_t actual_pins = min(_outputs, uint8_t(SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH));
+  pinManager.getPinsByOwnerFixed(PinOwner::Parallel_IO, parallelPins, SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH, true);
+  for (uint8_t i = 0; i < actual_pins; i++) {
+    // USER_PRINTF("PARLIO pin %d = %d (default %d)\n", i, _pins[i], parallelPins[i]);
+    pinArray[i] = (parallelPins[i] == _pins[i]) ? parallelPins[i] : _pins[i];
+  }
+  return actual_pins;
+}
+
+void BusParallelIO::cleanup() {
+  for (uint8_t i = 0; i < sizeof(_pins); i++) {
+    if (!pinManager.deallocatePin(_pins[i], PinOwner::Parallel_IO)) {
+      USER_PRINTF("Error owning GPIO %d\n", _pins[i]);
+    }
+  }
+  _type = I_NONE;
+  _valid = false;
+  if (_data != nullptr) free(_data);
+  _data = nullptr;
+  _len = 0;
+}
+#endif // SOC_PARLIO_SUPPORTED
 
 // ***************************************************************************
 
@@ -991,7 +1154,7 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
     if (_ledsDirty) setBitArray(_ledsDirty, _len, false); // reset dirty bits
 
     #if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_SPIRAM_MODE_OCT && defined(BOARD_HAS_PSRAM) && (defined(WLED_USE_PSRAM) || defined(WLED_USE_PSRAM_JSON))
-      if (psramFound()) {
+      if (psramFound()) { // FIX?
         _ledBuffer = (CRGB*) ps_calloc(_len, sizeof(CRGB));  // create LEDs buffer (initialized to BLACK)
       } else {
         _ledBuffer = (CRGB*) calloc(_len, sizeof(CRGB));  // create LEDs buffer (initialized to BLACK)
@@ -1254,17 +1417,25 @@ int BusManager::add(BusConfig &bc) {
   slowMode = false;
 
   DEBUG_PRINTF("BusManager::add(bc.type=%u)\n", bc.type);
-  if (bc.type >= TYPE_NET_DDP_RGB && bc.type < 96) {
+  if (bc.type == TYPE_NET_ARTNET_RGB || bc.type == TYPE_NET_ARTNET_RGBW || bc.type == TYPE_NET_DDP_RGB || bc.type == TYPE_NET_DDP_RGBW) {
     busses[numBusses] = new BusNetwork(bc, colorOrderMap);
-  } else if (bc.type >= TYPE_HUB75MATRIX && bc.type <= (TYPE_HUB75MATRIX + 10)) {
-#ifdef WLED_ENABLE_HUB75MATRIX
+  } else if (bc.type == TYPE_HUB75MATRIX) {
+  #ifdef WLED_ENABLE_HUB75MATRIX
     DEBUG_PRINTLN("BusManager::add - Adding BusHub75Matrix");
     busses[numBusses] = new BusHub75Matrix(bc);
     USER_PRINTLN("[BusHub75Matrix] ");
-#else
+  #else
     USER_PRINTLN("[unsupported! BusHub75Matrix - add flag -D WLED_ENABLE_HUB75MATRIX] ");
     return -1;
-#endif
+  #endif
+  } else if (bc.type == TYPE_PARLIO_RGB || bc.type == TYPE_PARLIO_RGBW) {
+  #ifdef SOC_PARLIO_SUPPORTED
+    busses[numBusses] = new BusParallelIO(bc, colorOrderMap);
+    USER_PRINTLN("[BusParallelIO] ");
+  #else
+    USER_PRINTLN("[unsupported! BusParallelIO isn't supported by chipset!] ");
+    return -1;
+  #endif
   } else if (IS_DIGITAL(bc.type)) {
     busses[numBusses] = new BusDigital(bc, numBusses, colorOrderMap);
   } else if (bc.type == TYPE_ONOFF) {
@@ -1295,10 +1466,10 @@ void BusManager::removeAll() {
 
 void __attribute__((hot)) BusManager::show() {
   for (unsigned i = 0; i < numBusses; i++) {
-#if 1 && defined(ARDUINO_ARCH_ESP32)
-    unsigned long t0 = millis();
-    while ((busses[i]->canShow() == false) && (millis() - t0 < 80)) delay(1); // WLEDMM experimental: wait until bus driver is ready (max 80ms) - costs us 1-2 fps but reduces flickering
-#endif
+    // #if 1 && defined(ARDUINO_ARCH_ESP32)
+    //     unsigned long t0 = millis();
+    //     while ((busses[i]->canShow() == false) && (millis() - t0 < 80)) delay(1); // WLEDMM experimental: wait until bus driver is ready (max 80ms) - costs us 1-2 fps but reduces flickering
+    // #endif
     busses[i]->show();
   }
 }

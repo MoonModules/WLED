@@ -33,7 +33,7 @@ String PinManagerClass::getPinOwnerText(int gpio) {
 String PinManagerClass::getOwnerText(PinOwner tag) {
   switch(tag) {
     case PinOwner::None       : return(F("no owner")); break;       // unknown - no owner
-    case PinOwner::DebugOut   : return(F("debug output")); break;   // 'Dbg'  == debug output always IO1
+    case PinOwner::DebugOut   : return(F("Serial (hw)")); break;    // 'Dbg'  == debug output always IO1
     case PinOwner::Ethernet   : return(F("Ethernet")); break;       // Ethernet
     case PinOwner::BusDigital : return(F("LEDs (digital)")); break; // Digital LEDs
     case PinOwner::BusPwm     : return(F("LEDs (PWM)")); break;     // PWM output using BusPwm
@@ -52,6 +52,7 @@ String PinManagerClass::getOwnerText(PinOwner tag) {
     case PinOwner::HW_SPI     : return(F("SPI (hw)")); break;            // 'SPI'  == hardware (V)SPI pins (13,14&15 on ESP8266, 5,18&23 on ESP32)
     case PinOwner::DMX_INPUT  : return(F("DMX Input")); break;            
     case PinOwner::HUB75      : return(F("Hub75")); break;          // 'Hub75' == Hub75 driver 
+    case PinOwner::Parallel_IO: return(F("Parallel IO")); break;          // 'Parallel_IO' == Parallel IO driver 
 
     case PinOwner::UM_Audioreactive     : return(F("AudioReactive (UM)")); break;     // audioreactive usermod - analog or digital audio input
     case PinOwner::UM_Temperature       : return(F("Temperature (UM)")); break;       // "usermod_temperature.h"
@@ -132,7 +133,6 @@ String PinManagerClass::getPinSpecialText(int gpio) {  // special purpose PIN in
       //if (gpio > 38 && gpio < 43) return (F("USB (CDC) / JTAG"));  // note to self: this seems to be wrong. need to fix later.
       if (gpio == 46) return (F("pulled-down, input only"));
       //if (gpio == 0 || gpio == 45 || gpio == 46) return (F("(strapping pin)"));
-
     #elif defined(CONFIG_IDF_TARGET_ESP32C3)
       // ESP32-C3
       if (gpio > 17 && gpio < 20) return (F("USB (CDC) or JTAG"));
@@ -140,13 +140,18 @@ String PinManagerClass::getPinSpecialText(int gpio) {  // special purpose PIN in
     #elif defined(CONFIG_IDF_TARGET_ESP32C6)
       // ESP32-C6
       if (gpio > 11 && gpio < 14) return (F("USB (CDC) / JTAG"));
+    #elif defined(CONFIG_IDF_TARGET_ESP32P4)
+      if (gpio >= 34 && gpio <= 38) return (F("(strapping pin)"));
+      if (gpio == 26 || gpio == 27) return (F("Extra USB (usable)"));
+      if (gpio == 6) return (F("ESP32-C6 wakeup (usable)"));
+      if (gpio == 53) return (F("Audio Amp Enable (usable)"));
     #else
       // "classic" ESP32, or ESP32 PICO-D4
       //if (gpio == 0 || gpio == 2 || gpio == 5) return (F("(strapping pin)"));
       //if (gpio == 12) return (F("(strapping pin - MTDI)"));
       //if (gpio == 15) return (F("(strapping pin - MTDO)"));
       //if (gpio > 11 && gpio < 16) return (F("(optional) JTAG debug probe"));
-      #if defined(BOARD_HAS_PSRAM) && !defined(ARDUINO_ARCH_ESP32P4)
+      #if defined(BOARD_HAS_PSRAM) && !defined()
         if (gpio == 16 || gpio == 17) return (F("(reserved) PSRAM"));
       #endif
       #if defined(ARDUINO_TTGO_T7_V14_Mini32) || defined(ARDUINO_LOLIN_D32_PRO) || defined(ARDUINO_ADAFRUIT_FEATHER_ESP32_V2)
@@ -453,12 +458,56 @@ bool PinManagerClass::allocateMultiplePins(const managed_pin_type * mptArray, by
   return true;
 }
 
+bool PinManagerClass::isHWPin(byte gpio) {
+  #ifdef I2S_SDPIN
+    if (gpio == I2S_SDPIN) return true;
+  #endif
+  #ifdef I2S_WSPIN
+    if (gpio == I2S_WSPIN) return true;
+  #endif
+  #ifdef I2S_CKPIN
+    if (gpio == I2S_CKPIN) return true;
+  #endif
+  #ifdef MCLK_PIN
+    if (gpio == MCLK_PIN) return true;
+  #endif
+  #ifdef HW_PIN_SDA
+    if (gpio == HW_PIN_SDA) return true;
+  #endif
+  #ifdef HW_PIN_SCL
+    if (gpio == HW_PIN_SCL) return true;
+  #endif
+  #ifdef HW_PIN_MOSISPI
+    if (gpio == HW_PIN_MOSISPI) return true;
+  #endif
+  #ifdef HW_PIN_MISOSPI
+    if (gpio == HW_PIN_MISOSPI) return true;
+  #endif
+  #ifdef HW_PIN_CLOCKSPI
+    if (gpio == HW_PIN_CLOCKSPI) return true;
+  #endif
+  #ifdef SOC_RX0
+    if (gpio == SOC_RX0) return true;
+  #endif
+  #ifdef SOC_TX0
+    if (gpio == SOC_TX0) return true;
+  #endif
+  return false;
+}
+
 bool PinManagerClass::allocatePin(byte gpio, bool output, PinOwner tag)
 {
   // HW I2C & SPI pins have to be allocated using allocateMultiplePins variant since there is always SCL/SDA pair
   // DMX_INPUT pins have to be allocated using allocateMultiplePins variant since there is always RX/TX/EN triple
-  if (!isPinOk(gpio, output) || (gpio >= WLED_NUM_PINS) || tag==PinOwner::HW_I2C || tag==PinOwner::HW_SPI
-      || tag==PinOwner::DMX_INPUT) {
+  PinOwner currentOwner = pinManager.getPinOwner(gpio);
+  bool isParallelIOBlocked = (tag == PinOwner::Parallel_IO && (currentOwner != PinOwner::None || isPinAllocated(gpio) || isHWPin(gpio)));
+
+  if (!isPinOk(gpio, output) || gpio >= WLED_NUM_PINS ||
+  tag == PinOwner::HW_I2C ||
+  tag == PinOwner::HW_SPI ||
+  tag == PinOwner::DMX_INPUT ||
+  isParallelIOBlocked) {
+        
     #ifdef WLED_DEBUG
     if (gpio < 255) {  // 255 (-1) is the "not defined GPIO"
       if (!isPinOk(gpio, output)) {
@@ -763,15 +812,24 @@ bool PinManagerClass::isPinOk(byte gpio, bool output) const
     // JTAG: GPIO39-42 are usually used for inline debugging
     // GPIO46 is input only and pulled down
   #elif defined(CONFIG_IDF_TARGET_ESP32P4)
-    // strapping pins: ???
+    // strapping pins: 34,35,36,37,38
     // Hide all pins not available on connector except pins we need to assign to things later, like I2S
-    if (gpio > 13 && gpio < 20) return false;     // I2S pins and ESP-Hosted WiFi pins
-    if (gpio > 27 && gpio < 32) return false;     // Ethernet pins
-    if (gpio > 33 && gpio < 36) return false;     // Ethernet pins - boot button is on 35 and works... but messes with Ethernet if enabled in WLED
-    if (gpio > 48 && gpio < 55) return false;     // Ethernet pins & others
-    if (gpio > 38 && gpio < 45) return false;     // SD1 Pins
-    // NOTE: GPIO53 and 54 are on the connector, but are used for other things.
-    // We could likely allow 53 as it's for audio amp output, but 54 is used for resetting the C6 board
+    if (             gpio <   2) return false;     // NC unless you mod the board.
+    if (             gpio ==  9) return false;     // I2S Sound Output Pin
+    if (gpio > 13 && gpio <  20) return false;     // ESP-Hosted WiFi pins
+    if (gpio > 23 && gpio <  26) return false;     // USB Pins
+    if (gpio > 27 && gpio <  32) return false;     // Ethernet pins
+    if (gpio > 33 && gpio <  36) return false;     // Ethernet pins - boot button is on 35 and works... but messes with Ethernet if enabled in WLED
+    // if (gpio > 36 && gpio <  38) return false;     // Serial console.
+    if (gpio > 38 && gpio <  46) return false;     // SD1 Pins - 45 is NC unless you modify the board.
+    if (gpio > 48 && gpio <  53) return false;     // Ethernet pins & others
+    if (             gpio == 54) return false;     // C6 WiFi EN pin
+    // 
+    // 24-25 is is USB, but so is 26-27 but they're exposed on the header and work OK for pin outout.
+    // 6 is C5 wakeup - but works fine for pin outout.
+    // 45 is SD power but it's NC without hacking the board.
+    // 53 is for PA enable but it's exposed on header and works for WLED pin output. Best to not use it but left available.
+    // 54 is "C4 EN pin" so I guess we shouldn't fuck with that.
   #else
     if ((gpio > 5 && gpio < 12) &&   // WLEDMM slightly faster to first check for "potentially reserved pins" and then call ESP.getChipModel()
         ((strncmp_P(PSTR("ESP32-U4WDH"), ESP.getChipModel(), 11) == 0) ||    // this is the correct identifier, but....
@@ -805,6 +863,19 @@ PinOwner PinManagerClass::getPinOwner(byte gpio) const {
   if (gpio >= WLED_NUM_PINS) return PinOwner::None; // catch error case, to avoid array out-of-bounds access
   if (!isPinOk(gpio, false)) return PinOwner::None;
   return ownerTag[gpio];
+}
+
+int PinManagerClass::getPinsByOwnerFixed(PinOwner targetOwner, int* outPins, int maxPins, bool is_output = true) const {
+  int count = 0;
+  for (byte gpio = 0; gpio < WLED_NUM_PINS && count < maxPins; ++gpio) {
+    if (isPinOk(gpio, is_output) && ownerTag[gpio] == targetOwner) {
+      outPins[count++] = gpio;
+    }
+  }
+  while (count < maxPins) {
+    outPins[count++] = -1;
+  }
+  return count; // number of valid pins found
 }
 
 #ifdef ARDUINO_ARCH_ESP32

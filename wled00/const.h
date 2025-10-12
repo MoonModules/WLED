@@ -40,9 +40,12 @@
         #define WLED_MAX_BUSSES 7             // will allow 5 digital & 2 analog
         #define WLED_MIN_VIRTUAL_BUSSES 3
       #endif
-    #elif defined(CONFIG_IDF_TARGET_ESP32S3)  // 4 RMT, 8 LEDC, has 2 I2S but NPB does not support them ATM
+      #elif defined(CONFIG_IDF_TARGET_ESP32S3)  // 4 RMT, 8 LEDC, has 2 I2S but NPB does not support them ATM
       #define WLED_MAX_BUSSES 6               // will allow 4 digital & 2 analog
       #define WLED_MIN_VIRTUAL_BUSSES 4
+      #elif defined(CONFIG_IDF_TARGET_ESP32P4)  // becasue of framebuffer, for now we support 1 physical or 1 local bus
+      #define WLED_MAX_BUSSES 1               // will allow 4 digital & 2 analog
+      #define WLED_MIN_VIRTUAL_BUSSES 0
     #else
       #if defined(USERMOD_AUDIOREACTIVE)      // requested by @softhack007 https://github.com/blazoncek/WLED/issues/33
         #define WLED_MAX_BUSSES 9             // WLEDMM I2S#1 is availeable for LEDs
@@ -179,11 +182,8 @@
 #define REALTIME_MODE_INACTIVE    0
 #define REALTIME_MODE_GENERIC     1
 #define REALTIME_MODE_UDP         2
-#define REALTIME_MODE_HYPERION    3
 #define REALTIME_MODE_E131        4
-#define REALTIME_MODE_ADALIGHT    5
 #define REALTIME_MODE_ARTNET      6
-#define REALTIME_MODE_TPM2NET     7
 #define REALTIME_MODE_DDP         8
 #define REALTIME_MODE_DMX         9
 
@@ -256,6 +256,9 @@
 #define TYPE_NET_ARTNET_RGB      82            //network ArtNet RGB bus (master broadcast bus)
 #define TYPE_NET_ARTNET_RGBW     83            //network ArtNet RGB bus (master broadcast bus)
 #define TYPE_NET_DDP_RGBW        88            //network DDP RGBW bus (master broadcast bus)
+
+#define TYPE_PARLIO_RGB         90
+#define TYPE_PARLIO_RGBW        91
 
 #define IS_DIGITAL(t) (((t) & 0x10) || ((t)==TYPE_HUB75MATRIX)) //digital are 16-31 and 48-63 // WLEDMM added HUB75
 #define IS_PWM(t)     ((t) > 40 && (t) < 46)
@@ -432,7 +435,9 @@
 
 // string temp buffer (now stored in stack locally) // WLEDMM ...which is actually not the greatest design choice on ESP32
 #ifdef ESP8266
-#define SETTINGS_STACK_BUF_SIZE 2048
+  #define SETTINGS_STACK_BUF_SIZE 2048
+#elif defined(CONFIG_IDF_TARGET_ESP32P4)
+  #define SETTINGS_STACK_BUF_SIZE 1024000
 #else
   #if !defined(USERMOD_AUDIOREACTIVE)
     #define SETTINGS_STACK_BUF_SIZE 3834   // WLEDMM added 696+32 bytes of margin (was 3096)
@@ -447,7 +452,7 @@
 
 #ifndef E131_MAX_UNIVERSE_COUNT
   #ifdef WLED_USE_ETHERNET
-    #define E131_MAX_UNIVERSE_COUNT 20
+    #define E131_MAX_UNIVERSE_COUNT 128
   #else
     #ifdef ESP8266
       #define E131_MAX_UNIVERSE_COUNT 9
@@ -546,7 +551,7 @@
 // which GPIO pins are actually used in a hardware layout (controller board)
 //WLEDMM: unchangeable pins are not treated here by undef them, but elsewhere in the code 
 // defaults for 1st I2C on ESP32 (Wire global)
-#ifndef ARDUINO_ARCH_ESP32P4 
+#ifndef CONFIG_IDF_TARGET_ESP32P4 
   #ifndef HW_PIN_SCL
     #define HW_PIN_SCL -1 //WLEDMM if not defined, -1 will be used (not SCL/22) (also for esp8266?)
   #endif

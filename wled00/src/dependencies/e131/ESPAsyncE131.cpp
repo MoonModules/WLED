@@ -44,7 +44,7 @@ ESPAsyncE131::ESPAsyncE131(e131_packet_callback_function callback) {
 //
 /////////////////////////////////////////////////////////
 
-bool ESPAsyncE131::begin(bool multicast, uint16_t port, uint16_t universe, uint8_t n) {
+bool ESPAsyncE131::begin(bool multicast, uint16_t port, uint16_t universe, uint16_t n) {
   bool success = false;
 
   if (multicast) {

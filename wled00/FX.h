@@ -337,7 +337,9 @@ bool strip_uses_global_leds(void) __attribute__((pure));  // WLEDMM implemented 
 #define FX_MODE_GEQLASER               195 // WLED-MM GEQ Laser
 #define FX_MODE_2DPAINTBRUSH           196 // WLED-MM Paintbrush
 #define FX_MODE_2DSNOWFALL             197 // WLED-MM Snowfall
-#define MODE_COUNT                     198
+#define FX_MODE_GEQPPA                 198
+#define FX_MODE_PPA_TESTBED            199
+#define MODE_COUNT                     200
 
 typedef enum mapping1D2D {
   M12_Pixels = 0,
@@ -903,7 +905,8 @@ class WS2812FX {  // 96 bytes
     }
 
     static WS2812FX* getInstance(void) { return instance; }
-    uint16_t* getCustomMappingTable() const { return customMappingTable; } // TroyHacks for doing dumb things
+    uint32_t* getCustomMappingTable() const { return customMappingTable; } // TroyHacks for doing dumb things
+    uint32_t getCustomMappingTableSize() const { return customMappingTableSize; } // TroyHacks for doing dumb things
     
     void
 #ifdef WLED_DEBUG
@@ -1014,7 +1017,7 @@ class WS2812FX {  // 96 bytes
       isMatrix;
 
 #ifndef WLED_DISABLE_2D
-    #define WLED_MAX_PANELS 64
+    #define WLED_MAX_PANELS 128
     uint8_t
       panels,
       panelsH, //WLEDMM needs to be stored as well
@@ -1118,9 +1121,9 @@ class WS2812FX {  // 96 bytes
 
     show_callback _callback;
 
-    uint16_t* customMappingTable;
-    uint16_t  customMappingTableSize; //WLEDMM
-    uint16_t  customMappingSize;
+    uint32_t* customMappingTable;
+    uint32_t  customMappingTableSize; //WLEDMM
+    uint32_t  customMappingSize;
 
     /*uint32_t*/ unsigned long _lastShow; // WLEDMM avoid losing precision
     unsigned long _lastServiceShow;       // WLEDMM last call of strip.show (timestamp)

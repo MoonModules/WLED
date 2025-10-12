@@ -196,16 +196,12 @@ void appendGPIOinfo() {
   size_t roLen = strlen(ro_gpio);
   char pinString[10];
   for(int pinNr = 0; pinNr < WLED_NUM_PINS; pinNr++) { // 49 = highest PIN on ESP32-S3
-  #if defined(ARDUINO_ARCH_ESP32) && !defined(BOARD_HAS_PSRAM)
-    if ((!pinManager.isPinOk(pinNr, false)) || (pinManager.getPinOwner(pinNr) == PinOwner::SPI_RAM)) {  // WLEDMM add SPIRAM pins as "reserved" (pico boards)
-  #else
-    if (!pinManager.isPinOk(pinNr, false)) {
-  #endif
+    if (!pinManager.isPinOk(pinNr, false) || (pinManager.getPinOwner(pinNr) == PinOwner::DebugOut)) {
       sprintf(pinString, "%s%d", strlen(rsvd)==rsLen?"":",", pinNr);
       strcat(rsvd, pinString);
     }
     else {
-      //if ((!pinManager.isPinAllocated(pinNr)) && (pinManager.getPinSpecialText(pinNr).length() == 0)) continue;      // un-comment to hide no-name,unused GPIO pins
+      if ((!pinManager.isPinAllocated(pinNr)) && (pinManager.getPinSpecialText(pinNr).length() == 0)) continue;      // un-comment to hide no-name,unused GPIO pins
       bool is_inOut = pinManager.isPinOk(pinNr, true);
       if (!is_inOut) {
         sprintf(pinString, "%s%d", strlen(ro_gpio)==roLen?"":",", pinNr);
@@ -229,37 +225,6 @@ void appendGPIOinfo() {
     #endif
   #endif
 
-  //Note: Using pin 3 (RX) disables Adalight / Serial JSON
-
-  #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(CONFIG_IDF_TARGET_ESP32C3)
-    if (psramFound()) oappend(SET_F(",16,17")); // GPIO16 & GPIO17 reserved for SPI RAM on ESP32 (not on S2, S3 or C3)
-    #elif defined(CONFIG_IDF_TARGET_ESP32S3)
-    if (psramFound()) oappend(SET_F(",33,34,35,36,37")); // in use for "octal" PSRAM or "octal" FLASH -seems that octal PSRAM is very common on S3.
-    #endif
-  #endif
-
-  #ifdef WLED_USE_ETHERNET
-  if (ethernetType != WLED_ETH_NONE && ethernetType < WLED_NUM_ETH_TYPES) {
-    for (uint8_t p=0; p<WLED_ETH_RSVD_PINS_COUNT; p++) { oappend(","); oappend(itoa(esp32_nonconfigurable_ethernet_pins[p].pin,nS,10)); }
-    if (ethernetBoards[ethernetType].eth_power>=0)     { oappend(","); oappend(itoa(ethernetBoards[ethernetType].eth_power,nS,10)); }
-    if (ethernetBoards[ethernetType].eth_mdc>=0)       { oappend(","); oappend(itoa(ethernetBoards[ethernetType].eth_mdc,nS,10)); }
-    if (ethernetBoards[ethernetType].eth_mdio>=0)      { oappend(","); oappend(itoa(ethernetBoards[ethernetType].eth_mdio,nS,10)); }
-    switch (ethernetBoards[ethernetType].eth_clk_mode) {
-      case ETH_CLOCK_GPIO0_IN:
-      case ETH_CLOCK_GPIO0_OUT:
-        oappend(SET_F(",0"));
-        break;
-      case ETH_CLOCK_GPIO16_OUT:
-        oappend(SET_F(",16"));
-        break;
-      case ETH_CLOCK_GPIO17_OUT:
-        oappend(SET_F(",17"));
-        break;
-    }
-  }
-  #endif
-
   oappend(SET_F("];"));
 
   // add info for read-only GPIO
@@ -276,6 +241,23 @@ void appendGPIOinfo() {
   #endif
   oappend(SET_F(";"));
 
+  #ifdef SOC_PARLIO_SUPPORTED
+  oappend(SET_F("d.max_parlio="));
+  oappendi(SOC_PARLIO_RX_UNIT_MAX_DATA_WIDTH);
+  oappend(SET_F(";"));
+  #ifdef PARLIO_PINS
+  oappend(SET_F("d.parlio_default_pins=["));
+  constexpr uint8_t parlio_default_pins[] = { PARLIO_PINS };
+  char parlio_pin_string[128] = { 0 }; // adjust size as needed
+  size_t offset = 0;
+  for (size_t i = 0; i < sizeof(parlio_default_pins); ++i) {
+    offset += snprintf(parlio_pin_string + offset, sizeof(parlio_pin_string) - offset,
+      (i == 0 ? "%u" : ",%u"), parlio_default_pins[i]);
+  }
+  oappend(parlio_pin_string);
+  oappend(SET_F("];"));
+  #endif
+  #endif
   char dt_pins[64] = { '\0' }; // fix warning: output 45 bytes into a destination of size 30
   #if defined(ESP8266) && !defined(ARDUINO_ESP8266_ESP01)
   snprintf(dt_pins, 64, "d.dt_pins=[%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d];", D0, D1, D2, D3, D4, D5, D6, D7, D8, hardwareRX, hardwareTX);
@@ -440,11 +422,20 @@ void getSettingsJS(AsyncWebServerRequest* request, byte subPage, char* dest) //W
       char al[4] = "AL"; al[2] = 48+s; al[3] = 0; //Art-Net LEDs per output
       char af[4] = "AF"; af[2] = 48+s; af[3] = 0; //Art-Net FPS limit
       oappend(SET_F("addLEDs(1);"));
+      #ifdef SOC_PARLIO_SUPPORTED
+      uint8_t pins[SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH];
+      #else
       uint8_t pins[5];
+      #endif
       uint8_t nPins = bus->getPins(pins);
       for (uint8_t i = 0; i < nPins; i++) {
-        lp[1] = 48+i;
-        if (pinManager.isPinOk(pins[i]) || bus->getType()>=TYPE_NET_DDP_RGB) sappend('v',lp,pins[i]);
+        char lp[7];
+        snprintf(lp, sizeof(lp), "L%u%u", i, s);
+        if (pinManager.isPinOk(pins[i]) || bus->getType() >= TYPE_NET_DDP_RGB) {
+          sappend('v', lp, (pins[i] == 255 ? -1 : pins[i]));
+        } else {
+          USER_PRINTF("Rejecting pin %d of %d pins\n", pins[i], nPins);
+        }
       }
       sappend('v',lc,bus->getLength());
       sappend('v',lt,bus->getType());
@@ -455,9 +446,10 @@ void getSettingsJS(AsyncWebServerRequest* request, byte subPage, char* dest) //W
       sappend('c',rf,bus->isOffRefreshRequired());
       sappend('v',aw,bus->getAutoWhiteMode());
       sappend('v',wo,bus->getColorOrder() >> 4);
-      sappend('v',ao,bus->get_artnet_outputs());
-      sappend('v',al,bus->get_artnet_leds_per_output());
-      sappend('v',af,bus->get_artnet_fps_limit());
+      sappend('v',ao,bus->get_outputs());
+      sappend('v',al,bus->get_leds_per_output());
+      sappend('v',af,bus->get_fps_limit());
+
       uint16_t speed = bus->getFrequency();
       if (bus->getType() > TYPE_ONOFF && bus->getType() < 48) {
         switch (speed) {
@@ -678,9 +670,6 @@ void getSettingsJS(AsyncWebServerRequest* request, byte subPage, char* dest) //W
 
 #ifdef WLED_ENABLE_LOXONE
     oappend(SET_F("hideNoLOX();"));  // WLEDMM hide "not compiled in" message    
-#endif
-#ifdef WLED_ENABLE_ADALIGHT
-    oappend(SET_F("hideNoADA();"));  // WLEDMM hide "not compiled in" message    
 #endif
 
   }

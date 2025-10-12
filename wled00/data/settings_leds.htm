@@ -67,40 +67,76 @@
 			var lc = d.getElementsByName("LC"+i)[0];
 			lc.max = max;
 		}
- 		function pinsOK() {
-			var LCs = d.getElementsByTagName("input");
-			for (i=0; i<LCs.length; i++) {
-				var nm = LCs[i].name.substring(0,2);
-				// ignore IP address
-				if (nm=="L0" || nm=="L1" || nm=="L2" || nm=="L3") {
-					var n = LCs[i].name.substring(2);
-					var t = parseInt(d.getElementsByName("LT"+n)[0].value, 10); // LED type SELECT
-					if (t>=80) continue;
-				}
-				//check for pin conflicts
-				if (nm=="L0" || nm=="L1" || nm=="L2" || nm=="L3" || nm=="L4" || nm=="RL" || nm=="BT" || nm=="IR")
-					if (LCs[i].value!="" && LCs[i].value!="-1") {
-						var p = []; // used pin array
-						for (k=0;k<d.rsvd.length;k++) p.push(d.rsvd[k]); // fill with reservations
-						for (k=0;k<d.um_p.length;k++) p.push(d.um_p[k]); // fill with usermod pins
-						if (p.some((e)=>e==parseInt(LCs[i].value,10))) {alert(`Sorry, pins ${JSON.stringify(p)} can't be used.`);LCs[i].value="";LCs[i].focus();return false;}
-						else if (!(nm == "IR" || nm=="BT") && d.ro_gpio.some((e)=>e==parseInt(LCs[i].value,10))) {alert(`Sorry, pins ${JSON.stringify(d.ro_gpio)} are input only.`);LCs[i].value="";LCs[i].focus();return false;}
-						for (j=i+1; j<LCs.length; j++)
-						{
-							var n2 = LCs[j].name.substring(0,2);
-							if (n2=="L0" || n2=="L1" || n2=="L2" || n2=="L3" || n2=="L4" || n2=="RL" || n2=="BT" || n2=="IR") {
-								if (n2.substring(0,1)==="L") {
-									var m  = LCs[j].name.substring(2);
-									var t2 = parseInt(d.getElementsByName("LT"+m)[0].value, 10);
-									if (t2>=80) continue;
-								}
-								if (LCs[j].value!="" && LCs[i].value==LCs[j].value) {alert(`Pin conflict between ${LCs[i].name}/${LCs[j].name}!`);LCs[j].value="";LCs[j].focus();return false;}
-							}
-						}
-					}
-			}
-			return true;
-		}
+
+    function pinsOK() {
+        // Use a Map to track pins that have been assigned.
+        // The key is the pin number, the value is the name of the input field.
+        const pinAssignments = new Map();
+        const allInputs = d.getElementsByTagName("input");
+
+        for (const input of allInputs) {
+          if (input.disabled) {
+            continue; // Skip disabled inputs
+          }
+
+          const name = input.name;
+          const isPinInput = (name.startsWith("L") && !isNaN(name.substring(1))) ||
+            name.startsWith("RL") || name.startsWith("BT") || name.startsWith("IR");
+
+          // Only process inputs that are for GPIO pins
+          if (!isPinInput) {
+            continue;
+          }
+
+          // Check if this input should be skipped because it's an IP address field
+          if (name.startsWith("L")) {
+            const stripIndex = name.charAt(name.length - 1);
+            const ltEl = d.getElementsByName("LT" + stripIndex)[0];
+            const ledType = ltEl ? parseInt(ltEl.value, 10) : 0;
+
+            if (ledType >= 80 && ledType !== 90 && ledType !== 91) {
+              continue; // This is an IP address field, not a GPIO pin, so we skip it.
+            }
+          }
+
+          const value = input.value;
+          if (value === "" || value === "-1") {
+            continue; // No pin assigned, so nothing to check.
+          }
+
+          const pin = parseInt(value, 10);
+
+          // 1. Check for duplicates using the Map (this replaces the nested loop)
+          if (pinAssignments.has(pin)) {
+            const originalInputName = pinAssignments.get(pin);
+            alert(`Pin conflict! Pin ${pin} is used by both ${originalInputName} and ${name}.`);
+            input.focus();
+            return false;
+          }
+
+          // 2. Check against reserved pins
+          const reservedPins = [...d.rsvd, ...d.um_p];
+          if (reservedPins.includes(pin)) {
+            alert(`Sorry, pin ${pin} (${name}) can't be used as it is reserved.`);
+            input.focus();
+            return false;
+          }
+
+          // 3. Check against read-only pins
+          if (!name.startsWith("IR") && !name.startsWith("BT") && d.ro_gpio.includes(pin)) {
+            alert(`Sorry, pin ${pin} (${name}) is input only.`);
+            input.focus();
+            return false;
+          }
+
+          // If all checks pass, add this pin to our map for future duplicate checks.
+          pinAssignments.set(pin, name);
+        }
+
+        // If the loop completes without finding any issues, we're good.
+        return true;
+      }
+    
 		function trySubmit(e) {
 			d.Sf.data.value = '';
 			e.preventDefault();
@@ -161,6 +197,18 @@
 			if (t > 31 && t < 48) return 5;
 			return len*3;
 		}
+    function isValidPositiveNumber(value) {
+      const num = Number(value);
+      return Number.isFinite(num) && num > 0;
+    }
+
+    function matchToOutputCount(n) {
+      if (n <= 1) return 1;
+      if (n <= 2) return 2;
+      if (n <= 4) return 4;
+      if (n <= 8) return 8;
+      return 16;
+    }
 
 		function UI(change=false)
 		{
@@ -188,32 +236,84 @@
 				if (s[i].name.substring(0,2)=="LT") {
 					var n = s[i].name.substring(2);
 					var t = parseInt(s[i].value,10);
-					gId("p0d"+n).innerHTML = (t >= 100 && t < 110) ? "Chain Length:" : (t>=80 && t<96) ? "IP address:" : (t > 49) ? "Data GPIO:" : (t > 41) ? "GPIOs:" : "GPIO:";
+					gId("p0d"+n).innerHTML = (t == 90 || t == 91) ? "Parallel IO Pins:" :(t >= 100 && t < 110) ? "Chain Length:" : (t>=80 && t<90) ? "IP Address:" : (t > 49) ? "Data GPIO:" : (t > 41) ? "GPIOs:" : "GPIO:";
+          gId("p0d" + n).innerHTML += (t == 90 || t == 91) ? "<br />" : "";
 					gId("p1d"+n).innerHTML = (t> 49 && t<64) ? "Clk GPIO:" : "";
 					var LK = d.getElementsByName("L1"+n)[0]; // clock pin
 
 					memu += getMem(t, n); // calc memory
 
 					// enumerate pins
-					for (p=1; p<5; p++) {
-						var LK = d.getElementsByName("L"+p+n)[0]; // secondary pins
+          var loopmax = d.max_parlio ?? 4;
+          var color_el = d.getElementsByName("AO" + n)[0];
+          var coloroutputs = color_el ? Number(color_el.value) : 0;
+          var pins_nulled = 0;
+          coloroutputs = (Number(coloroutputs) === 0) ? loopmax : coloroutputs;
+					for (p=0; p<17; p++) {
+						var LK = d.getElementsByName("L" + p + n)[0]; // secondary pins
+            // LK.value = LK.value.trim();
 						if (!LK) continue;
 						if(t >= 100 && t < 110)  {
 							// hide pin field
 							LK.style.display = "none";
 							LK.required = false;
-							LK.value="";                                                    
-						}
-						else if (((t>=80 && t<96) && p<4) || (t>49 && p==1) || (t>41 && t < 50 && (p+40 < t))) // TYPE_xxxx values from const.h
-						{
+							// LK.value="";                                                 
+						} else if (((t == 90 || t == 91) && p < loopmax) || ((t>=80 && t<96) && p<4) || (t>49 && p==1) || (t>41 && t < 50 && (p+40 < t))) { // TYPE_xxxx values from const.h
 							// display pin field
 							LK.style.display = "inline";
+              if (t == 90 || t == 91) { 
+                LK.min = Number(-1);
+                LK.max = Number(d.max_gpio);
+                if (Array.isArray(d.parlio_default_pins) && typeof d.parlio_default_pins[p] === "number") {
+                  LK._defaultValue = d.parlio_default_pins[p]; // stash it
+                }
+                if (p < matchToOutputCount(coloroutputs) && p >= coloroutputs) {
+                  LK.style.backgroundColor = "rgb(80,80,0)"; // we won't need this pin but it's allocated.
+                  LK._prevValue = LK.value;
+                  LK.value = Number(-1);
+                  LK.disabled = true;
+                } else if (p < coloroutputs) {
+                  LK.style.backgroundColor = "rgb(0,69,0)"; // we'll need this pin
+                  if (LK.disabled || LK.value.trim() === "" || (LK.disabled && Number(LK.value) < 0)) {
+                    let candidate = LK._prevValue;
+                    if (candidate === undefined || Number(candidate) === -1 || candidate === "") {
+                      candidate = Number(LK._defaultValue);
+                    }
+                    if (
+                      candidate !== undefined &&
+                      candidate !== "" &&
+                      Array.isArray(d.rsvd) &&
+                      !d.rsvd.includes(Number(candidate))
+                    ) {
+                      LK.value = Number(candidate);
+                    } else {
+                      LK.value = Number(-1);
+                    }
+                    LK.disabled = false;
+                    if (LK.style.color === "red") {
+                      LK.style.color = "#fff";
+                    }
+                  }
+                } else {
+                  LK.style.backgroundColor = "";
+                  LK._prevValue = LK.value;
+                  LK.value = Number(-1);
+                  LK.disabled = true;
+                }
+                LK.min = -1;
+                if (LK.value == -1) {
+                  if (LK.disabled != true) pins_nulled++;
+                  LK.style.color = "#fff"; // Sometimes other logic turns -1 pins red.
+                }
+              } else {
+                LK.style.backgroundColor = "";
+              }
 							LK.required = true;
 						} else {
 							// hide pin field
 							LK.style.display = "none";
 							LK.required = false;
-							LK.value="";
+							// LK.value="";
 						}
 					}
 					if (change) {
@@ -221,37 +321,94 @@
 						if (t > 31 && t < 48) d.getElementsByName("LC"+n)[0].value = 1; // for sanity change analog count just to 1 LED
 					}
 					gId("rf"+n).onclick = (t == 31) ? (()=>{return false}) : (()=>{});  // prevent change for TM1814
-					gRGBW |= isRGBW = ((t > 17 && t < 22) || (t > 28 && t < 32) || (t > 40 && t < 46 && t != 43) || t == 88); // RGBW checkbox, TYPE_xxxx values from const.h
-					gId("co"+n).style.display = ((t >= 83 && t < 96) || (t >= 40 && t < 48)||(t >= 100 && t < 110)) ? "none":"inline";  // hide color order for PWM
+					gRGBW |= isRGBW = ((t > 17 && t < 22) || (t > 28 && t < 32) || (t > 40 && t < 46 && t != 43) || t == 83 || t == 88 || t == 91); // RGBW checkbox, TYPE_xxxx values from const.h
+          t = d.getElementsByName("LT" + n)[0].value; // user might have changed the type selector.
+					gId("co"+n).style.display = ((t >= 84 && t < 96) || (t >= 40 && t < 48)||(t >= 100 && t < 110)) ? "none":"inline";  // hide color order for PWM
+          gId("pbr4_" + n).style.display = ((t == 90 || t == 91) && loopmax > 4) ? "inline" : "none";
+          gId("pbr8_" + n).style.display = ((t == 90 || t == 91) && loopmax > 8) ? "inline" : "none";
+          gId("pbr12_" + n).style.display = ((t == 90 || t == 91) && loopmax > 12) ? "inline" : "none";
 					gId("dig"+n+"w").style.display = (t > 28 && t < 32) ? "inline":"none";  // show swap channels dropdown
-					gId("dig"+n+"O").style.display = (t == 82 || t == 83) ? "inline":"none";  // show Art-Net output number
-					gId("dig"+n+"L").style.display = (t == 82 || t == 83) ? "inline":"none";  // show Art-Net LEDs per output
+					gId("dig"+n+"O").style.display = (t == 82 || t == 83 || t == 90 || t == 91) ? "inline":"none";  // show Art-Net/ParlIO output number
+					gId("dig"+n+"L").style.display = (t == 82 || t == 83 || t == 90 || t == 91) ? "inline":"none";  // show Art-Net LEDs per output
 					gId("dig"+n+"F").style.display = (t == 82 || t == 83) ? "inline":"none";  // show Art-Net FPS limiter
-					gId("dig"+n+"W").style.display = (t == 82 || t == 83) ? "inline":"none";  // show Art-Net warnings/info box
-					d.getElementsByName("AO"+n)[0].min = (t == 82 || t == 83) ? 1 : -1; // make sure these fields do not block saving when hidden 
-					d.getElementsByName("AL"+n)[0].min = (t == 82 || t == 83) ? 1 : -1; 
+					gId("dig"+n+"W").style.display = (t == 82 || t == 83 || t == 90 || t == 91 || t == 80 || t == 88) ? "inline":"none";  // show warnings/info box
+          let el = gId("dig" + n + "F");
+          if (el.style.display === "inline" && (el.value === "" || isNaN(el.value))) {
+            el.value = 30;
+          }
+          if (t == 90 || t == 91) d.getElementsByName("AO" + n)[0].max = d.max_parlio;
+					d.getElementsByName("AO"+n)[0].min = (t == 82 || t == 83 || t == 90 || t == 91) ? 1 : -1; // make sure these fields do not block saving when hidden 
+					d.getElementsByName("AL" + n)[0].min = (t == 82 || t == 83 || t == 90 || t == 91) ? 1 : -1;
+          if (t == 90 || t == 91) d.getElementsByName("AL" + n)[0].max = Number(1024);
 					d.getElementsByName("AF"+n)[0].min = (t == 82 || t == 83) ? 1 : -1;
-					if (gId("dig"+n+"F").style.display == "inline") {
-						total_leds = d.getElementsByName("LC"+n)[0].value;
-						outputs = d.getElementsByName("AO"+n)[0].value;
-						leds_per_output = d.getElementsByName("AL"+n)[0].value;
-						fps_limit = d.getElementsByName("AF"+n)[0].value;
-						last_octet = d.getElementsByName("L3"+n)[0].value;
+          gId("dig" + n + "W").innerHTML = ""; // clear warning block.
+					if (gId("dig"+n+"O").style.display == "inline") {
+            outputs = Number(d.getElementsByName("AO" + n)[0].value);
+            leds_per_output = Number(d.getElementsByName("AL" + n)[0].value);
+            total_leds = Number(d.getElementsByName("LC" + n)[0].value);
+						fps_limit = Number(d.getElementsByName("AF"+n)[0].value);
+						last_octet = Number(d.getElementsByName("L3"+n)[0].value);
+            symbols_per_pixel = Number(isRGBW ? 128 : 96);
+            bits_per_pixel = symbols_per_pixel * matchToOutputCount(outputs);
+            bytes_per_pixel = Math.floor((bits_per_pixel + 7) / 8);
+            HW_MAX_BYTES_PER_CHUNK = 65535;
+            max_leds_per_chunk = bytes_per_pixel > 0 ? Math.floor(HW_MAX_BYTES_PER_CHUNK / bytes_per_pixel) : 0;
+            num_chunks = max_leds_per_chunk > 0
+              ? Math.floor((leds_per_output + max_leds_per_chunk - 1) / max_leds_per_chunk)
+              : 0;
+
+            if (outputs == 0 && (t == 90 || t == 91)) {
+              d.getElementsByName("AO" + n)[0].value = Number(d.max_parlio);
+              outputs = Number(d.getElementsByName("AO" + n)[0].value);
+            }
+            if (t == 90 || t == 91) {
+              if (d.getElementsByName("AO" + n)[0].value > d.max_parlio) {
+                d.getElementsByName("AO" + n)[0].value = Number(d.max_parlio);
+                outputs = Number(d.max_parlio);
+              }
+              d.getElementsByName("AO" + n)[0].max = Number(d.max_parlio);
+              gId("dig" + n + "W").innerHTML += "<br />Parallel IO at " + matchToOutputCount(outputs) + "-bit width with " + outputs + " pins.";
+              if (num_chunks > 1) gId("dig" + n + "W").innerHTML += `<br />Using ${num_chunks} transfers which is not \"guaranteed\" glitch-free.`;
+              const requiredPins = matchToOutputCount(outputs);
+              const activePins = matchToOutputCount(requiredPins - pins_nulled);
+              if (activePins < requiredPins) {
+                const activeOutputs = requiredPins - pins_nulled;
+                const msg = `⚠️ You only need ${activeOutputs} output${activeOutputs !== 1 ? "s" : ""}, which increases FPS!`
+                gId("dig" + n + "W").innerHTML += "<br />" + msg;
+              }
+            } else {
+              d.getElementsByName("AO" + n)[0].max = Number(255);
+            }
+            if (isValidPositiveNumber(total_leds) && (leds_per_output == 0 || !isValidPositiveNumber(leds_per_output))) {
+              d.getElementsByName("AL" + n)[0].value = Number(total_leds/outputs);
+              leds_per_output = Number(d.getElementsByName("AL" + n)[0].value);
+            }
+            t = d.getElementsByName("LT" + n)[0].value; // user might have changed the type selector.
 						if (outputs > 1) {
-							if (t == 82) gId("dig"+n+"W").innerHTML = "<br />Set your Art-Net Hardware to "+Math.ceil(leds_per_output/170)+" universes per output.";
-							if (t == 83) gId("dig"+n+"W").innerHTML = "<br />Set your Art-Net Hardware to "+Math.ceil(leds_per_output/128)+" universes per output.";
+							if (t == 82) gId("dig"+n+"W").innerHTML += "<br />Set your Art-Net Hardware to "+Math.ceil(leds_per_output/170)+" universes per output.";
+							if (t == 83) gId("dig"+n+"W").innerHTML += "<br />Set your Art-Net Hardware to "+Math.ceil(leds_per_output/128)+" universes per output.";
 						} else if (outputs == 1) {
-							gId("dig"+n+"W").innerHTML = "<br />WLED-style Art-Net output enabled.";
+							if (t == 82 || t == 83) gId("dig"+n+"W").innerHTML += "<br />WLED-style Art-Net output enabled.";
 						} else {
-							gId("dig"+n+"W").innerHTML = "<br />You need at least 1 output!";
+							gId("dig"+n+"W").innerHTML += "<br />You need at least 1 output!";
 						}
-						if (outputs > 1 && fps_limit > 33333/leds_per_output) gId("dig"+n+"W").innerHTML += "<br />FPS limit may be too high for WS281x pixels.";
-						if (outputs*leds_per_output != total_leds) gId("dig"+n+"W").innerHTML += "<br />Total LEDs doesn't match outputs * LEDs per output.";
-						if (last_octet == 255) {
-							if (total_leds <= 1024) gId("dig"+n+"W").innerHTML += "<br />Art-Net is in broadcast mode.";
-							if (total_leds  > 1024) gId("dig"+n+"W").innerHTML += "<br />You are sending a lot of broadcast data. Be cautious.";
-						}
+						if (outputs > 1 && (t == 82 || t == 83) && fps_limit > 33333/leds_per_output) gId("dig"+n+"W").innerHTML += "<br />FPS limit may be too high for WS281x pixels.";
+            if (outputs * leds_per_output != total_leds) {
+              gId("dig" + n + "W").innerHTML +=
+                "<br />Length (" + total_leds + ") doesn't match Number of Outputs * LEDs Per Output (<span title='Click to fix' style='text-decoration:underline; cursor:pointer;' onclick=\"total_leds=Number("+ outputs * leds_per_output +");d.getElementsByName('LC"+n+"')[0].value=" + (outputs * leds_per_output) + ";UI();\">" + (outputs * leds_per_output) + "</span>).";
+            }
 					}
+          if ((t == 82 || t == 83 || t == 80 || t == 88)) {
+            total_leds = d.getElementsByName("LC" + n)[0].value;
+            last_octet = d.getElementsByName("L3" + n)[0].value;
+            if (last_octet == 255) {
+              if (total_leds <= 1024) {
+                let protocol = (t == 80 || t == 88) ? "DDP" : "Art-Net";
+                gId("dig" + n + "W").innerHTML += `<br />${protocol} is in broadcast mode.`;
+              }
+              if (total_leds > 1024) gId("dig" + n + "W").innerHTML += "<br />You are sending a lot of broadcast data. Be cautious.";
+            }
+          }
 					if (!(t > 28 && t < 32)) d.getElementsByName("WO"+n)[0].value = 0; // reset swapping
 					gId("dig"+n+"c").style.display = ((t >= 40 && t < 48)||(t >= 100 && t < 110)) ? "none":"inline";  // hide count for analog and HUB75
 					gId("dig"+n+"r").style.display = (t >= 80) && (t < 100) ? "none":"inline";  // hide reversed for virtual, except for HUB75
@@ -300,13 +457,13 @@
 				}
 				// do we have led pins for digital leds
 				if (nm=="L0" || nm=="L1") {
-					var lc=d.getElementsByName("LC"+n)[0];
-					lc.max=maxPB; // update max led count value
+					// var lc=d.getElementsByName("LC"+n)[0];
+					// lc.max=maxPB; // update max led count value
 				}
 				// ignore IP address (stored in pins for virtual busses)
-				if (nm=="L0" || nm=="L1" || nm=="L2" || nm=="L3") {
+				if ((t == 80 || t == 88 || t == 82 || t == 88) && (nm=="L0" || nm=="L1" || nm=="L2" || nm=="L3")) {
 					var t = parseInt(d.getElementsByName("LT"+n)[0].value); // LED type SELECT
-					if (t>=80) {
+					if (t>=80 && t != 90 && t != 91) {
 						LCs[i].max = 255;
 						LCs[i].min = 0;
 						LCs[i].style.color="#fff";
@@ -317,26 +474,44 @@
 					}
 				}
 				// check for pin conflicts
-				if (nm=="L0" || nm=="L1" || nm=="L2" || nm=="L3" || nm=="L4" || nm=="RL" || nm=="BT" || nm=="IR")
-					if (LCs[i].value!="" && LCs[i].value!="-1") {
-						var p = []; // used pin array
-						for (k=0;k<d.rsvd.length;k++) p.push(d.rsvd[k]); // fill with reservations
-						for (k=0;k<d.um_p.length;k++) p.push(d.um_p[k]); // fill with usermod pins
-						for (j=0; j<LCs.length; j++) {
-							if (i==j) continue;
-							var n2 = LCs[j].name.substring(0,2);
-							if (n2=="L0" || n2=="L1" || n2=="L2" || n2=="L3" || n2=="L4" || n2=="RL" || n2=="BT" || n2=="IR") {
-								if (n2.substring(0,1)==="L") {
-									var m  = LCs[j].name.substring(2);
-									var t2 = parseInt(d.getElementsByName("LT"+m)[0].value, 10);
-									if (t2>=80) continue;
-								}
-								if (LCs[j].value!="" && LCs[j].value!="-1") p.push(parseInt(LCs[j].value,10));  // add current pin
-							}
-						}
-						// now check for conflicts
-						if (p.some((e)=>e==parseInt(LCs[i].value,10))) LCs[i].style.color="red"; else LCs[i].style.color=d.ro_gpio.some((e)=>e==parseInt(LCs[i].value,10))?"orange":"#fff";
-					}
+        if (/^L\d+$/.test(nm) || nm === "RL" || nm === "BT" || nm === "IR") {
+          if (LCs[i].value !== "" && LCs[i].value !== "-1") {
+            var p = []; // used pin array
+            for (k = 0; k < d.rsvd.length; k++) p.push(d.rsvd[k]); // fill with reservations
+            for (k = 0; k < d.um_p.length; k++) p.push(d.um_p[k]); // fill with usermod pins
+
+            for (j = 0; j < LCs.length; j++) {
+              if (i === j) continue;
+
+              var name = LCs[j].name;
+              if (/^L\d+$/.test(name) || name.startsWith("RL") || name.startsWith("BT") || name.startsWith("IR")) {
+                if (name.startsWith("L")) {
+                  var m = name.substring(1); // everything after "L"
+                  var ltEl = d.getElementsByName("LT" + m)[0];
+                  var t2 = ltEl ? parseInt(ltEl.value, 10) : 0;
+                  if (t2 >= 80 && t2 !== 90 && t2 !== 91) continue;
+                }
+
+                if (LCs[j].value !== "") {
+                  if (LCs[j].value === "-1") {
+                    if (t2 === 90 || t2 === 91) continue; // allow -1 for types 90/91
+                  } else {
+                    p.push(parseInt(LCs[j].value, 10)); // valid pin
+                  }
+                }
+              }
+            }
+
+            // now check for conflicts
+            var currentPin = parseInt(LCs[i].value, 10);
+            if (p.includes(currentPin)) {
+              LCs[i].style.color = "red";
+            } else {
+              LCs[i].style.color = d.ro_gpio.includes(currentPin) ? "orange" : "#fff";
+            }
+          }
+        }
+
 				// check buttons, IR & relay
 				if (nm=="IR" || nm=="BT" || nm=="RL") {
 					LCs[i].max = d.max_gpio;
@@ -399,8 +574,8 @@
 <hr class="sml">
 ${i+1}:
 <select name="LT${i}" onchange="UI(true)">${i>=maxB ? '' :
-'<option value="22">WS281x</option>\
-<!-- <option value="30">SK6812/WS2814 RGBW</option>\
+'<!--<option value="22">WS281x</option>\
+ <option value="30">SK6812/WS2814 RGBW</option>\
 <option value="31">TM1814</option>\
 <option value="24">400kHz</option>\
 <option value="25">TM1829</option>\
@@ -419,10 +594,12 @@ ${i+1}:
 <option value="44">PWM RGBW</option>\
 <option value="45">PWM RGB+CCT</option>\
 <!--option value="46">PWM RGB+DCCT</option--> -->'}
-<option value="80">DDP RGB (network)</option>
-<!--option value="81">E1.31 RGB (network)</option-->
-<option value="82" selected>Art-Net RGB (network)</option>
+<!--option value="81">E1.31 RGB (network)</option-->\
+<option value="90">Parallel IO WS281x RGB</option>
+<option value="91">Parallel IO SK6812/WS2814 RGBW</option>
+<option value="82">Art-Net RGB (network)</option>
 <option value="83">Art-Net RGBW (network)</option>
+<option value="80">DDP RGB (network)</option>
 <option value="88">DDP RGBW (network)</option>
 <!-- <option value="101">Hub75Matrix 32x32</option>
 <option value="102">Hub75Matrix 64x32</option>
@@ -448,11 +625,22 @@ ${i+1}:
 <span id="psd${i}">Start:</span> <input type="number" name="LS${i}" id="ls${i}" class="l starts" min="0" max="65534" value="${lastEnd(i)}" oninput="startsDirty[${i}]=true;UI();" required />&nbsp;
 <div id="dig${i}c" style="display:inline">Length: <input type="number" name="LC${i}" class="xl" min="1" max="${maxPB}" value="1" required oninput="UI()" /></div><br>
 </div>
-<span id="p0d${i}">GPIO:</span> <input type="number" name="L0${i}" required class="s" onchange="UI()"/>
-<span id="p1d${i}"></span><input type="number" name="L1${i}" class="s" onchange="UI()"/>
-<span id="p2d${i}"></span><input type="number" name="L2${i}" class="s" onchange="UI()"/>
-<span id="p3d${i}"></span><input type="number" name="L3${i}" class="s" onchange="UI()"/>
-<span id="p4d${i}"></span><input type="number" name="L4${i}" class="s" onchange="UI()"/>
+<span id="p0d${i}">GPIO:</span><input title="Pin 1" type="number" name="L0${i}" required class="s" onchange="UI()"/>
+<span id="p1d${i}"></span><input title="Pin 2" type="number" name="L1${i}" class="s" onchange="UI()"/>
+<span id="p2d${i}"></span><input title="Pin 3" type="number" name="L2${i}" class="s" onchange="UI()"/>
+<span id="p3d${i}"></span><input title="Pin 4" type="number" name="L3${i}" class="s" onchange="UI()"/><br id="pbr4_${i}" />
+<span id="p4d${i}"></span><input title="Pin 5" type="number" name="L4${i}" class="s" onchange="UI()"/>
+<span id="p5d${i}"></span><input title="Pin 6" type="number" name="L5${i}" class="s" onchange="UI()"/>
+<span id="p6d${i}"></span><input title="Pin 7" type="number" name="L6${i}" class="s" onchange="UI()"/>
+<span id="p7d${i}"></span><input title="Pin 8" type="number" name="L7${i}" class="s" onchange="UI()"/><br id="pbr8_${i}" />
+<span id="p8d${i}"></span><input title="Pin 9" type="number" name="L8${i}" class="s" onchange="UI()"/>
+<span id="p9d${i}"></span><input title="Pin 10" type="number" name="L9${i}" class="s" onchange="UI()"/>
+<span id="p10d${i}"></span><input title="Pin 11" type="number" name="L10${i}" class="s" onchange="UI()"/>
+<span id="p11d${i}"></span><input title="Pin 12" type="number" name="L11${i}" class="s" onchange="UI()"/><br id="pbr12_${i}" />
+<span id="p12d${i}"></span><input title="Pin 13" type="number" name="L12${i}" class="s" onchange="UI()"/>
+<span id="p13d${i}"></span><input title="Pin 14" type="number" name="L13${i}" class="s" onchange="UI()"/>
+<span id="p14d${i}"></span><input title="Pin 15" type="number" name="L14${i}" class="s" onchange="UI()"/>
+<span id="p15d${i}"></span><input title="Pin 16" type="number" name="L15${i}" class="s" onchange="UI()"/>
 <div id="dig${i}O" style="display:inline"><br>Number of Outputs: <input type="number" name="AO${i}" min="1" max="255" value="1" oninput="UI()"></div>
 <div id="dig${i}L" style="display:inline"><br>LEDs Per Output: <input type="number" name="AL${i}" min="1" max="65535" value="1" oninput="UI()"></div>
 <div id="dig${i}F" style="display:inline"><br>FPS Limit: <input type="number" name="AF${i}" min="1" max="255" value="30" oninput="UI()"></div>

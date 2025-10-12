@@ -21,6 +21,11 @@ public:
   void localMAC(uint8_t* MAC);
   bool isConnected();
   bool isEthernet();
+  IPAddress hostByName(const char* hostname);
+  String format_mac_address(const uint8_t* mac);
+  esp_err_t get_hardware_mac_address(uint8_t* mac_addr);
+  String getEscapedMac();
+  bool setHostname(const char* hostname);
 };
 
 #ifdef ARDUINO_ARCH_ESP32

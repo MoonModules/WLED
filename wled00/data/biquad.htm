@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Biquad Calculator</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #333;
+            color: #ccc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #calculator-container {
+            background-color: #444;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: inline-block;
+            width: 120px;
+        }
+        input[type="text"], select {
+            width: 150px;
+            background-color: #555;
+            color: #ccc;
+            border: 1px solid #666;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        #coeffs-display {
+            margin-top: 20px;
+            background-color: #222;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        canvas {
+            background-color: #222;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="calculator-container">
+    <h2>Biquad Calculator</h2>
+
+    <div class="control-group">
+        <label for="filter-type">Filter Type:</label>
+        <select id="filter-type">
+            <option value="lowpass">Lowpass</option>
+            <option value="highpass">Highpass</option>
+            <option value="bandpass">Bandpass</option>
+            <option value="notch">Notch</option>
+            <option value="peak">Peak</option>
+            <option value="lowshelf">Lowshelf</option>
+            <option value="highshelf">Highshelf</option>
+        </select>
+    </div>
+
+    <div class="control-group">
+        <label for="sample-rate">Sample Rate (Hz):</label>
+        <input type="text" id="sample-rate" value="44100">
+    </div>
+
+    <div class="control-group">
+        <label for="fc">Fc (Hz):</label>
+        <input type="text" id="fc" value="1000">
+    </div>
+
+    <div class="control-group">
+        <label for="q">Q:</label>
+        <input type="text" id="q" value="0.707">
+    </div>
+
+    <div class="control-group">
+        <label for="gain">Gain (dB):</label>
+        <input type="text" id="gain" value="0">
+    </div>
+
+    <div id="coeffs-display">
+        <pre id="coeffs-output"></pre>
+    </div>
+    
+    <canvas id="plot" width="512" height="256"></canvas>
+
+</div>
+
+<script>
+const filterType = document.getElementById('filter-type');
+const sampleRateInput = document.getElementById('sample-rate');
+const fcInput = document.getElementById('fc');
+const qInput = document.getElementById('q');
+const gainInput = document.getElementById('gain');
+const coeffsOutput = document.getElementById('coeffs-output');
+const plotCanvas = document.getElementById('plot');
+const plotCtx = plotCanvas.getContext('2d');
+
+function calcBiquad() {
+    const type = filterType.value;
+    const Fs = parseFloat(sampleRateInput.value);
+    const Fc = parseFloat(fcInput.value);
+    const Q = parseFloat(qInput.value);
+    const gain = parseFloat(gainInput.value);
+
+    const V = Math.pow(10, Math.abs(gain) / 20);
+    const K = Math.tan(Math.PI * Fc / Fs);
+    let a0, a1, a2, b0, b1, b2;
+    let norm;
+
+    switch (type) {
+        case "lowpass":
+            norm = 1 / (1 + K / Q + K * K);
+            b0 = (K * K) * norm;
+            b1 = 2 * b0;
+            b2 = b0;
+            a1 = 2 * (K * K - 1) * norm;
+            a2 = (1 - K / Q + K * K) * norm;
+            break;
+        case "highpass":
+            norm = 1 / (1 + K / Q + K * K);
+            b0 = 1 * norm;
+            b1 = -2 * b0;
+            b2 = b0;
+            a1 = 2 * (K * K - 1) * norm;
+            a2 = (1 - K / Q + K * K) * norm;
+            break;
+        case "bandpass":
+            norm = 1 / (1 + K / Q + K * K);
+            b0 = K / Q * norm;
+            b1 = 0;
+            b2 = -b0;
+            a1 = 2 * (K * K - 1) * norm;
+            a2 = (1 - K / Q + K * K) * norm;
+            break;
+        case "notch":
+            norm = 1 / (1 + K / Q + K * K);
+            b0 = (1 + K * K) * norm;
+            b1 = 2 * (K * K - 1) * norm;
+            b2 = b0;
+            a1 = b1;
+            a2 = (1 - K / Q + K * K) * norm;
+            break;
+        case "peak":
+            if (gain >= 0) {
+                norm = 1 / (1 + 1/Q * K + K * K);
+                b0 = (1 + V/Q * K + K * K) * norm;
+                b1 = 2 * (K * K - 1) * norm;
+                b2 = (1 - V/Q * K + K * K) * norm;
+                a1 = b1;
+                a2 = (1 - 1/Q * K + K * K) * norm;
+            } else {
+                norm = 1 / (1 + V/Q * K + K * K);
+                b0 = (1 + 1/Q * K + K * K) * norm;
+                b1 = 2 * (K * K - 1) * norm;
+                b2 = (1 - 1/Q * K + K * K) * norm;
+                a1 = b1;
+                a2 = (1 - V/Q * K + K * K) * norm;
+            }
+            break;
+        case "lowshelf":
+            if (gain >= 0) {
+                norm = 1 / (1 + Math.SQRT2 * K + K * K);
+                b0 = (1 + Math.sqrt(2*V) * K + V * K * K) * norm;
+                b1 = 2 * (V * K * K - 1) * norm;
+                b2 = (1 - Math.sqrt(2*V) * K + V * K * K) * norm;
+                a1 = 2 * (K * K - 1) * norm;
+                a2 = (1 - Math.SQRT2 * K + K * K) * norm;
+            } else {
+                norm = 1 / (1 + Math.sqrt(2*V) * K + V * K * K);
+                b0 = (1 + Math.SQRT2 * K + K * K) * norm;
+                b1 = 2 * (K * K - 1) * norm;
+                b2 = (1 - Math.SQRT2 * K + K * K) * norm;
+                a1 = 2 * (V * K * K - 1) * norm;
+                a2 = (1 - Math.sqrt(2*V) * K + V * K * K) * norm;
+            }
+            break;
+        case "highshelf":
+            if (gain >= 0) {
+                norm = 1 / (1 + Math.SQRT2 * K + K * K);
+                b0 = (V + Math.sqrt(2*V) * K + K * K) * norm;
+                b1 = 2 * (K * K - V) * norm;
+                b2 = (V - Math.sqrt(2*V) * K + K * K) * norm;
+                a1 = 2 * (K * K - 1) * norm;
+                a2 = (1 - Math.SQRT2 * K + K * K) * norm;
+            } else {
+                norm = 1 / (V + Math.sqrt(2*V) * K + K * K);
+                b0 = (1 + Math.SQRT2 * K + K * K) * norm;
+                b1 = 2 * (K * K - 1) * norm;
+                b2 = (1 - Math.SQRT2 * K + K * K) * norm;
+                a1 = 2 * (K * K / V - 1) * norm;
+                a2 = (1 - Math.sqrt(2/V) * K + K * K / V) * norm;
+            }
+            break;
+    }
+    
+    coeffsOutput.textContent = `a0 = ${b0}\na1 = ${b1}\na2 = ${b2}\nb1 = ${a1}\nb2 = ${a2}`;
+    
+    drawPlot(b0, b1, b2, 1, a1, a2, Fs);
+}
+
+function drawPlot(b0, b1, b2, a0, a1, a2, fs) {
+    const width = plotCanvas.width;
+    const height = plotCanvas.height;
+    plotCtx.clearRect(0, 0, width, height);
+    plotCtx.strokeStyle = '#0f0';
+    
+    plotCtx.beginPath();
+    
+    for(let i = 0; i <= width; i++) {
+        const freq = (i / width) * (fs / 2);
+        const w = 2 * Math.PI * freq / fs;
+        
+        const phi = Math.pow(Math.sin(w/2), 2);
+        const y = Math.log(Math.pow(b0+b1+b2, 2) - 4*(b0*b1 + 4*b0*b2 + b1*b2)*phi + 16*b0*b2*phi*phi) - Math.log(Math.pow(a0+a1+a2, 2) - 4*(a0*a1 + 4*a0*a2 + a1*a2)*phi + 16*a0*a2*phi*phi);
+        
+        const db = y * 10 / Math.LN10;
+        const y_pos = (height / 2) - (db * 5); // Simple scaling for display
+        
+        if (i === 0) {
+            plotCtx.moveTo(i, y_pos);
+        } else {
+            plotCtx.lineTo(i, y_pos);
+        }
+    }
+    
+    plotCtx.stroke();
+}
+
+[filterType, sampleRateInput, fcInput, qInput, gainInput].forEach(input => {
+    input.addEventListener('input', calcBiquad);
+});
+
+calcBiquad(); // Initial calculation
+</script>
+
+</body>
+</html>

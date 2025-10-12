@@ -23,11 +23,11 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
 
   // WLEDMM: before changing bus, ledmap, strip or 2D settings, make sure our strip is _not_ servicing effects in parallel
   if ((subPage == 2) || (subPage == 3) || (subPage == 10)) {
-    suspendStripService = true; // temporarily lock out strip updates
-    if (strip.isServicing()) {
-      USER_PRINTLN(F("handleSettingsSet(): strip is still drawing effects."));
-      strip.waitUntilIdle();
-    }
+    // suspendStripService = true; // temporarily lock out strip updates
+    // if (strip.isServicing()) {
+    //   USER_PRINTLN(F("handleSettingsSet(): strip is still drawing effects."));
+    //   strip.waitUntilIdle();
+    // }
   }
 
   //WIFI SETTINGS
@@ -95,9 +95,14 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       }
     }
 
-    uint8_t colorOrder, type, skip, awmode, channelSwap, artnet_outputs, artnet_fps_limit;
-    uint16_t length, start, artnet_leds_per_output;
-    uint8_t pins[5] = {255, 255, 255, 255, 255};
+    uint8_t colorOrder, type, skip, awmode, channelSwap, outputs, fps_limit;
+    uint16_t length, start, leds_per_output;
+    #ifdef SOC_PARLIO_SUPPORTED
+    uint8_t nPins = SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH;
+    #else
+    uint8_t nPins = 5;
+    #endif
+    uint8_t pins[nPins];
 
     autoSegments = request->hasArg(F("MS"));
     correctWB = request->hasArg(F("CCT"));
@@ -110,6 +115,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
 
     bool busesChanged = false;
     for (uint8_t s = 0; s < WLED_MAX_BUSSES+WLED_MIN_VIRTUAL_BUSSES; s++) {
+      USER_PRINTF("Saving %d\n",s);
       // "48+s" means the ASCII character "0", so 48+1 = ASCII for "1", etc - and "[3]=0" means null-terminate the string.
       char lp[4] = "L0"; lp[2] = 48+s; lp[3] = 0; //ascii 0-9 //strip data pin
       char lc[4] = "LC"; lc[2] = 48+s; lc[3] = 0; //strip length
@@ -126,13 +132,24 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       char al[4] = "AL"; al[2] = 48+s; al[3] = 0; //Art-Net LEDs per output
       char af[4] = "AF"; af[2] = 48+s; af[3] = 0; //Art-Net FPS limit
       if (!request->hasArg(lp)) {
-        DEBUG_PRINT(F("No data for "));
-        DEBUG_PRINTLN(s);
+        USER_PRINT(F("No data for "));
+        USER_PRINTLN(s);
         break;
       }
-      for (uint8_t i = 0; i < 5; i++) {
-        lp[1] = 48+i;
-        if (!request->hasArg(lp)) break;
+      // for (uint8_t i = 0; i < 5; i++) {
+      //   lp[1] = 48+i;
+      //   if (!request->hasArg(lp)) break;
+      //   pins[i] = (request->arg(lp).length() > 0) ? request->arg(lp).toInt() : 255;
+      // }
+      for (uint8_t i = 0; i < nPins; i++) {
+        char lp[7];
+        snprintf(lp, sizeof(lp), "L%u%u", i, s);
+        if (!request->hasArg(lp)) {
+          USER_PRINT(F("No data for "));
+          USER_PRINTLN(lp);
+          break;
+        }
+        USER_PRINTF("Saving pin arg %s to pin[%d] with value %d\n", lp, i, (request->arg(lp).length() > 0) ? request->arg(lp).toInt() : 255);
         pins[i] = (request->arg(lp).length() > 0) ? request->arg(lp).toInt() : 255;
       }
       type = request->arg(lt).toInt();
@@ -171,13 +188,13 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       }
       channelSwap = Bus::hasWhite(type) ? request->arg(wo).toInt() : 0;
       type |= request->hasArg(rf) << 7; // off refresh override
-      artnet_outputs         = (request->hasArg(ao)) ? request->arg(ao).toInt() : 1;
-      artnet_leds_per_output = (request->hasArg(al)) ? request->arg(al).toInt() : length;
-      artnet_fps_limit       = (request->hasArg(af)) ? request->arg(af).toInt() : 33333/length;
+      outputs         = (request->hasArg(ao)) ? request->arg(ao).toInt() : 1;
+      leds_per_output = (request->hasArg(al)) ? request->arg(al).toInt() : length;
+      fps_limit       = (request->hasArg(af)) ? request->arg(af).toInt() : 33333/length;
       // actual finalization is done in WLED::loop() (removing old busses and adding new)
       // this may happen even before this loop is finished so we do "doInitBusses" after the loop
       if (busConfigs[s] != nullptr) delete busConfigs[s];
-      busConfigs[s] = new BusConfig(type, pins, start, length, colorOrder | (channelSwap<<4), request->hasArg(cv), skip, awmode, freqHz, artnet_outputs, artnet_leds_per_output, artnet_fps_limit);
+      busConfigs[s] = new BusConfig(type, pins, start, length, colorOrder | (channelSwap<<4), request->hasArg(cv), skip, awmode, freqHz, outputs, leds_per_output, fps_limit);
       busesChanged = true;
     }
     //doInitBusses = busesChanged; // we will do that below to ensure all input data is processed
@@ -799,7 +816,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
   #endif
 
   if ((subPage == 2) || (subPage == 3) || (subPage == 10)) {
-    suspendStripService = false; // WLEDMM release lock
+    // suspendStripService = false; // WLEDMM release lock
   }
 
   lastEditTime = millis();
@@ -839,10 +856,10 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
   }
 
   // WLEDMM: before changing segment settings, make sure our strip is _not_ servicing effects in parallel
-  if (strip.isServicing()) {
-      USER_PRINTLN(F("handleSet(): strip is still drawing effects."));
-      strip.waitUntilIdle();
-  }
+  // if (strip.isServicing()) {
+  //     USER_PRINTLN(F("handleSet(): strip is still drawing effects."));
+  //     strip.waitUntilIdle();
+  // }
 
   Segment& selseg = strip.getSegment(selectedSeg);
   pos = req.indexOf(F("SV=")); //segment selected

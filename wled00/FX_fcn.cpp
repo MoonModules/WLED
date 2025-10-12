@@ -103,8 +103,8 @@ Segment::Segment(const Segment &orig) {
 
 //WLEDMM: recreate ledsrgb if more space needed (will not free ledsrgb!)
 void Segment::allocLeds() {
-  size_t size = sizeof(CRGB)*max((size_t) length(), ledmapMaxSize); // TroyHacks
-  if ((size < sizeof(CRGB)) || (size > 164000)) {                   //softhack too small (<3) or too large (>160Kb)
+  uint32_t size = sizeof(CRGB)*max((uint32_t) length(), ledmapMaxSize); // TroyHacks
+  if ((size < sizeof(CRGB))) { //softhack too small (<3) or too large (>160Kb) // TroyHacks Removed  "|| (size > 164000)" for P4 because we can be big
     DEBUG_PRINTF("allocLeds warning: size == %u !!\n", size);
     if (ledsrgb && (ledsrgbSize == 0)) {
       USER_PRINTLN("allocLeds warning: ledsrgbSize == 0 but ledsrgb!=NULL");
@@ -114,12 +114,8 @@ void Segment::allocLeds() {
   if ((size > 0) && (!ledsrgb || size > ledsrgbSize)) {    //softhack dont allocate zero bytes
     USER_PRINTF("allocLeds (%d,%d to %d,%d), %u from %u\n", start, startY, stop, stopY, size, ledsrgb?ledsrgbSize:0);
     if (ledsrgb) free(ledsrgb);   // we need a bigger buffer, so free the old one first
-    #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
-    if (psramFound()){
-      ledsrgb = (CRGB*)ps_calloc(size, 1);
-    } else {
-      ledsrgb = (CRGB*)calloc(size, 1);
-    }
+    #if defined(ARDUINO_ARCH_ESP32)
+    ledsrgb = (CRGB*) heap_caps_calloc_prefer(size, 1, 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_INTERNAL);
     #else
     ledsrgb = (CRGB*)calloc(size, 1);
     #endif
@@ -235,26 +231,13 @@ bool Segment::allocateData(size_t len) {
   //DEBUG_PRINTF("allocateData(%u) start %d, stop %d, vlen %d\n", len, start, stop, virtualLength());
   deallocateData();
   if (len == 0) return false; // nothing to do
-  #if defined(ARDUINO_ARCH_ESP32) && !defined(WLED_USE_PSRAM)
-  if (Segment::getUsedSegmentData() + len > MAX_SEGMENT_DATA) {
-    //USER_PRINTF("Segment::allocateData: Segment data quota exceeded! used:%u request:%u max:%d\n", Segment::getUsedSegmentData(), len, MAX_SEGMENT_DATA);
-    if (len > 0) errorFlag = ERR_LOW_SEG_MEM;  // WLEDMM raise errorflag
-    return false; //not enough memory
-  }
-  #endif
-  // do not use SPI RAM on ESP32 since it is slow
-  #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
-  if (psramFound())
-   data = (byte*) ps_malloc(len);
-  else
-  #endif
-    data = (byte*) malloc(len);
+  data = (byte*)heap_caps_calloc_prefer(len, 1, 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_INTERNAL);
   if (!data) {
-      _dataLen = 0; // WLEDMM reset dataLen
-      errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
-      USER_PRINT(F("Segment::allocateData: FAILED to allocate ")); 
-      USER_PRINT(len); USER_PRINTLN(F(" bytes."));
-      return false;
+    _dataLen = 0; // WLEDMM reset dataLen
+    errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
+    USER_PRINT(F("Segment::allocateData: FAILED to allocate "));
+    USER_PRINT(len); USER_PRINTLN(F(" bytes."));
+    return false;
   } //allocation failed
   Segment::addUsedSegmentData(len);
   _dataLen = len;
@@ -311,10 +294,10 @@ void Segment::setUpLeds() {
     ledsrgbSize = length() * sizeof(CRGB); // also set this when using global leds.
     #endif
   } else if (length() > 0) { //WLEDMM we always want a new buffer //softhack007 quickfix - avoid malloc(0) which is undefined behaviour (should not happen, but i've seen it)
-    #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
-    if (psramFound())
-     ledsrgb = (CRGB*)ps_malloc(sizeof(CRGB)*length()); // softhack007 disabled; putting leds into psram leads to horrible slowdown on WROVER boards
-    else
+    #if defined(ARDUINO_ARCH_ESP32)
+    // ledsrgb = (CRGB*)ps_malloc(sizeof(CRGB)*length()); // softhack007 disabled; putting leds into psram leads to horrible slowdown on WROVER boards
+    // TroyHacks says better it works than crashes if we have PSRAM
+    ledsrgb = (CRGB*)heap_caps_calloc_prefer(length() * sizeof(CRGB), 1, 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_INTERNAL);
     #endif
     allocLeds(); //WLEDMM
     //USER_PRINTF("\nsetUpLeds() local LEDs: startX=%d stopx=%d startY=%d stopy=%d maxwidth=%d; length=%d, size=%d\n\n", start, stop, startY, stopY, Segment::maxWidth, length(), ledsrgbSize/3);
@@ -1370,7 +1353,9 @@ void Segment::refreshLightCapabilities() {
     // we are withing 2D matrix (includes 1D segments)
     for (int y = startY; y < stopY; y++) for (int x = start; x < stop; x++) {
       uint16_t index = x + Segment::maxWidth * y;
+      #ifndef WLEDMM_REMAP_AT_OUTPUT
       if (index < strip.customMappingSize) index = strip.customMappingTable[index]; // convert logical address to physical
+      #endif
       if (index < 0xFFFFU) {
         if (segStartIdx > index) segStartIdx = index;
         if (segStopIdx  < index) segStopIdx  = index;
@@ -1701,59 +1686,6 @@ void WS2812FX::enumerateLedmaps() {
 
     if (isFile) {
       ledMaps |= 1 << i;
-
-      #ifndef ESP8266
-      if (requestJSONBufferLock(21)) {
-        //WLEDMM: upstream code loops over all ledmap files, read them all, every byte (!!!!) and only get the name of the file!!!
-        File f;
-        f = WLED_FS.open(fileName, "r");
-        if (f) {
-          f.find("\"n\":");
-          char name[34] = { '\0' };  // ensure string termination
-          f.readBytesUntil('\n', name, sizeof(name)-1);
-
-          size_t len = strlen(name);
-          if (len > 0 && len < 33) {
-            (void) cleanUpName(name);
-            len = strlen(name);
-            ledmapNames[i-1] = new(std::nothrow) char[len+1]; // +1 to include terminating \0 
-            if (ledmapNames[i-1]) strlcpy(ledmapNames[i-1], name, 33);
-          }
-          if (!ledmapNames[i-1]) {
-            char tmp[33];
-            snprintf_P(tmp, 32, PSTR("ledmap%d.json"), i);
-            len = strlen(tmp);
-            ledmapNames[i-1] = new(std::nothrow) char[len+1];
-            if (ledmapNames[i-1]) strlcpy(ledmapNames[i-1], tmp, 33);
-          }
-
-          USER_PRINTF("enumerateLedmaps %s \"%s\"", fileName, name);
-          if (isMatrix) {
-            //WLEDMM calc ledmapMaxSize (TroyHacks)
-            char dim[34] = { '\0' };
-            f.find("\"width\":");
-            f.readBytesUntil('\n', dim, sizeof(dim)-1); //hack: use fileName as we have this allocated already
-            uint16_t maxWidth = atoi(cleanUpName(dim));
-            f.find("\"height\":");
-            memset(dim, 0, sizeof(dim)); // clear buffer before reading
-            f.readBytesUntil('\n', dim, sizeof(dim)-1);
-            uint16_t maxHeight = atoi(cleanUpName(dim));
-            ledmapMaxSize = MAX(ledmapMaxSize, maxWidth * maxHeight);
-
-            if (maxWidth*maxHeight>0) {
-              USER_PRINTF(" (%dx%d -> %d)\n", maxWidth, maxHeight, ledmapMaxSize);
-            } else {
-              USER_PRINTLN();
-            }
-          }
-          else
-            USER_PRINTLN();
-        }
-        f.close();
-        USER_FLUSH();
-        releaseJSONBufferLock();
-      }
-      #endif
     }
   }
   //WLEDMM add segment names to be used as ledmap names
@@ -1774,7 +1706,7 @@ void WS2812FX::enumerateLedmaps() {
 void WS2812FX::finalizeInit(void)
 {
   //reset segment runtimes
-  suspendStripService = true; // WLEDMM avoid running effects on an incomplete strip
+  // suspendStripService = true; // WLEDMM avoid running effects on an incomplete strip
   for (segment &seg : _segments) {
     seg.markForReset();
     seg.resetIfRequired();
@@ -1843,12 +1775,8 @@ void WS2812FX::finalizeInit(void)
   if (useLedsArray && getLengthTotal()>0) { // WLEDMM avoid malloc(0)
     size_t arrSize = sizeof(CRGB) * getLengthTotal();
     // softhack007 disabled; putting leds into psram leads to horrible slowdown on WROVER boards (see setUpLeds())
-    #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
-    if (psramFound())
-     Segment::_globalLeds = (CRGB*) ps_malloc(arrSize);
-    else
-    #endif
-      if (arrSize > 0) Segment::_globalLeds = (CRGB*) malloc(arrSize); // WLEDMM avoid malloc(0)
+    // Troy says better it works than not but we can try internal first.
+    if (arrSize > 0) Segment::_globalLeds = (CRGB*)heap_caps_calloc_prefer(arrSize, 1, 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_INTERNAL);
     if ((Segment::_globalLeds != nullptr) && (arrSize > 0)) memset(Segment::_globalLeds, 0, arrSize); // WLEDMM avoid dereferencing nullptr
     if ((Segment::_globalLeds == nullptr) && (arrSize > 0)) errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
   }
@@ -1859,7 +1787,7 @@ void WS2812FX::finalizeInit(void)
   DEBUG_PRINTLN(F("Loading custom ledmaps"));
   deserializeMap();     // (re)load default ledmap
   _isServicing = false;        // WLEDMM
-  suspendStripService = false; // WLEDMM ready, run !
+  // suspendStripService = false; // WLEDMM ready, run !
 }
 
 // WLEDMM wait until strip is idle (=not servicing).
@@ -1887,20 +1815,11 @@ void WS2812FX::service() {
 
   now = nowUp + timebase;
   unsigned long elapsed = nowUp - _lastServiceShow;
-  #if defined(ARDUINO_ARCH_ESP32) && defined(WLEDMM_FASTPATH)   // WLEDMM go faster on ESP32
   //if (_suspend) return;
   if (elapsed < 2) return;                                                       // keep wifi alive
   if ( !_triggered && (_targetFps != FPS_UNLIMITED) && (_targetFps != FPS_UNLIMITED_AC)) {
-#if 0
     if (elapsed < MIN_SHOW_DELAY) return;                                        // WLEDMM too early for service - delivers higher fps
-#else
-    if ((elapsed+1) < _frametime) return;                                            // code from upstream - stricter on FPS
-#endif
   }
-  #else  // legacy
-  if (elapsed < _frametime) return;
-  #endif
-
   bool doShow = false;
   unsigned speedLimit = (_targetFps != FPS_UNLIMITED) && (_targetFps != FPS_UNLIMITED_AC) ? (0.85f * FRAMETIME) : 1;      // WLEDMM minimum for effect frametime
 
@@ -1977,21 +1896,27 @@ void WS2812FX::service() {
 
 void IRAM_ATTR WS2812FX::setPixelColor(int i, uint32_t col)
 {
+  #ifndef WLEDMM_REMAP_AT_OUTPUT
   if (i < customMappingSize) i = customMappingTable[i];
+  #endif
   if (i >= _length) return;
   busses.setPixelColor(i, col);
 }
 
 uint32_t WS2812FX::getPixelColor(uint_fast16_t i) const // WLEDMM fast int types
 {
+  #ifndef WLEDMM_REMAP_AT_OUTPUT
   if (i < customMappingSize) i = customMappingTable[i];
+  #endif
   if (i >= _length) return 0;
   return busses.getPixelColor(i);
 }
 
 uint32_t WS2812FX::getPixelColorRestored(uint_fast16_t i)  const  // WLEDMM gets the original color from the driver (without downscaling by _bri)
 {
+  #ifndef WLEDMM_REMAP_AT_OUTPUT
   if (i < customMappingSize) i = customMappingTable[i];
+  #endif
   if (i >= _length) return 0;
   return busses.getPixelColorRestored(i);
 }
@@ -2101,6 +2026,7 @@ void WS2812FX::show(void) {
   // some buses send asynchronously and this method will return before
   // all of the data has been sent.
   // See https://github.com/Makuna/NeoPixelBus/wiki/ESP32-NeoMethods#neoesp32rmt-methods
+  
   busses.show();
 
   unsigned long diff = showNow - _lastShow;
@@ -2568,155 +2494,161 @@ void WS2812FX::loadCustomPalettes() {
 //load custom mapping table from JSON file (called from finalizeInit() or deserializeState())
 bool WS2812FX::deserializeMap(uint8_t n) {
   // 2D support creates its own ledmap (on the fly) if a ledmap.json exists it will overwrite built one.
-
-  char fileName[32] = {'\0'};
-  //WLEDMM: als support segment name ledmaps
-  bool isFile = false;;
-  if (n<10) {
-    strcpy_P(fileName, PSTR("/ledmap"));
-    if (n) sprintf(fileName +7, "%d", n); //WLEDMM: trick to not include 0 in ledmap.json
-    strcat(fileName, ".json");
-    isFile = WLED_FS.exists(fileName);
-  } else { //WLEDMM add segment name as ledmap.name
-    uint8_t segment_index = 0;
-    for (segment &seg : _segments) {
-      if (n == 10 + segment_index && !isFile && seg.name != nullptr) {
-        sprintf_P(fileName, PSTR("/%s.json"), seg.name);
-        isFile = WLED_FS.exists(fileName);
+  // if (xSemaphoreTake(busMutex, portMAX_DELAY)) {
+    char fileName[32] = { '\0' };
+    //WLEDMM: als support segment name ledmaps
+    bool isFile = false;;
+    if (n < 10) {
+      strcpy_P(fileName, PSTR("/ledmap"));
+      if (n) sprintf(fileName + 7, "%d", n); //WLEDMM: trick to not include 0 in ledmap.json
+      strcat(fileName, ".json");
+      isFile = WLED_FS.exists(fileName);
+    } else { //WLEDMM add segment name as ledmap.name
+      uint8_t segment_index = 0;
+      for (segment& seg : _segments) {
+        if (n == 10 + segment_index && !isFile && seg.name != nullptr) {
+          sprintf_P(fileName, PSTR("/%s.json"), seg.name);
+          isFile = WLED_FS.exists(fileName);
+        }
+        if (isFile) break;
+        segment_index++;
       }
-      if (isFile) break;
-      segment_index++;
     }
-  }
 
-  if (!isFile) {
-    // erase custom mapping if selecting nonexistent ledmap.json (n==0)
-    //WLEDMM: doubt this is necessary as return false causes setupMatrix to deal with this !!!!
-    if (!isMatrix && !n) {
-      customMappingSize = 0;
-      loadedLedmap = 0; //WLEDMM
+    if (!isFile) {
+      // erase custom mapping if selecting nonexistent ledmap.json (n==0)
+      //WLEDMM: doubt this is necessary as return false causes setupMatrix to deal with this !!!!
+      if (!isMatrix && !n) {
+        customMappingSize = 0;
+        loadedLedmap = 0; //WLEDMM
+      }
+      // xSemaphoreGive(busMutex);
+      return false;
     }
-    return false;
-  }
 
-  if (!requestJSONBufferLock(7)) return false;
+    if (!requestJSONBufferLock(7)) return false;
 
-  // WLEDMM: before changing maps, make sure our strip is _not_ servicing effects in parallel
-  if (strip.isServicing()) {
-    USER_PRINTLN(F("deserializeMap(): strip is still drawing effects, waiting ..."));
-    strip.waitUntilIdle();
-  }
+    // WLEDMM: before changing maps, make sure our strip is _not_ servicing effects in parallel
+    // if (strip.isServicing()) {
+    //   USER_PRINTLN(F("deserializeMap(): strip is still drawing effects, waiting ..."));
+    //   strip.waitUntilIdle();
+    // }
 
-  //WLEDMM: change upstream code: do not load complete ledmaps in json as this blows up memory, use file read instead
-  //read the file
-  File f;
-  f = WLED_FS.open(fileName, "r");
-  if (!f) {
-    releaseJSONBufferLock();
-    return false; //if file does not exist just exit
-  }
+    //WLEDMM: change upstream code: do not load complete ledmaps in json as this blows up memory, use file read instead
+    //read the file
+    File f;
 
-  USER_PRINT(F("Reading LED map from ")); //WLEDMM use USER_PRINT
-  USER_PRINTLN(fileName);
+    f = WLED_FS.open(fileName, "r");
+    if (!f) {
+      releaseJSONBufferLock();
+      // xSemaphoreGive(busMutex);
+      return false; //if file does not exist just exit
+    }
 
-  if (isMatrix) {
-    //WLEDMM: read width and height
-    memset(fileName, 0, sizeof(fileName));              // clear old buffer - readBytesUntil() does not terminate strings !!!
-    f.find("\"width\":");
-    f.readBytesUntil('\n', fileName, sizeof(fileName)); //hack: use fileName as we have this allocated already
-    uint16_t maxWidth = atoi(cleanUpName(fileName));
-    //DEBUG_PRINTF(" (\"width\": %s) ", fileName)
+    USER_PRINT(F("Reading LED map from ")); //WLEDMM use USER_PRINT
+    USER_PRINTLN(fileName);
 
-    memset(fileName, 0, sizeof(fileName));              // clear old buffer
-    f.find("\"height\":");
-    f.readBytesUntil('\n', fileName, sizeof(fileName));
-    uint16_t maxHeight = atoi(cleanUpName(fileName));
-    //DEBUG_PRINTF(" (\"height\": %s) \n", fileName)
+    if (isMatrix) {
+      //WLEDMM: read width and height
+      memset(fileName, 0, sizeof(fileName));              // clear old buffer - readBytesUntil() does not terminate strings !!!
+      f.find("\"width\":");
+      f.readBytesUntil('\n', fileName, sizeof(fileName)); //hack: use fileName as we have this allocated already
+      uint16_t maxWidth = atoi(cleanUpName(fileName));
+      //DEBUG_PRINTF(" (\"width\": %s) ", fileName)
+
+      memset(fileName, 0, sizeof(fileName));              // clear old buffer
+      f.find("\"height\":");
+      f.readBytesUntil('\n', fileName, sizeof(fileName));
+      uint16_t maxHeight = atoi(cleanUpName(fileName));
+      //DEBUG_PRINTF(" (\"height\": %s) \n", fileName)
 
     #ifndef WLEDMM_NO_MAP_RESET
     //WLEDMM: support ledmap file properties width and height: if found change segment
-    if (maxWidth * maxHeight > 0) {
-      Segment::maxWidth = maxWidth;
-      Segment::maxHeight = maxHeight;
-      resetSegments(true); //WLEDMM not makeAutoSegments() as we only want to change bounds
-    }
-    else
-      setUpMatrix(); //reset segment sizes to panels
+      if (maxWidth * maxHeight > 0) {
+        Segment::maxWidth = maxWidth;
+        Segment::maxHeight = maxHeight;
+        resetSegments(true); //WLEDMM not makeAutoSegments() as we only want to change bounds
+      } else
+        setUpMatrix(); //reset segment sizes to panels
     #endif
-  }
-
-  USER_PRINTF("deserializeMap %d x %d\n", Segment::maxWidth, Segment::maxHeight);
-
-  //WLEDMM recreate customMappingTable if more space needed
-  if (Segment::maxWidth * Segment::maxHeight > customMappingTableSize) {
-    size_t size = max(ledmapMaxSize, size_t(Segment::maxWidth * Segment::maxHeight)); // TroyHacks
-    USER_PRINTF("deserializemap customMappingTable alloc %u from %u\n", size, customMappingTableSize);
-    //if (customMappingTable != nullptr) delete[] customMappingTable;
-    //customMappingTable = new(std::nothrow) uint16_t[size];
-
-    // don't use new / delete
-    if ((size > 0) && (customMappingTable != nullptr)) {
-      #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
-      if (psramFound()) {
-        customMappingTable = (uint16_t*) ps_realloc(customMappingTable, sizeof(uint16_t) * size); // TroyHacks: This should work? We always have tons of PSRAM
-      } else {
-        customMappingTable = (uint16_t*) reallocf(customMappingTable, sizeof(uint16_t) * size);  // reallocf will free memory if it cannot resize
-      }
-      #else
-      customMappingTable = (uint16_t*) reallocf(customMappingTable, sizeof(uint16_t) * size);  // reallocf will free memory if it cannot resize
-      #endif
     }
-    if ((size > 0) && (customMappingTable == nullptr)) { // second try
-      DEBUG_PRINTLN("deserializeMap: trying to get fresh memory block.");
-      #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
-      if (psramFound()) {
-        customMappingTable = (uint16_t*) ps_calloc(size, sizeof(uint16_t));
-      } else {
-        customMappingTable = (uint16_t*) calloc(size, sizeof(uint16_t));
-      }
+
+    USER_PRINTF("deserializeMap %d x %d\n", Segment::maxWidth, Segment::maxHeight);
+
+    //WLEDMM recreate customMappingTable if more space needed
+    if (Segment::maxWidth * Segment::maxHeight > customMappingTableSize) {
+      uint32_t size = max(ledmapMaxSize, uint32_t(Segment::maxWidth * Segment::maxHeight)); // TroyHacks
+      USER_PRINTF("deserializemap customMappingTable alloc %u from %u\n", size, customMappingTableSize);
+      //if (customMappingTable != nullptr) delete[] customMappingTable;
+      //customMappingTable = new(std::nothrow) uint16_t[size];
+
+      // don't use new / delete
+      if ((size > 0) && (customMappingTable != nullptr)) {
+      #if defined(ARDUINO_ARCH_ESP32)
+        customMappingTable = (uint32_t*)heap_caps_realloc_prefer(customMappingTable, size * sizeof(uint32_t), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_INTERNAL);
       #else
-      customMappingTable = (uint16_t*) calloc(size, sizeof(uint16_t));
+        customMappingTable = (uint32_t*)reallocf(customMappingTable, sizeof(uint32_t) * size);  // reallocf will free memory if it cannot resize
       #endif
-      if (customMappingTable == nullptr) { 
-        DEBUG_PRINTLN("deserializeMap: alloc failed!");
-        errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
       }
+      if ((size > 0) && (customMappingTable == nullptr)) { // second try
+        DEBUG_PRINTLN("deserializeMap: trying to get fresh memory block.");
+      #if defined(ARDUINO_ARCH_ESP32)
+        customMappingTable = (uint32_t*)heap_caps_calloc_prefer(size, sizeof(uint32_t), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_INTERNAL);
+      #else
+        customMappingTable = (uint16_t*)calloc(size, sizeof(uint16_t));
+      #endif
+        if (customMappingTable == nullptr) {
+          DEBUG_PRINTLN("deserializeMap: alloc failed!");
+          errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
+        }
+      }
+      if (customMappingTable != nullptr) customMappingTableSize = size;
     }
-    if (customMappingTable != nullptr) customMappingTableSize = size;
-  }
 
-  if (customMappingTable != nullptr) {
-    customMappingSize  = Segment::maxWidth * Segment::maxHeight;
-    // WLEDMM reset mapping table before loading
-    //memset(customMappingTable, 0xFF, customMappingTableSize * sizeof(uint16_t)); // FFFF = no pixel
-    for (unsigned i=0; i<customMappingTableSize; i++) customMappingTable[i]=i;     // "neutral" 1:1 mapping
+    if (customMappingTable != nullptr) {
+      customMappingSize = Segment::maxWidth * Segment::maxHeight;
+      // WLEDMM reset mapping table before loading
+      //memset(customMappingTable, 0xFF, customMappingTableSize * sizeof(uint16_t)); // FFFF = no pixel
 
-    //WLEDMM: find the map values
-    f.find("\"map\":[");
-    uint16_t i=0;
-    do { //for each element in the array
-      int mapi = f.readStringUntil(',').toInt();
-      // USER_PRINTF(", %d(%d)", mapi, i);
-      if (i < customMappingSize) customMappingTable[i++] = (uint16_t) (mapi<0 ? 0xFFFFU : mapi);  // WLEDMM do not write past array bounds
-    } while (f.available());
+    #ifndef WLEDMM_INVERSE_MAPS
+      for (unsigned i = 0; i < customMappingTableSize; i++) customMappingTable[i] = i;     // "neutral" 1:1 mapping
+    #else
+      memset(customMappingTable, UINT32_MAX, customMappingTableSize * sizeof(uint32_t)); // TroyHacks fill with equivelent to -1 (max uint32_t)
+    #endif
 
-    loadedLedmap = n;
-    f.close();
+      //WLEDMM: find the map values
+      f.find("\"map\":[");
+      uint32_t i = 0;
+      do { //for each element in the array
+        int mapi = f.readStringUntil(',').toInt();
+        // USER_PRINTF(", %d(%d)", mapi, i);
 
-    USER_PRINTF("Custom ledmap: %d size=%d\n", loadedLedmap, customMappingSize);
+      #ifndef WLEDMM_INVERSE_MAPS
+        if (i < customMappingSize) customMappingTable[i++] = (uint32_t)(mapi < 0 ? UINT32_MAX : mapi);  // WLEDMM do not write past array bounds
+      #else
+        if (i < customMappingSize) customMappingTable[mapi] = (uint32_t)(i++);  // Reverse map logic - instead of every position, we only have the remapped ones
+      #endif
+
+      } while (f.available());
+
+      loadedLedmap = n;
+      f.close();
+      USER_PRINTF("Custom ledmap: %d size=%d\n", loadedLedmap, customMappingSize);
     #ifdef WLED_DEBUG_MAPS
-      for (uint16_t j=0; j<customMappingSize; j++) { // fixing a minor warning: declaration of 'i' shadows a previous local
-        if (!(j%Segment::maxWidth)) DEBUG_PRINTLN();
+      for (uint32_t j = 0; j < customMappingSize; j++) { // fixing a minor warning: declaration of 'i' shadows a previous local
+        if (!(j % Segment::maxWidth)) DEBUG_PRINTLN();
         DEBUG_PRINTF("%4d,", customMappingTable[j]);
       }
       DEBUG_PRINTLN();
     #endif
-  } else { // memory allocation error
-    customMappingTableSize = 0;
-    USER_PRINTLN(F("Deserializemap: Ledmap alloc error."));
-    USER_FLUSH();
-  }
 
+    } else { // memory allocation error
+      customMappingTableSize = 0;
+      USER_PRINTLN(F("Deserializemap: Ledmap alloc error."));
+      USER_FLUSH();
+    }
+  //   xSemaphoreGive(busMutex);
+  // }
   releaseJSONBufferLock();
   return true;
 }

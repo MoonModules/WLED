@@ -64,7 +64,7 @@ void WS2812FX::setUpMatrix() {
 
     //WLEDMM recreate customMappingTable if more space needed
     if (Segment::maxWidth * Segment::maxHeight > customMappingTableSize) {
-      size_t size = max(ledmapMaxSize, size_t(Segment::maxWidth * Segment::maxHeight)); // TroyHacks
+      uint32_t size = max(ledmapMaxSize, uint32_t(Segment::maxWidth * Segment::maxHeight)); // TroyHacks
       if (!needLedMap) size = 0;                                                        // softhack007
       USER_PRINTF("setupmatrix customMappingTable alloc %d from %d\n", size, customMappingTableSize);
       //if (customMappingTable != nullptr) delete[] customMappingTable;
@@ -72,25 +72,14 @@ void WS2812FX::setUpMatrix() {
 
       // don't use new / delete
       if ((size > 0) && (customMappingTable != nullptr)) {  // resize
-        customMappingTable = (uint16_t*) reallocf(customMappingTable, sizeof(uint16_t) * size); // reallocf will free memory if it cannot resize
+        customMappingTable = (uint32_t*) reallocf(customMappingTable, sizeof(uint32_t) * size); // reallocf will free memory if it cannot resize
       }
       if ((size > 0) && (customMappingTable == nullptr)) { // second try
         DEBUG_PRINTLN("setUpMatrix: trying to get fresh memory block.");
-        // #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
-        // if (psramFound()){
-        //   customMappingTable = (uint16_t*) ps_calloc(size, sizeof(uint16_t));
-        // } else {
-        //   customMappingTable = (uint16_t*) calloc(size, sizeof(uint16_t));
-        // }
-        // #else
-        // customMappingTable = (uint16_t*) calloc(size, sizeof(uint16_t));
-        // #endif
-        customMappingTable = (uint16_t*) heap_caps_calloc_prefer(size, sizeof(uint16_t),2,MALLOC_CAP_SPIRAM,MALLOC_CAP_INTERNAL);
+        customMappingTable = (uint32_t*) heap_caps_calloc_prefer(size, sizeof(uint32_t),2,MALLOC_CAP_SPIRAM,MALLOC_CAP_INTERNAL);
         if (customMappingTable == nullptr) { 
           USER_PRINTLN("setUpMatrix: alloc failed");
           errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
-        } else {
-          USER_PRINTLN("setUpMatrix: alloc failed");
         }
       }
       if (customMappingTable != nullptr) customMappingTableSize = size;
@@ -101,9 +90,10 @@ void WS2812FX::setUpMatrix() {
       if (!needLedMap) customMappingSize = 0;                                                        // softhack007
 
       // fill with empty in case we don't fill the entire matrix
-      for (size_t i = 0; i< customMappingTableSize; i++) { //WLEDMM use customMappingTableSize
-        customMappingTable[i] = (uint16_t)-1;
-      }
+      // for (uint32_t i = 0; i< customMappingTableSize; i++) { //WLEDMM use customMappingTableSize
+      //   customMappingTable[i] = (uint32_t)-1;
+      // }
+      memset(customMappingTable,(uint32_t)-1,customMappingTableSize); // WLED-MM optimization TroyHacks
 
       // we will try to load a "gap" array (a JSON file)
       // the array has to have the same amount of values as mapping array (or larger)
@@ -114,7 +104,7 @@ void WS2812FX::setUpMatrix() {
       // allowed values are: -1 (missing pixel/no LED attached), 0 (inactive/unused pixel), 1 (active/used pixel)
       char    fileName[32]; strcpy_P(fileName, PSTR("/2d-gaps.json")); // reduce flash footprint
       bool    isFile = WLED_FS.exists(fileName);
-      size_t  gapSize = 0;
+      uint32_t  gapSize = 0;
       int8_t *gapTable = nullptr;
 
       if (isFile && requestJSONBufferLock(20)) {
@@ -140,22 +130,22 @@ void WS2812FX::setUpMatrix() {
       }
 
       if (needLedMap && customMappingTable != nullptr) {  // softhack007
-      uint_fast16_t x, y, pix=0; //pixel
-      for (size_t pan = 0; pan < panel.size(); pan++) {
-        Panel &p = panel[pan];
-        uint_fast16_t h = p.vertical ? p.height : p.width;
-        uint_fast16_t v = p.vertical ? p.width  : p.height;
-        for (size_t j = 0; j < v; j++){
-          for(size_t i = 0; i < h; i++) {
-            y = (p.vertical?p.rightStart:p.bottomStart) ? v-j-1 : j;
-            x = (p.vertical?p.bottomStart:p.rightStart) ? h-i-1 : i;
-            x = p.serpentine && j%2 ? h-x-1 : x;
-            size_t index = (p.yOffset + (p.vertical?x:y)) * Segment::maxWidth + p.xOffset + (p.vertical?y:x);
-            if (!gapTable || (gapTable && gapTable[index] >  0)) customMappingTable[index] = pix; // a useful pixel (otherwise -1 is retained)
-            if (!gapTable || (gapTable && gapTable[index] >= 0)) pix++; // not a missing pixel
+        uint_fast16_t x, y, pix=0; //pixel
+        for (uint32_t pan = 0; pan < panel.size(); pan++) {
+          Panel &p = panel[pan];
+          uint_fast16_t h = p.vertical ? p.height : p.width;
+          uint_fast16_t v = p.vertical ? p.width  : p.height;
+          for (size_t j = 0; j < v; j++){
+            for(size_t i = 0; i < h; i++) {
+              y = (p.vertical?p.rightStart:p.bottomStart) ? v-j-1 : j;
+              x = (p.vertical?p.bottomStart:p.rightStart) ? h-i-1 : i;
+              x = p.serpentine && j%2 ? h-x-1 : x;
+              size_t index = (p.yOffset + (p.vertical?x:y)) * Segment::maxWidth + p.xOffset + (p.vertical?y:x);
+              if (!gapTable || (gapTable && gapTable[index] >  0)) customMappingTable[index] = pix; // a useful pixel (otherwise -1 is retained)
+              if (!gapTable || (gapTable && gapTable[index] >= 0)) pix++; // not a missing pixel
+            }
           }
         }
-      }
       }
 
       // delete gap array as we no longer need it
@@ -187,7 +177,7 @@ void WS2812FX::setUpMatrix() {
   // softhack007 hack: delete mapping table in case it only contains "identity"
   if (customMappingTable != nullptr && customMappingTableSize > 0) {
     bool isIdentity = true;
-    for (size_t i = 0; (i< customMappingSize) && isIdentity; i++) { //WLEDMM use customMappingTableSize
+    for (uint32_t i = 0; (i< customMappingSize) && isIdentity; i++) { //WLEDMM use customMappingTableSize
       if (customMappingTable[i] != (uint16_t)i ) isIdentity = false;
     }
     if (isIdentity) {
@@ -208,8 +198,10 @@ void WS2812FX::setUpMatrix() {
 // absolute matrix version of setPixelColor(), without error checking
 void IRAM_ATTR __attribute__((hot)) WS2812FX::setPixelColorXY_fast(int x, int y, uint32_t col) //WLEDMM: IRAM_ATTR conditionally
 {
-  uint_fast16_t index = y * Segment::maxWidth + x;
+  uint_fast32_t index = y * Segment::maxWidth + x;
+  #ifndef WLEDMM_REMAP_AT_OUTPUT
   if (index < customMappingSize) index = customMappingTable[index];
+  #endif
   if (index >= _length) return;
   busses.setPixelColor(index, col);
 }
@@ -219,11 +211,13 @@ void IRAM_ATTR_YN WS2812FX::setPixelColorXY(int x, int y, uint32_t col) //WLEDMM
 {
 #ifndef WLED_DISABLE_2D
   if (!isMatrix) return; // not a matrix set-up
-  uint_fast16_t index = y * Segment::maxWidth + x;
+  uint_fast32_t index = y * Segment::maxWidth + x;
 #else
   uint16_t index = x;
 #endif
+  #ifndef WLEDMM_REMAP_AT_OUTPUT
   if (index < customMappingSize) index = customMappingTable[index];
+  #endif
   if (index >= _length) return;
   busses.setPixelColor(index, col);
 }
@@ -231,22 +225,26 @@ void IRAM_ATTR_YN WS2812FX::setPixelColorXY(int x, int y, uint32_t col) //WLEDMM
 // returns RGBW values of pixel
 uint32_t __attribute__((hot)) WS2812FX::getPixelColorXY(uint16_t x, uint16_t y) const {
 #ifndef WLED_DISABLE_2D
-  uint_fast16_t index = (y * Segment::maxWidth + x); //WLEDMM: use fast types
+  uint_fast32_t index = (y * Segment::maxWidth + x); //WLEDMM: use fast types
 #else
   uint16_t index = x;
 #endif
+  #ifndef WLEDMM_REMAP_AT_OUTPUT
   if (index < customMappingSize) index = customMappingTable[index];
+  #endif
   if (index >= _length) return 0;
   return busses.getPixelColor(index);
 }
 
 uint32_t __attribute__((hot)) WS2812FX::getPixelColorXYRestored(uint16_t x, uint16_t y)  const {  // WLEDMM gets the original color from the driver (without downscaling by _bri)
   #ifndef WLED_DISABLE_2D
-    uint_fast16_t index = (y * Segment::maxWidth + x); //WLEDMM: use fast types
+    uint_fast32_t index = (y * Segment::maxWidth + x); //WLEDMM: use fast types
   #else
     uint16_t index = x;
   #endif
+  #ifndef WLEDMM_REMAP_AT_OUTPUT
   if (index < customMappingSize) index = customMappingTable[index];
+  #endif
   if (index >= _length) return 0;
   return busses.getPixelColorRestored(index);
 }
@@ -291,7 +289,7 @@ void IRAM_ATTR __attribute__((hot)) Segment::setPixelColorXY_fast(int x, int y, 
     else ledsrgb[i] = fastled_col;
   }
 
-#if 1 // this is still a dangerous optimization
+#ifdef WLED_DANGEROUS_OPTIMIZATIONS // this is still a dangerous optimization
   if ((i < UINT_MAX) && sameColor && (call > 0) && (!transitional)  && (mode != FX_MODE_2DSCROLLTEXT) && (ledsrgb[i] == CRGB(scaled_col))) return; // WLEDMM looks like nothing to do
 #endif
 
@@ -353,7 +351,7 @@ void IRAM_ATTR_YN Segment::setPixelColorXY(int x, int y, uint32_t col) //WLEDMM:
     col = color_fade(col, _bri_t);
   }
 
-#if 1 // this is a dangerous optimization
+#ifdef WLED_DANGEROUS_OPTIMIZATIONS // this is a dangerous optimization
   if ((i < UINT_MAX) && sameColor && (call > 0) && (!transitional) && (mode != FX_MODE_2DSCROLLTEXT) && (ledsrgb[i] == CRGB(col))) return; // WLEDMM looks like nothing to do
 #endif
 

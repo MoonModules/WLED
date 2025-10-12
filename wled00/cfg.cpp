@@ -91,16 +91,16 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   JsonObject hw_led = hw["led"];
 
   // WLEDMM: before changing strip, make sure our strip is _not_ servicing effects in parallel
-  suspendStripService = true; // temporarily lock out strip updates
+  // suspendStripService = true; // temporarily lock out strip updates
 #ifdef ARDUINO_ARCH_ESP32
-  if (strip.isServicing() && (strncmp(pcTaskGetTaskName(NULL), "loopTask", 8) != 0)) { // if we are in looptask (arduino loop), its safe to proceed without waiting
-    if (fromFS) {
-      USER_PRINTLN(F("deserializeConfig(fromFS): strip is still drawing effects."));
-    } else {
-      USER_PRINTLN(F("deserializeConfig(): strip is still drawing effects."));
-    }
-    strip.waitUntilIdle();
-  }
+  // if (strip.isServicing() && (strncmp(pcTaskGetTaskName(NULL), "loopTask", 8) != 0)) { // if we are in looptask (arduino loop), its safe to proceed without waiting
+  //   if (fromFS) {
+  //     USER_PRINTLN(F("deserializeConfig(fromFS): strip is still drawing effects."));
+  //   } else {
+  //     USER_PRINTLN(F("deserializeConfig(): strip is still drawing effects."));
+  //   }
+  //   strip.waitUntilIdle();
+  // }
 #endif
 
   CJSON(strip.ablMilliampsMax, hw_led[F("maxpwr")]);
@@ -173,14 +173,14 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     bool busesChanged = false;
     for (JsonObject elm : ins) {
       if (s >= WLED_MAX_BUSSES+WLED_MIN_VIRTUAL_BUSSES) break;
-      uint8_t pins[5] = {255, 255, 255, 255, 255};
+      uint8_t pins[16] = { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 };
       JsonArray pinArr = elm["pin"];
       if (pinArr.size() == 0) continue;
       pins[0] = pinArr[0];
       uint8_t i = 0;
       for (int p : pinArr) {
         pins[i++] = p;
-        if (i>4) break;
+        if (i>16) break;
       }
 
       uint16_t length = elm["len"] | 1;
@@ -194,16 +194,16 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       uint16_t freqkHz = elm[F("freq")] | 0;  // will be in kHz for DotStar and Hz for PWM (not yet implemented fully)
       ledType |= refresh << 7; // hack bit 7 to indicate strip requires off refresh
       uint8_t AWmode = elm[F("rgbwm")] | RGBW_MODE_MANUAL_ONLY;
-      uint8_t artnet_outputs = elm["artnet_outputs"] | 1; // sanity check
-      uint16_t artnet_leds_per_output = elm["artnet_leds_per_output"] | length; // sanity check
-      uint8_t artnet_fps_limit = elm["artnet_fps_limit"] | 24; // sanity check
+      uint8_t outputs = elm["outputs"] | 1; // sanity check
+      uint16_t leds_per_output = elm["leds_per_output"] | length; // sanity check
+      uint8_t fps_limit = elm["fps_limit"] | 24; // sanity check
       if (fromFS) {
-        BusConfig bc = BusConfig(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz, artnet_outputs, artnet_leds_per_output, artnet_fps_limit);
+        BusConfig bc = BusConfig(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz, outputs, leds_per_output, fps_limit);
         mem += BusManager::memUsage(bc);
         if (mem <= MAX_LED_MEMORY) if (busses.add(bc) == -1) break;  // finalization will be done in WLED::beginStrip()
       } else {
         if (busConfigs[s] != nullptr) delete busConfigs[s];
-        busConfigs[s] = new BusConfig(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz, artnet_outputs, artnet_leds_per_output, artnet_fps_limit);
+        busConfigs[s] = new BusConfig(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz, outputs, leds_per_output, fps_limit);
         busesChanged = true;
       }
       s++;
@@ -636,7 +636,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     needsSave = !usermods.readFromConfig(usermods_settings);
   }
 
-  suspendStripService = false; // WLEDMM release lock
+  // suspendStripService = false; // WLEDMM release lock
 
   if (fromFS) return needsSave;
   // if from /json/cfg
@@ -741,7 +741,7 @@ void serializeConfig() {
   wifi[F("sleep")] = !noWifiSleep;
   wifi[F("phy")] = force802_3g;
 
-  #ifdef WLED_USE_ETHERNET
+#if defined(WLED_USE_ETHERNET) && !defined(CONFIG_IDF_TARGET_ESP32P4)
   JsonObject ethernet = doc.createNestedObject("eth");
   ethernet["type"] = ethernetType;
   if (ethernetType != WLED_ETH_NONE && ethernetType < WLED_NUM_ETH_TYPES) {
@@ -822,9 +822,12 @@ void serializeConfig() {
     ins["start"] = bus->getStart();
     ins["len"] = bus->getLength();
     JsonArray ins_pin = ins.createNestedArray("pin");
-    uint8_t pins[5];
+    uint8_t pins[16];
     uint8_t nPins = bus->getPins(pins);
-    for (uint8_t i = 0; i < nPins; i++) ins_pin.add(pins[i]);
+    for (uint8_t i = 0; i < nPins; i++) {
+      ins_pin.add(pins[i]);
+      // USER_PRINTF("Adding ins_pin pin[%d] with value %d\n", i, pins[i]);
+    }
     ins[F("order")] = bus->getColorOrder();
     ins["rev"] = bus->reversed;
     ins[F("skip")] = bus->skippedLeds();
@@ -832,9 +835,9 @@ void serializeConfig() {
     ins["ref"] = bus->isOffRefreshRequired();
     ins[F("rgbwm")] = bus->getAutoWhiteMode();
     ins[F("freq")] = bus->getFrequency();
-    ins["artnet_outputs"] = bus->get_artnet_outputs();
-    ins["artnet_fps_limit"] = bus->get_artnet_fps_limit();
-    ins["artnet_leds_per_output"] = bus->get_artnet_leds_per_output();
+    ins["outputs"] = bus->get_outputs();
+    ins["fps_limit"] = bus->get_fps_limit();
+    ins["leds_per_output"] = bus->get_leds_per_output();
   }
 
   JsonArray hw_com = hw.createNestedArray(F("com"));

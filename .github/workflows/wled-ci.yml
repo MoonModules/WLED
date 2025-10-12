@@ -54,9 +54,16 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-          python-version: '3.9'
-    - name: Install PlatformIO
-      run: pip install -r requirements.txt
+        python-version: "3.13"
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+      with:
+        version: "latest"
+        enable-cache: false
+    - name: Install dependencies
+      run: |
+        uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.18.zip
+        pio pkg install --global --environment ${{ matrix.environment }}
     - name: Build firmware
       env:
         WLED_RELEASE: True

@@ -58,7 +58,7 @@ void handleDDPPacket(e131_packet_t* p) {
 //E1.31 and Art-Net protocol support
 void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol){
 
-  uint16_t uni = 0, dmxChannels = 0;
+  uint32_t uni = 0, dmxChannels = 0;
   uint8_t* e131_data = nullptr;
   uint8_t seq = 0, mde = REALTIME_MODE_E131;
 
@@ -98,7 +98,7 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol){
   //if (uni < e131Universe || uni >= (e131Universe + E131_MAX_UNIVERSE_COUNT)) return;
   if (uni < e131Universe || uni >= e131Universe + 256) return; // WLEDMM just prevent overflow
 
-  uint8_t previousUniverses = uni - e131Universe;
+  uint16_t previousUniverses = uni - e131Universe;
 
   if (e131SkipOutOfSequence && (previousUniverses < E131_MAX_UNIVERSE_COUNT))  // WLEDMM
     if (seq < e131LastSequenceNumber[previousUniverses] && seq > 20 && e131LastSequenceNumber[previousUniverses] < 250){
@@ -330,10 +330,23 @@ void handleDMXData(uint16_t uni, uint16_t dmxChannels, uint8_t* e131_data, uint8
             dmxOffset+=3;
           }
         } else {
+          #ifdef WLEDMM_REMAP_AT_OUTPUT
+          byte* busPixelData = nullptr;
+          uint32_t busPixelSize = 0;
+          Bus* bus = busses.getBus(0);
+          if (bus) {
+            busPixelData = bus->getPixelData();
+            if (busPixelData == NULL || busPixelSize == 0) return;
+          } else {
+            return;
+          }
+          memcpy(busPixelData + previousLeds, e131_data + dmxOffset, availDMXLen); // may need availDMXLen-1 ?
+          #else
           for (uint16_t i = previousLeds; i < ledsTotal; i++) {
-            setRealtimePixel(i, e131_data[dmxOffset], e131_data[dmxOffset+1], e131_data[dmxOffset+2], e131_data[dmxOffset+3]);
+            setRealtimePixel(i, e131_data[dmxOffset], e131_data[dmxOffset + 1], e131_data[dmxOffset + 2], e131_data[dmxOffset + 3]);
             dmxOffset+=4;
           }
+          #endif
         }
         break;
       }

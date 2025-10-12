@@ -35,14 +35,14 @@ static File f; // don't export to other cpp files
 
 //wrapper to find out how long closing takes
 void closeFile() {
-  #ifdef ARDUINO_ARCH_ESP32
+  // #ifdef ARDUINO_ARCH_ESP32
   // WLEDMM: file.close() triggers flash writing. While flash is writing, the NPB RMT driver cannot fill its buffer which may create glitches.
   unsigned long t_wait = millis();
-  while(strip.isUpdating() && (millis() - t_wait < 72)) delay(1); // WLEDMM try to catch a moment when strip is idle
-  while(strip.isUpdating() && (millis() - t_wait < 96)) delay(0); //        try harder
-  //if (strip.isUpdating()) USER_PRINTLN("closeFile: strip still updating.");
-  delay(2); // might help
-  #endif
+  // while(strip.isUpdating() && (millis() - t_wait < 72)) delay(1); // WLEDMM try to catch a moment when strip is idle
+  // while(strip.isUpdating() && (millis() - t_wait < 96)) delay(0); //        try harder
+  // //if (strip.isUpdating()) USER_PRINTLN("closeFile: strip still updating.");
+  // delay(2); // might help
+  // #endif
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINT(F("Close -> "));
     uint32_t s = millis();
@@ -347,7 +347,7 @@ bool readObjectFromFileUsingId(const char* file, uint16_t id, JsonDocument* dest
 //WLEDMM: if key is not a nullptr, nothing seems to be done with it!!! (except check for existing), still whole json is loaded
 bool readObjectFromFile(const char* file, const char* key, JsonDocument* dest)
 {
-  if (doCloseFile) closeFile();
+  // if (doCloseFile) closeFile();
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINTF("Read from %s with key %s >>>\n", file, (key==nullptr)?"nullptr":key);
     uint32_t s = millis();
@@ -364,7 +364,21 @@ bool readObjectFromFile(const char* file, const char* key, JsonDocument* dest)
     return false;
   }
 
-  deserializeJson(*dest, f);
+  DeserializationError err = deserializeJson(*dest, f);
+  switch (err.code()) {
+    case DeserializationError::Ok:
+      DEBUGFS_PRINTLN(F("Deserialization succeeded"));
+      break;
+    case DeserializationError::InvalidInput:
+      DEBUGFS_PRINTLN(F("Invalid input!"));
+      break;
+    case DeserializationError::NoMemory:
+      DEBUGFS_PRINTLN(F("Not enough memory"));
+      break;
+    default:
+      DEBUGFS_PRINTLN(F("Deserialization failed"));
+      break;
+  }
 
   f.close();
   DEBUGFS_PRINTF("Read, took %d ms\n", millis() - s);
@@ -417,7 +431,7 @@ static const uint8_t *getPresetCache(size_t &size) {
   static size_t presetsCachedSize = 0;
   static byte presetsCachedValidate = 0;
 
-  if (!psramFound()) {
+  if (!psramFound()) { // OK use
     size = 0;
     return nullptr;
   }
@@ -438,7 +452,7 @@ static const uint8_t *getPresetCache(size_t &size) {
       presetsCachedTime = presetsModifiedTime;
       presetsCachedValidate = cacheInvalidate;
       presetsCachedSize = 0;
-      presetsCached = (uint8_t*)ps_malloc(file.size() + 1);
+      presetsCached = (uint8_t*)heap_caps_malloc(file.size() + 1, MALLOC_CAP_SPIRAM);
       if (presetsCached) {
         presetsCachedSize = file.size();
         file.read(presetsCached, presetsCachedSize);

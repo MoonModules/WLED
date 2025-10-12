@@ -7,7 +7,7 @@
 	<script>
 	var d=document;
 	var loc = false, locip;
-	var maxPanels=64;
+	var maxPanels=128;
 	var ctx = null; // WLEDMM
 	function H(){window.open("https://mm.kno.wled.ge/features/2D");}
 	var ledIndex = 0; // WLEDMM
@@ -401,9 +401,9 @@ Y:<input id="P${i}Y" name="P${i}Y" type="number" min="0" max="1023" value="0" on
 			<h3 id="title">Matrix Generator <button type="button" id="expGen" onclick="expand(this,gId('mxGen'));">&gt;</button></h3>
 		</div>
 		<div id="mxGen" style="display:none;">
-			Panel dimensions (WxH): <input name="PW" type="number" min="1" max="1023" value="8" oninput="fieldChange()"> x <input name="PH" type="number" min="1" max="1023" value="8" oninput="fieldChange()"><br>
-			Horizontal panels: <input name="MPH" type="number" min="1" max="8" value="1" oninput="fieldChange()">
-			Vertical panels: <input name="MPV" type="number" min="1" max="8" value="1" oninput="fieldChange()"><br>
+			Panel dimensions (WxH): <input name="PW" type="number" min="1" max="1024" value="16" oninput="fieldChange()"> x <input name="PH" type="number" min="1" max="1024" value="16" oninput="fieldChange()"><br>
+			Horizontal panels: <input name="MPH" type="number" min="1" max="32" value="1" oninput="fieldChange()">
+			Vertical panels: <input name="MPV" type="number" min="1" max="32" value="1" oninput="fieldChange()"><br>
 			<div id="blockPanelOrientation">
 				1<sup>st</sup> panel: <select name="PB" oninput="fieldChange()">
 					<option value="0">Top</option>
@@ -440,7 +440,7 @@ Y:<input id="P${i}Y" name="P${i}Y" type="number" min="0" max="1023" value="0" on
 		<div id="blockPanelSetup">
 			<hr class="sml">
 			<h3>Panel set-up</h3>
-			Number of panels: <input name="MPC" type="number" min="1" max="64" value="1" oninput="addPanels();UI();"><br>
+			Number of panels: <input name="MPC" type="number" min="1" max="128" value="1" oninput="addPanels();UI();"><br>
 			<i>A matrix is made of 1 or more physical LED panels.<br>
 			Each panel can be of different size and/or have different LED orientation and/or starting point and/or layout.</i><br>
 			<h3>LED panel layout</h3>

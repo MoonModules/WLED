@@ -35,8 +35,9 @@ bool presetsActionPending(void) {  // WLEDMM true if presetToApply, presetToSave
 }
 
 static void doSaveState() {
+
   bool persist = (presetToSave < 251);
-  const char *filename = getFileName(persist);
+  const char* filename = getFileName(persist);
 
   if (!requestJSONBufferLock(10)) return; // will set fileDoc
 
@@ -53,42 +54,37 @@ static void doSaveState() {
   sObj["n"] = saveName;
   if (quickLoad[0]) sObj[F("ql")] = quickLoad;
   if (saveLedmap >= 0) sObj[F("ledmap")] = saveLedmap;
-/*
-  #ifdef WLED_DEBUG
-    DEBUG_PRINTLN(F("Serialized preset"));
-    serializeJson(doc,Serial);
-    DEBUG_PRINTLN();
-  #endif
-*/
-  #if defined(ARDUINO_ARCH_ESP32)
+  /*
+    #ifdef WLED_DEBUG
+      DEBUG_PRINTLN(F("Serialized preset"));
+      serializeJson(doc,Serial);
+      DEBUG_PRINTLN();
+    #endif
+  */
+#if defined(ARDUINO_ARCH_ESP32)
   if (!persist) {
-    if (tmpRAMbuffer!=nullptr) free(tmpRAMbuffer);
+    if (tmpRAMbuffer != nullptr) free(tmpRAMbuffer);
     size_t len = measureJson(*fileDoc) + 1;
     DEBUG_PRINTLN(len);
     // if possible use SPI RAM on ESP32
-    #if defined(BOARD_HAS_PSRAM) && (defined(WLED_USE_PSRAM) || defined(WLED_USE_PSRAM_JSON))        // WLEDMM
-    if (psramFound())
-      tmpRAMbuffer = (char*) ps_malloc(len);
-    else
-    #endif
-      tmpRAMbuffer = (char*) malloc(len);
-    if (tmpRAMbuffer!=nullptr) {
+    tmpRAMbuffer = (char*)heap_caps_calloc_prefer(len, 1, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_INTERNAL);
+    if (tmpRAMbuffer != nullptr) {
       serializeJson(*fileDoc, tmpRAMbuffer, len);
     } else {
       writeObjectToFileUsingId(filename, presetToSave, fileDoc);
     }
   } else
   #endif
-  writeObjectToFileUsingId(filename, presetToSave, fileDoc);
+    writeObjectToFileUsingId(filename, presetToSave, fileDoc);
 
   if (persist) presetsModifiedTime = toki.second(); //unix time
   releaseJSONBufferLock();
   updateFSInfo();
 
   // clean up
-  saveLedmap   = -1;
+  saveLedmap = -1;
   presetToSave = 0;
-  saveName[0]  = '\0';
+  saveName[0] = '\0';
   quickLoad[0] = '\0';
   playlistSave = false;
 }
@@ -237,14 +233,14 @@ void handlePresets()
   #if defined(ARDUINO_ARCH_ESP32)   // WLEDMM we apply this workaround to all esp32 boards (S3 and classic esp32 included)
   //#if defined(ARDUINO_ARCH_ESP32S2) || defined(ARDUINO_ARCH_ESP32C3)
   // in case we are called from web UI, wait until strip.service() is done
-  if (!suspendStripService) { suspendStripService = true; haveLocked = true; } // only lock service if not locked already
+  // if (!suspendStripService) { suspendStripService = true; haveLocked = true; } // only lock service if not locked already
   unsigned long waitstart = millis();
-  while (strip.isServicing() && millis() - waitstart < FRAMETIME_FIXED) delay(1); // wait for effects to finish updating
+  // while (strip.isServicing() && millis() - waitstart < FRAMETIME_FIXED) delay(1); // wait for effects to finish updating
 
   strip.fill(BLACK); strip.show(); // experimental: set LEDs to black while new preset loads (instead of freezing effects)
 
   unsigned long start = millis();
-  while (strip.isUpdating() && millis() - start < FRAMETIME_FIXED) delay(1); // wait for strip to finish updating, accessing FS during sendout causes glitches // WLEDMM delay instead of yield
+  // while (strip.isUpdating() && millis() - start < FRAMETIME_FIXED) delay(1); // wait for strip to finish updating, accessing FS during sendout causes glitches // WLEDMM delay instead of yield
   #endif
 
   #ifdef ARDUINO_ARCH_ESP32
@@ -258,7 +254,7 @@ void handlePresets()
     if ((errorFlag == ERR_FS_PLOAD) || (errorFlag == ERR_JSON)) errorFlag = ERR_NONE;  // WLEDMM only reset our own error
     if (presetErrorFlag == ERR_FS_PLOAD) errorFlag = presetErrorFlag;
   }
-  if (haveLocked) suspendStripService = false; // WLEDMM unlock effects after presets file was loaded
+  // if (haveLocked) suspendStripService = false; // WLEDMM unlock effects after presets file was loaded
   fdo = fileDoc->as<JsonObject>();
 
   //HTTP API commands

@@ -575,7 +575,7 @@ String dmxProcessor(const String& var)
 
 void serveSettingsJS(AsyncWebServerRequest* request)
 {
-  char buf[SETTINGS_STACK_BUF_SIZE+37] = { '\0' }; // WLEDMM ensure buffer is cleared initially
+  static char* buf = (char*)heap_caps_calloc_prefer(SETTINGS_STACK_BUF_SIZE, 1, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_INTERNAL);
   buf[0] = 0;
   byte subPage = request->arg(F("p")).toInt();
   if (subPage > 10) {
@@ -648,7 +648,7 @@ void serveSettings(AsyncWebServerRequest* request, bool post)
     char s2[45] = "";
 
     switch (subPage) {
-      case 1: strcpy_P(s, PSTR("WiFi")); strcpy_P(s2, PSTR("Please connect to the new IP (if changed)")); forceReconnect = true; break;
+      case 1: strcpy_P(s, PSTR("WiFi")); USER_PRINTLN("savesettings forcing reconnect"); strcpy_P(s2, PSTR("Please connect to the new IP (if changed)")); forceReconnect = true; break;
       case 2: strcpy_P(s, PSTR("LED")); break;
       case 3: strcpy_P(s, PSTR("UI")); break;
       case 4: strcpy_P(s, PSTR("Sync")); break;

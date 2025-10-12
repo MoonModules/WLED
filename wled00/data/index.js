@@ -666,10 +666,10 @@ function parseInfo(i) {
 function populateInfo(i)
 {
 	var cn="";
-	var heap = i.freeheap/1000;
+	var heap = i.freeheap/1024;
 	var heap = Math.round(i.freeheap/100)/10;        // WLEDMM bugfix
-	var theap = (i.totalheap>0)?i.totalheap/1000:-1; //WLEDMM - total heap is not available on 8266
-	var flashsize = i.getflash/1000; //WLEDMM and Athom
+	var theap = (i.totalheap>0)?i.totalheap/1024:-1; //WLEDMM - total heap is not available on 8266
+	var flashsize = i.getflash/1024; //WLEDMM and Athom
 	flashsize = flashsize.toFixed(1); //WLEDMM and Athom
 	var pwr = i.leds.pwr;
 	var pwru = "Not calculated";
@@ -696,7 +696,7 @@ function populateInfo(i)
 	//if (i.ver.includes("0.14.0-b15.22")) vcn = "Lupo";
 	//if (i.ver.includes("0.14.1-b")) vcn = "Fried Chicken";  // final line of "One Vision" by Queen
 	if (i.ver.includes("0.14.3-b")) vcn = "Fried Chicken";
-	if (i.ver.includes("14.5.")) vcn = "Small Step";
+	if (i.ver.includes("14.5.")) vcn = "P4 Anniversary Edition";
 
 	cn += `v${i.ver} &nbsp;<i>"${vcn}"</i><p>(WLEDMM ${i.rel}.bin)</p><p><em>build ${i.vid}</em></p><table>
 ${urows}
@@ -705,19 +705,64 @@ ${i.opt&0x100?inforow("Net Print ☾","<button class=\"btn btn-xs\" onclick=\"re
 ${i.serialOnline?inforow(i.serialOnline,"TX="+i.sTX,"; RX="+i.sRX):""}
 ${i.opt&0x100?'<tr><td colspan=2><hr style="height:1px;border-width:0;color:SeaGreen;background-color:SeaGreen"></td></tr>':''}
 ${inforow("Build",i.vid)}
-${inforow("Estimated current",pwru)}
+${pwru !== "Not calculated" ? inforow("Estimated current", pwru) : ""}
 ${inforow("Average FPS",i.leds.fps)}
-${inforow("Signal strength",i.wifi.signal +"% ("+ i.wifi.rssi, " dBm)")}
-${inforow("MAC address",i.mac)}
+${(() => {
+  if (!i.network) return "";
+  let html = "";
+  if (i.network.wifi) {
+    const wifi = i.network.wifi;
+    if (wifi.ap) {
+      html += inforow("WiFi SSID", `${wifi.ap.ssid} (${wifi.ap.bw} ${wifi.ap.auth})`);
+      html += inforow("WiFi AP", `Ch: ${wifi.ap.channel} ${wifi.mode}`);
+      html += inforow("Signal", `${wifi.ap.signal}% (${wifi.ap.rssi} dBm)`);
+    }
+    if (wifi.ip) {
+      html += inforow("WiFi IP", wifi.ip);
+    }
+    html += inforow("WiFi MAC", wifi.mac);
+  }
+  if (i.network.ethernet) {
+    const eth = i.network.ethernet;
+    if (eth.ip) {
+      html += inforow("Ethernet IP", eth.ip);
+    }
+    html += inforow("Ethernet MAC", eth.mac);
+  }
+  if (i.network.default_route) {
+    html += inforow("Priority", i.network.default_route);
+  }
+  return html;
+})()}
 ${inforow("Uptime",getRuntimeStr(i.uptime))}
 <!-- WLEDMM begin--> 
 <tr><td colspan=2><hr style="height:2px;border-width:0;color:SeaGreen;background-color:SeaGreen"></td></tr>
-${inforow("Filesystem",i.fs.u + "/" + i.fs.t + " kB, " +Math.round(i.fs.u*100/i.fs.t) + "%")}
-${theap>0?inforow("Heap ☾",((i.totalheap-i.freeheap)/1000).toFixed(0)+"/"+theap.toFixed(0)+" kB",", "+Math.round((i.totalheap-i.freeheap)/(10*theap))+"%"):inforow("Free heap",heap," kB")}  <!--WLEDMM different for 8266-->
-${i.minfreeheap?inforow("Max used heap ☾",((i.totalheap-i.minfreeheap)/1000).toFixed(0)+" kB",", "+Math.round((i.totalheap-i.minfreeheap)/(10*theap))+"%"):""} 
-${i.psram?inforow("PSRAM ☾",((i.tpram-i.psram)/1024).toFixed(0)+"/"+(i.tpram/1024).toFixed(0)+" kB",", "+((i.tpram-i.psram)*100.0/i.tpram).toFixed(1)+"%"):""} 
-${i.psusedram?inforow("Max used PSRAM ☾",((i.tpram-i.psusedram)/1024).toFixed(0)+" kB",", "+((i.tpram-i.psusedram)*100.0/i.tpram).toFixed(1)+"%"):""} 
-${i.freestack?inforow("Free stack ☾",(i.freestack/1000).toFixed(3)," kB"):""} <!--WLEDMM-->
+${inforow("Filesystem", i.fs.u + "/" + i.fs.t + " KB, " + Math.round(i.fs.u * 100 / i.fs.t) + "%")}
+${(() => {
+  // This means the drive is present and the cache was idle, so we can show stats.
+  if (i.usb) {
+    const formatBytes = (bytes) => {
+      if (bytes >= 1000000000) { return (bytes / 1000000000).toFixed(2) + " GB"; }
+      if (bytes >= 1000000) { return (bytes / 1000000).toFixed(1) + " MB"; }
+      return Math.round(bytes / 1000) + " kB";
+    };
+    const usageStr = `${formatBytes(i.usb.u)} / ${formatBytes(i.usb.t)}`;
+    const percent = i.usb.t > 0 ? Math.round(i.usb.u * 100 / i.usb.t) : 0;
+    return inforow("USB Storage", `${usageStr}, ${percent}%`);
+  } else if (i.cache && i.cache.s !== 'Idle' && i.cache.f && i.cache.f.startsWith('/usb0')) {
+    return inforow("USB Storage", "Preloading");
+  } else {
+    return "";
+  }
+})()}
+${i.cache ? inforow("ImageCache", i.cache.s) : ""}
+${i.cache && i.cache.f ? inforow("ImageCache Dir", i.cache.f.substring(0, i.cache.f.lastIndexOf('/'))) : ""}
+${i.cache && i.cache.p > 0 ? inforow("ImageCache Size", i.cache.p + " KB") : ""}
+${theap>0?inforow("Heap ☾",((i.totalheap-i.freeheap)/1024).toFixed(0)+"/"+theap.toFixed(0)+" KB",", "+Math.round((i.totalheap-i.freeheap)/(10*theap))+"%"):inforow("Free heap",heap," KB")}  <!--WLEDMM different for 8266-->
+${i.minfreeheap?inforow("Max used heap ☾",((i.totalheap-i.minfreeheap)/1024).toFixed(0)+" KB",", "+Math.round((i.totalheap-i.minfreeheap)/(10*theap))+"%"):""} 
+${i.psram?inforow("PSRAM ☾",((i.tpram-i.psram)/1024).toFixed(0)+"/"+(i.tpram/1024).toFixed(0)+" KB",", "+((i.tpram-i.psram)*100.0/i.tpram).toFixed(1)+"%"):""} 
+${i.psusedram?inforow("Max used PSRAM ☾",((i.tpram-i.psusedram)/1024).toFixed(0)+" KB",", "+((i.tpram-i.psusedram)*100.0/i.tpram).toFixed(1)+"%"):""} 
+${i.freestack?inforow("Free stack ☾",(i.freestack/1024).toFixed(3)," KB"):""} <!--WLEDMM-->
 <tr><td colspan=2><hr style="height:1px;border-width:0;color:SeaGreen;background-color:SeaGreen"></td></tr>
 ${i.tpram?inforow("PSRAM " + (i.psrmode?"("+i.psrmode+" mode) ":"") + " ☾",(i.tpram/1024/1024).toFixed(0)," MB"):inforow("NO PSRAM found.", "")}
 ${i.e32flash?inforow("Flash mode "+i.e32flashmode+i.e32flashtext + " ☾",i.e32flash+" MB, "+i.e32flashspeed," Mhz"):""}
@@ -889,7 +934,7 @@ function populateSegments(s)
 		if (parseInt(gId("seg0bri").value)==255) gId(`segp0`).classList.add("hide");
 	}
 	if (!isM && !noNewSegs && (cfg.comp.seglen?parseInt(gId(`seg${lSeg}s`).value):0)+parseInt(gId(`seg${lSeg}e`).value)<ledCount) gId(`segr${lSeg}`).classList.remove("hide");
-	gId('segutil2').style.display = (segCount > 1) ? "block":"none"; // rsbtn parent
+	gId('segutil2').style.display = "block"; // (segCount > 1) ? "block":"none"; // rsbtn parent // WLED-MM P4 Always show segment reset for production reasons. 
 
 	if (Array.isArray(li.maps) && li.maps.length>0) { //WLEDMM >0 instead of 1 to show also first ledmap. Attention: WLED AC has isM check, in MM Matrices are supported so do not check on isM
 		let cont = `Ledmap:&nbsp;<select class="sel-sg" onchange="requestJson({'ledmap':parseInt(this.value)})">`; //WLEDMM remove <option value="" selected>Unchanged</option>

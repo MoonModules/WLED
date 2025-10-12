@@ -47,6 +47,7 @@ enum struct PinOwner : uint8_t {
   DMX_INPUT     = 0x8D,   // 'DMX_INPUT' == DMX input via serial
   HUB75         = 0x8E,   // 'Hub75' == Hub75 driver 
   WiFi          = 0x8F,   // 'ESP-HOSTED == Pins for ESP32-C6 submodule for wifi on the ESP32-P4
+  Parallel_IO   = 0x90,   // Parallel IO
   // Use UserMod IDs from const.h here
   UM_Unspecified       = USERMOD_ID_UNSPECIFIED,        // 0x01
   UM_Example           = USERMOD_ID_EXAMPLE,            // 0x02 // Usermod "usermod_v2_example.h"
@@ -117,6 +118,7 @@ class PinManagerClass {
   // using more than one pin, such as I2C, SPI, rotary encoders,
   // ethernet, etc..
   bool allocateMultiplePins(const managed_pin_type * mptArray, byte arrayElementCount, PinOwner tag );
+  bool isHWPin(byte gpio);
 
   #if !defined(ESP8266) // ESP8266 compiler doesn't understand deprecated attribute
   [[deprecated("Replaced by three-parameter allocatePin(gpio, output, ownerTag), for improved debugging")]]
@@ -126,7 +128,7 @@ class PinManagerClass {
   [[deprecated("Replaced by two-parameter deallocatePin(gpio, ownerTag), for improved debugging")]]
   #endif
   inline void deallocatePin(byte gpio) { deallocatePin(gpio, PinOwner::None); }
-
+  
   // WLEDMM: central initialization of Wire  (Wire1 not supported yet)
   bool joinWire();                                          // shortcut - use global pins when no parameters provided
   bool joinWire(int8_t pinSDA, int8_t pinSCL);              // use this instead of Wire.begin(SDA, SCL)
@@ -138,6 +140,7 @@ class PinManagerClass {
   bool isPinOk(byte gpio, bool output = true) const;
 
   PinOwner getPinOwner(byte gpio) const;
+  int getPinsByOwnerFixed(PinOwner targetOwner, int* outPins, int maxPins, bool is_output) const;
 
   // WLEDMM begin
   String getOwnerText(PinOwner tag); // WLEDMM  - return PIN owner tag as text

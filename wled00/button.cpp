@@ -231,7 +231,7 @@ void handleButton()
   static unsigned long lastRun = 0UL;
   unsigned long now = millis();
 
-  if (strip.isUpdating() && (now - lastRun < ANALOG_BTN_READ_CYCLE+1)) return; // don't interfere with strip update (unless strip is updating continuously, e.g. very long strips)
+  // if (strip.isUpdating() && (now - lastRun < ANALOG_BTN_READ_CYCLE+1)) return; // don't interfere with strip update (unless strip is updating continuously, e.g. very long strips)
   lastRun = now;
 
   for (uint8_t b=0; b<WLED_MAX_BUTTONS; b++) {
@@ -376,20 +376,11 @@ void handleIO()
   } else if (millis() - lastOnTime > 600)
   {
     if (!offMode) {
-      #ifdef ESP8266
-      // turn off built-in LED if strip is turned off
-      // this will break digital bus so will need to be re-initialised on On
-      PinOwner ledPinOwner = pinManager.getPinOwner(LED_BUILTIN);
-      if (!strip.isOffRefreshRequired() && (ledPinOwner == PinOwner::None || ledPinOwner == PinOwner::BusDigital)) {
-        pinMode(LED_BUILTIN, OUTPUT);
-        digitalWrite(LED_BUILTIN, HIGH);
-      }
-      #endif
       #ifdef ESP32_DATA_IDLE_HIGH
       esp32RMTInvertIdle();
       #endif
       if (rlyPin>=0) {
-        if (strip.isUpdating()) delay(FRAMETIME_FIXED); // WLEDMM avoids randomly colored pixles at power-on
+        // if (strip.isUpdating()) delay(FRAMETIME_FIXED); // WLEDMM avoids randomly colored pixles at power-on
         pinMode(rlyPin, OUTPUT);
         digitalWrite(rlyPin, !rlyMde);
       }

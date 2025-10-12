@@ -10,8 +10,8 @@ static volatile unsigned long wsLastLiveTime = 0;   // WLEDMM
 //uint8_t* wsFrameBuffer = nullptr;
 
 #if !defined(ARDUINO_ARCH_ESP32) || defined(WLEDMM_FASTPATH)   // WLEDMM
-#define WS_LIVE_INTERVAL_MAX 120
-#define WS_LIVE_INTERVAL_MIN 25
+#define WS_LIVE_INTERVAL_MAX 30
+#define WS_LIVE_INTERVAL_MIN 10
 #else
 #define WS_LIVE_INTERVAL_MAX 80
 #define WS_LIVE_INTERVAL_MIN 40
@@ -181,107 +181,122 @@ static uint32_t restoreColorLossy(uint32_t c, uint_fast8_t _restaurationBri) {
   return c;
 }
 
-static bool sendLiveLedsWs(uint32_t wsClient)  // WLEDMM added "static"
-{
-  AsyncWebSocketClient * wsc = ws.client(wsClient);
-  if (!wsc || wsc->queueLength() > 0) return false; //only send if queue free
+// --- Constants for clarity and easy modification ---
+namespace LiveLedsWS {
+  constexpr uint32_t MEMORY_BACKOFF_MS = 6000;
+  constexpr size_t   MAX_PREVIEW_LEDS = 4096;
+  constexpr uint8_t  MESSAGE_ID = 'L';
+  constexpr uint8_t  VERSION_1D = 1;
+  constexpr uint8_t  VERSION_2D = 2;
+  constexpr size_t   HEADER_SIZE_1D = 2;
+  constexpr size_t   HEADER_SIZE_2D = 4;
+}
 
-  #ifdef ARDUINO_ARCH_ESP32
-  static unsigned long ws_delay = 0;
-  if ((ws_delay > 0) && (millis() - ws_delay < 6000)) return false; // out of memory -> suspend for 6 seconds 
-  else ws_delay = 0;
-  #endif
-
-  #ifdef ESP8266
-    constexpr size_t MAX_LIVE_LEDS_WS = 256U;
-  #else
-    constexpr size_t MAX_LIVE_LEDS_WS = 4096U;  //WLEDMM use 4096 as max matrix size
-  #endif
-  size_t used;// = strip.getLengthTotal();
-  size_t n;// = ((used -1)/MAX_LIVE_LEDS_WS) +1; //only serve every n'th LED if count over MAX_LIVE_LEDS_WS
-  //WLEDMM skipping lines done right 
-  #ifndef WLED_DISABLE_2D
-    if (strip.isMatrix) {
-      used = Segment::maxWidth * Segment::maxHeight;
-      if (used > MAX_LIVE_LEDS_WS*4)
-        // WLEDMM/TroyHacks: Pick the best scaling factor for uneven matrix sizes. 
-        // Optimized for preview accuracy but may increase preview resolution leading to some performance loss. 
-        // Best practice is to not live preview if you need maximum real-time performance.
-        n = Segment::maxWidth % 4 == 0 ? 4 : (Segment::maxWidth % 3 == 0 ? 3 : (Segment::maxWidth % 2 == 0 ? 2 : 1));
-      else if (used > MAX_LIVE_LEDS_WS)
-        n = Segment::maxWidth % 2 == 0 ? 2 : 1;
-      else
-        n = 1;
-    } else {
-      used = strip.getLengthTotal();
-      n = ((used -1)/MAX_LIVE_LEDS_WS) +1; //only serve every n'th LED if count over MAX_LIVE_LEDS_WS
+// --- Helper function to calculate the pixel sampling rate ---
+static size_t calculateSamplingFactor() {
+#ifndef WLED_DISABLE_2D
+  if (strip.isMatrix) {
+    const size_t totalMatrixLeds = Segment::maxWidth * Segment::maxHeight;
+    if (totalMatrixLeds > LiveLedsWS::MAX_PREVIEW_LEDS * 4) {
+      // Pick a scaling factor that aligns well with the matrix width for a better preview
+      if (Segment::maxWidth % 4 == 0) return 4;
+      if (Segment::maxWidth % 3 == 0) return 3;
+      if (Segment::maxWidth % 2 == 0) return 2;
+    } else if (totalMatrixLeds > LiveLedsWS::MAX_PREVIEW_LEDS) {
+      if (Segment::maxWidth % 2 == 0) return 2;
     }
-  #else
-    used = strip.getLengthTotal();
-    n = ((used -1)/MAX_LIVE_LEDS_WS) +1; //only serve every n'th LED if count over MAX_LIVE_LEDS_WS
+    return 1; // No sampling needed
+  }
+#endif
+  // Logic for 1D strips
+  const size_t totalLeds = strip.getLengthTotal();
+  return (totalLeds > 0) ? ((totalLeds - 1) / LiveLedsWS::MAX_PREVIEW_LEDS) + 1 : 1;
+}
+
+// --- Helper function to populate the pixel data into the buffer ---
+static void populatePixelData(uint8_t* buffer, size_t bufferSize, size_t headerSize, size_t samplingFactor) {
+  size_t bufferIndex = headerSize;
+  const size_t totalLeds = strip.getLengthTotal();
+
+  for (size_t i = 0; i < totalLeds && bufferIndex < bufferSize - 2; i += samplingFactor) {
+  #ifndef WLED_DISABLE_2D
+    // For 2D matrices, skip entire rows to maintain aspect ratio
+    if (strip.isMatrix && samplingFactor > 1) {
+      if ((i / Segment::maxWidth) % samplingFactor != 0) {
+        i += Segment::maxWidth * (samplingFactor - 1); // Jump to the start of the next row to sample
+        if (i >= totalLeds) break;
+      }
+    }
   #endif
-  size_t pos = (strip.isMatrix ? 4 : 2);
-  size_t bufSize = pos + (used/n)*3;
-  
-  if ((bufSize < 1) || (used < 1)) return(false); // WLEDMM should not happen
+    uint32_t pixelColor = strip.getPixelColorRestored(i);
+    uint8_t w = W(pixelColor);
+
+    if (gammaCorrectPreview) {
+      if (w > 0) pixelColor = color_add(pixelColor, RGBW32(w, w, w, 0), false);
+      buffer[bufferIndex++] = unGamma8(R(pixelColor));
+      buffer[bufferIndex++] = unGamma8(G(pixelColor));
+      buffer[bufferIndex++] = unGamma8(B(pixelColor));
+    } else {
+      buffer[bufferIndex++] = qadd8(w, R(pixelColor));
+      buffer[bufferIndex++] = qadd8(w, G(pixelColor));
+      buffer[bufferIndex++] = qadd8(w, B(pixelColor));
+    }
+  }
+}
+
+// --- Main function, now much cleaner and acting as a controller ---
+static bool sendLiveLedsWs(uint32_t wsClient) {
+  AsyncWebSocketClient* wsc = ws.client(wsClient);
+  if (!wsc || wsc->queueLength() > 0) return false; // Client invalid or busy
+
+  // Check for memory backoff period
+  static unsigned long memory_backoff_ts = 0;
+  if (memory_backoff_ts > 0 && millis() - memory_backoff_ts < LiveLedsWS::MEMORY_BACKOFF_MS) {
+    return false;
+  }
+  memory_backoff_ts = 0;
+
+  const size_t totalLeds = strip.getLengthTotal();
+  if (totalLeds == 0) return false;
+
+  const size_t samplingFactor = calculateSamplingFactor();
+  const size_t ledsToSend = totalLeds / samplingFactor;
+
+  // Determine header size and version based on strip type
+  const bool isMatrix =
+  #ifndef WLED_DISABLE_2D
+    strip.isMatrix;
+#else
+    false;
+#endif
+  const size_t headerSize = isMatrix ? LiveLedsWS::HEADER_SIZE_2D : LiveLedsWS::HEADER_SIZE_1D;
+
+  // Allocate buffer
+  const size_t bufSize = headerSize + ledsToSend * 3;
   AsyncWebSocketBuffer wsBuf(bufSize);
   if (!wsBuf) {
-    static unsigned long last_err_time = 0;
-    if (millis() - last_err_time > 300) { // WLEDMM limit to 3 messages per second   
-      USER_PRINTF("WS buffer allocation failed (!wsBuf %u bytes).\n", bufSize);
-      last_err_time = millis();
-    }
-	  errorFlag = ERR_LOW_WS_MEM;
-    #ifdef ARDUINO_ARCH_ESP32
-      ws_delay = millis(); // suspend for next 6 seconds
-      USER_PRINTLN("out of memory - live preview suspended for 6 seconds.");
-    #endif
-	  return false; //out of memory
+    USER_PRINTF("WS buffer allocation failed (%u bytes).\n", bufSize);
+    errorFlag = ERR_LOW_WS_MEM;
+  #ifdef ARDUINO_ARCH_ESP32
+    memory_backoff_ts = millis(); // Suspend live preview
+  #endif
+    return false;
   }
+
   uint8_t* buffer = reinterpret_cast<uint8_t*>(wsBuf.data());
-  if (!buffer) {
-	  USER_PRINTLN(F("WS buffer allocation failed."));
-	  errorFlag = ERR_LOW_WS_MEM;
-	  return false; //out of memory
+
+  // Populate header
+  buffer[0] = LiveLedsWS::MESSAGE_ID;
+  if (isMatrix) {
+    buffer[1] = LiveLedsWS::VERSION_2D;
+    buffer[2] = MIN(Segment::maxWidth / samplingFactor, 255);
+    buffer[3] = MIN(Segment::maxHeight / samplingFactor, 255);
+  } else {
+    buffer[1] = LiveLedsWS::VERSION_1D;
   }
 
-  buffer[0] = 'L';
-  buffer[1] = 1; //version
-  #ifndef WLED_DISABLE_2D
-    if (strip.isMatrix) {
-      buffer[1] = 2; //version
-      //WLEDMM skipping lines done right 
-      buffer[2] = MIN(Segment::maxWidth/n, (uint16_t) 255); // WLEDMM prevent overflow on buffer type uint8_t
-      buffer[3] = MIN(Segment::maxHeight/n, (uint16_t) 255);
-    }
-  #endif
-
-  uint8_t stripBrightness = strip.getBrightness();
-  for (size_t i = 0; pos < bufSize -2; i += n)
-  {
-  //WLEDMM skipping lines done right 
-  #ifndef WLED_DISABLE_2D
-     if (strip.isMatrix && n > 1) {
-      if ((i/Segment::maxWidth)%(n)) i += Segment::maxWidth * (n-1);
-    }
-  #endif
-    //uint32_t c = restoreColorLossy(strip.getPixelColor(i), stripBrightness); // WLEDMM full bright preview - does _not_ recover ABL reductions
-    uint32_t c = strip.getPixelColorRestored(i);
-    // WLEDMM begin: preview with color gamma correction
-    if (gammaCorrectPreview) {
-      uint8_t w = W(c);  // not sure why, but it looks better if using "white" without corrections
-      if (w>0) c = color_add(c, RGBW32(w, w, w, 0), false); // add white channel to RGB channels - color_add() will prevent over-saturation
-      buffer[pos++] = unGamma8(R(c)); //R
-      buffer[pos++] = unGamma8(G(c)); //G
-      buffer[pos++] = unGamma8(B(c)); //B
-    } else {
-    // WLEDMM end
-      uint8_t w = W(c);  // WLEDMM small optimization
-      buffer[pos++] = qadd8(w, R(c)); //R, add white channel to RGB channels as a simple RGBW -> RGB map
-      buffer[pos++] = qadd8(w, G(c)); //G
-      buffer[pos++] = qadd8(w, B(c)); //B
-    }
-  }
+  // Populate pixel data
+  populatePixelData(buffer, bufSize, headerSize, samplingFactor);
 
   wsc->binary(std::move(wsBuf));
   return true;
@@ -291,11 +306,7 @@ void handleWs()
 {
   if ((millis() - wsLastLiveTime) > (unsigned long)(max(WS_LIVE_INTERVAL_MIN, min((strip.getLengthTotal()/80), WS_LIVE_INTERVAL_MAX)))) //WLEDMM dynamic nr of peek frames per second
   {
-    #ifdef ESP8266
-    ws.cleanupClients(3);
-    #else
     ws.cleanupClients();
-    #endif
     bool success = true;
     if (wsLiveClientId) success = sendLiveLedsWs(wsLiveClientId);
     wsLastLiveTime = millis();

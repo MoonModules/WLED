@@ -58,11 +58,6 @@
 #ifndef WLED_DISABLE_MQTT
   #define WLED_ENABLE_MQTT         // saves 12kb
 #endif
-#ifndef WLED_DISABLE_ADALIGHT      // can be used to disable reading commands from serial RX pin (see issue #3128). 
-  #define WLED_ENABLE_ADALIGHT     // disable saves 5Kb (uses GPIO3 (RX) for serial). Related serial protocols: Adalight/TPM2, Improv, Serial JSON, Continuous Serial Streaming 
-#else
-  #undef WLED_ENABLE_ADALIGHT      // disable has priority over enable
-#endif
 //#define WLED_ENABLE_DMX          // uses 3.5kb (use LEDPIN other than 2)
 //#define WLED_ENABLE_DMX_INPUT      // Listen for DMX over Serial
 //#define WLED_ENABLE_JSONLIVE     // peek LED output via /json/live (WS binary peek is always enabled)
@@ -94,7 +89,7 @@
 //#define WLED_DISABLE_BROWNOUT_DET
 
 // WLEDMM MANDATORY flags
-#define WLEDMM_PROTECT_SERVICE // prevents crashes when effects are drawing while asyncWebServer tries to modify segments at the same time
+#undef WLEDMM_PROTECT_SERVICE // prevents crashes when effects are drawing while asyncWebServer tries to modify segments at the same time
 
 // Library inclusions.
 #include <Arduino.h>
@@ -113,20 +108,25 @@
 #else // ESP32
   #include <HardwareSerial.h>  // ensure we have the correct "Serial" on new MCUs (depends on ARDUINO_USB_MODE and ARDUINO_USB_CDC_ON_BOOT)
   #if defined(ESP_IDF_VERSION) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    #if defined(WLED_USE_ETHERNET_ONLY) && !defined(WLED_USE_ETHERNET)
+      #define WLED_USE_ETHERNET
+    #endif
     #ifdef WLED_USE_ETHERNET
       #include <esp_eth.h>
+    #endif
+    #ifdef CONFIG_IDF_TARGET_ESP32P4
+      #include <esp_hosted.h>
     #else
-      #ifdef CONFIG_IDF_TARGET_ESP32P4
-        #include <esp_hosted_api.h>
-      #endif
       #include <esp_wifi.h>
     #endif
-    #define I2S_SDPIN 11
-    #define I2S_WSPIN 10
-    #define I2S_CKPIN 12
-    #define MCLK_PIN  13
-    #define HW_PIN_SDA 7
-    #define HW_PIN_SCL 8
+    #ifdef CONFIG_IDF_TARGET_ESP32P4
+      #define I2S_SDPIN 11
+      #define I2S_WSPIN 10
+      #define I2S_CKPIN 12
+      #define MCLK_PIN  13
+      #define HW_PIN_SDA 7
+      #define HW_PIN_SCL 8
+    #endif
   #else
     #include "WiFi.h"
   #endif
@@ -152,7 +152,7 @@
 
 #include "src/dependencies/network/Network.h"
 #if defined(ESP_IDF_VERSION) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-#define Network WL_Network
+  #define Network WL_Network
 #endif
 
 #ifdef WLED_USE_MY_CONFIG
@@ -209,27 +209,37 @@
 // The following is a construct to enable code to compile without it.
 // There is a code that will still not use PSRAM though:
 //    AsyncJsonResponse is a derived class that implements DynamicJsonDocument (AsyncJson-v6.h)
-#if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && (defined(WLED_USE_PSRAM) || defined(WLED_USE_PSRAM_JSON))         // WLEDMM
+#if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && (defined(WLED_USE_PSRAM) || defined(WLED_USE_PSRAM_JSON)) && 0 // TroyHacks: P4 FIXME: JSON in PSRAM is borked for some reason on v5.5
 // WLEDMM the JSON_TO_PSRAM feature works, so use it by default
 #undef  WLED_USE_PSRAM_JSON
 #define WLED_USE_PSRAM_JSON
 #undef  ALL_JSON_TO_PSRAM
 #define ALL_JSON_TO_PSRAM
 
+template <typename T>
 struct PSRAM_Allocator {
-  void* allocate(size_t size) {
-    if (psramFound()) return ps_malloc(size); // use PSRAM if it exists
-    else              return malloc(size);    // fallback
+  using value_type = T;
+
+  PSRAM_Allocator() = default;
+
+  template <typename U>
+  PSRAM_Allocator(const PSRAM_Allocator<U>&) { }
+
+  T* allocate(std::size_t n) {
+    return static_cast<T*>(heap_caps_malloc_prefer(n * sizeof(T), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_INTERNAL));
   }
-  void* reallocate(void* ptr, size_t new_size) {
-    if (psramFound()) return ps_realloc(ptr, new_size); // use PSRAM if it exists
-    else              return realloc(ptr, new_size);    // fallback
+
+  void deallocate(T* p, std::size_t) {
+    heap_caps_free(p);
   }
-  void deallocate(void* pointer) {
-    free(pointer);
-  }
+
+  bool operator==(const PSRAM_Allocator&) const { return true; }
+  bool operator!=(const PSRAM_Allocator&) const { return false; }
 };
-using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
+
+
+using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator<char>>;
+
 //#define DynamicJsonDocument PSRAMDynamicJsonDocument  // WLEDMM experiment
 #else
 #define PSRAMDynamicJsonDocument DynamicJsonDocument
@@ -321,10 +331,28 @@ using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
   #define WLED_RELEASE_NAME mdev_release
 #endif
 
+#ifdef CONFIG_SOC_PPA_SUPPORTED
+#include "esp_heap_caps.h"
+#include "driver/ppa.h"
+#include "driver/jpeg_decode.h"
+#include "esp_h264_dec_sw.h"
+#include "ImageCacheManager.h"
+WLED_GLOBAL ppa_client_handle_t ppa_blend_handle _INIT(NULL);
+WLED_GLOBAL ppa_client_config_t ppa_blend_config _INIT_N(({ .oper_type = PPA_OPERATION_BLEND, .max_pending_trans_num = 1, .data_burst_length = PPA_DATA_BURST_LENGTH_128 }));
+WLED_GLOBAL ppa_client_handle_t ppa_fill_handle _INIT(NULL);
+WLED_GLOBAL ppa_client_config_t ppa_fill_config _INIT_N((({ .oper_type = PPA_OPERATION_FILL, .max_pending_trans_num = 1, .data_burst_length = PPA_DATA_BURST_LENGTH_128 })));
+WLED_GLOBAL ppa_client_handle_t ppa_srm_handle _INIT(NULL);
+WLED_GLOBAL ppa_client_config_t ppa_srm_config _INIT_N((({ .oper_type = PPA_OPERATION_SRM, .max_pending_trans_num = 1, .data_burst_length = PPA_DATA_BURST_LENGTH_128 })));
+WLED_GLOBAL jpeg_decoder_handle_t jpgd_handle _INIT(NULL);
+WLED_GLOBAL jpeg_decode_engine_cfg_t decode_eng_cfg _INIT_N((({ .timeout_ms = 40, })));
+#endif
+
 // Global Variable definitions
 WLED_GLOBAL char versionString[] _INIT(TOSTRING(WLED_VERSION));
 WLED_GLOBAL char releaseString[] _INIT_PROGMEM(TOSTRING(WLED_RELEASE_NAME)); //WLEDMM: to show on update page // somehow this will not work if using "const char releaseString[]
 #define WLED_CODENAME "Hoshi"
+
+WLED_GLOBAL SemaphoreHandle_t busMutex _INIT(xSemaphoreCreateMutex());
 
 // AP and OTA default passwords (for maximum security change them!)
 WLED_GLOBAL char apPass[65]  _INIT(WLED_AP_PASS);
@@ -392,6 +420,10 @@ WLED_GLOBAL bool force802_3g _INIT(false);
     WLED_GLOBAL int ethernetType _INIT(WLED_ETH_NONE);             // use none for ethernet board type if default not defined
   #endif
 #endif
+WLED_GLOBAL esp_eth_handle_t eth_handle;
+WLED_GLOBAL bool eth_is_connected _INIT(false);
+WLED_GLOBAL bool wifi_is_connected _INIT(false);
+
 // LED CONFIG
 WLED_GLOBAL bool turnOnAtBoot _INIT(true);                // turn on LEDs at power-up
 WLED_GLOBAL byte bootPreset   _INIT(0);                   // save preset to load after power-up
@@ -422,6 +454,12 @@ WLED_GLOBAL bool fadeTransition      _INIT(true);   // enable crossfading color 
 WLED_GLOBAL uint16_t transitionDelay _INIT(750);    // default crossfade duration in ms
 
 WLED_GLOBAL uint_fast16_t briMultiplier _INIT(100);          // % of brightness to set (to limit power, if you set it to 50 and set bri to 255, actual brightness will be 127)
+
+WLED_GLOBAL bool TROYHACKS_HPF   _INIT(true); // WLED-MM/TroyHacks: Turn HPF from ESP-DSP on/off
+WLED_GLOBAL bool TROYHACKS_LPF   _INIT(true); // WLED-MM/TroyHacks: Turn LPF from ESP-DSP on/off
+WLED_GLOBAL bool TROYHACKS_NOTCH _INIT(true); // WLED-MM/TroyHacks: Turn other filter from ESP-DSP on/off
+WLED_GLOBAL bool TROYHACKS_PINKY _INIT(false); // WLED-MM/TroyHacks: Internally calibrate audio against white noise
+WLED_GLOBAL float fftBinAverage[16] _INIT_N(({ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }));
 
 // User Interface CONFIG
 #ifndef SERVERNAME
@@ -795,9 +833,9 @@ WLED_GLOBAL volatile uint8_t loadedLedmap _INIT(0);         // WLEDMM default 0
 WLED_GLOBAL volatile bool suspendStripService _INIT(false); // WLEDMM temporarily prevent running strip.service, when strip or segments are "under update" and inconsistent
 WLED_GLOBAL volatile bool OTAisRunning _INIT(false);        // WLEDMM temporarily stop led updates during OTA
 #ifndef ESP8266
-WLED_GLOBAL char  *ledmapNames[WLED_MAX_LEDMAPS-1] _INIT_N(({nullptr}));
+WLED_GLOBAL char *ledmapNames[WLED_MAX_LEDMAPS-1] _INIT_N(({nullptr}));
 #endif
-WLED_GLOBAL size_t  ledmapMaxSize _INIT(0); //WLEDMM TroyHack
+WLED_GLOBAL uint32_t ledmapMaxSize _INIT(0); //WLEDMM TroyHacks
 #if WLED_MAX_LEDMAPS>16
 WLED_GLOBAL uint32_t ledMaps _INIT(0); // bitfield representation of available ledmaps
 #else
@@ -901,6 +939,20 @@ WLED_GLOBAL volatile uint8_t jsonBufferLock _INIT(0);
 #define USER_FLUSH()       DEBUGOUTFlush()
 // WLEDMM end
 
+#ifdef WLED_DISABLE_LOGGING
+  // First, undefine the existing macros to avoid redefinition warnings
+#undef USER_PRINT
+#undef USER_PRINTLN
+#undef USER_PRINTF
+#undef USER_FLUSH
+
+// Now, redefine them as completely empty
+#define USER_PRINT(x)
+#define USER_PRINTLN(x)
+#define USER_PRINTF(x...)
+#define USER_FLUSH()
+#endif
+
 #ifdef WLED_DEBUG_FS
   #define DEBUGFS_PRINT(x) DEBUGOUT(x)
   #define DEBUGFS_PRINTLN(x) DEBUGOUTLN(x)
@@ -919,15 +971,8 @@ WLED_GLOBAL volatile uint8_t jsonBufferLock _INIT(0);
   WLED_GLOBAL unsigned long loops _INIT(0);
 #endif
 
-// #ifdef ARDUINO_ARCH_ESP32
-//   #define WLED_CONNECTED (WiFi.status() == WL_CONNECTED || ETH.localIP()[0] != 0)
-// #else
-//   #define WLED_CONNECTED (WiFi.status() == WL_CONNECTED)
-// #endif
-// #define WLED_WIFI_CONFIGURED (strlen(clientSSID) >= 1 && strcmp(clientSSID, DEFAULT_CLIENT_SSID) != 0)
-#ifdef ARDUINO_ARCH_ESP32P4
-  #define WLED_CONNECTED (ETH.localIP()[0] != 0)
-#endif
+#define WLED_CONNECTED (Network.isConnected())
+#define WLED_WIFI_CONFIGURED (strlen(clientSSID) >= 1 && strcmp(clientSSID, DEFAULT_CLIENT_SSID) != 0)
 
 #ifndef WLED_AP_SSID_UNIQUE
   #define WLED_SET_AP_SSID() do { \
@@ -969,15 +1014,15 @@ public:
   void setup() __attribute__((used));
 
   void loop()  __attribute__((used));
-  void reset();
+  static void reset();
 
   void beginStrip();
-  void handleConnection();
-  bool initEthernet(); // result is informational
-  void initAP(bool resetAP = false);
-  void initConnection();
-  void initInterfaces();
-  void handleStatusLED();
+  static void handleConnection();
+  static bool initEthernet(); // result is informational
+  static void initAP(bool resetAP = false);
+  static void initConnection();
+  static void initInterfaces();
+  static void handleStatusLED();
   void enableWatchdog();
   void disableWatchdog();
 };

@@ -254,7 +254,7 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply=tru
 
 //udp.cpp
 void notify(byte callMode, bool followUp=false);
-uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint32_t length, uint8_t *buffer, uint8_t bri=255, bool isRGBW=false, uint8_t artnet_outouts=1, uint16_t artnet_leds_per_output=1, uint8_t artnet_fps_limit=1);
+uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint32_t length, uint8_t *buffer, uint8_t bri=255, bool isRGBW=false, uint8_t outouts=1, uint16_t leds_per_output=1, uint8_t fps_limit=1, uint8_t color_order=0);
 void realtimeLock(uint32_t timeoutMs, byte md = REALTIME_MODE_GENERIC);
 void exitRealtime();
 void handleNotifications();
@@ -262,9 +262,12 @@ void setRealtimePixel(uint16_t i, byte r, byte g, byte b, byte w);
 void refreshNodeList();
 void sendSysInfoUDP();
 
+// parlio.cpp
+uint8_t show_parlio(uint8_t* parallelPins, uint32_t length, uint8_t* buffer_in, uint8_t bri, bool isRGBW, uint8_t outputs, uint16_t leds_per_output, uint8_t color_order);
+
 //network.cpp
 int getSignalQuality(int rssi) __attribute__((const));
-#ifndef ARDUINO_ARCH_ESP32P4
+#ifndef CONFIG_IDF_TARGET_ESP32P4
 void WiFiEvent(WiFiEvent_t event);
 #endif
 
@@ -468,6 +471,7 @@ float tan_approx(float x);
 void handleSerial();
 void updateBaudRate(uint32_t rate);
 bool canUseSerial(void);   // WLEDMM returns true if Serial can be used for debug output (i.e. not configured for other purpose)
+void serial_drain();
 
 //wled_server.cpp
 bool isIp(String str);

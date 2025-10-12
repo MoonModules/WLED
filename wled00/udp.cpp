@@ -160,10 +160,10 @@ void realtimeLock(uint32_t timeoutMs, byte md)
     if (useMainSegmentOnly) { USER_PRINTLN(F(", main segment only].")); } else { USER_PRINTLN(F("]."));}
     USER_FLUSH();
 
-    if (strip.isServicing()) {
-      USER_PRINTLN(F("realtimeLock() entering RTM: strip is still drawing effects."));
-      strip.waitUntilIdle();
-    }
+    // if (strip.isServicing()) {
+    //   USER_PRINTLN(F("realtimeLock() entering RTM: strip is still drawing effects."));
+    //   strip.waitUntilIdle();
+    // }
     strip.service(); // WLEDMM make sure that all segments are properly initialized
     busses.invalidateCache(true);
     // WLEDMM end
@@ -240,8 +240,8 @@ static uint8_t udpIn[UDP_IN_MAXSIZE+1];
 // WLEDMM end
 #endif
 
-void handleNotifications()
-{
+void handleNotifications() {
+
   IPAddress localIP;
 
   //send second notification if enabled
@@ -277,30 +277,19 @@ void handleNotifications()
 
   //hyperion / raw RGB
   if (!packetSize && udpRgbConnected) {
-#ifdef ARDUINO_ARCH_ESP32
     rgbUdp.flush();
-#endif
     packetSize = rgbUdp.parsePacket();
     if (packetSize) {
-#ifdef ARDUINO_ARCH_ESP32
       if (!receiveDirect) {rgbUdp.flush(); notifierUdp.flush(); notifier2Udp.flush(); return;}
       if (packetSize > UDP_IN_MAXSIZE || packetSize < 3) {rgbUdp.flush(); notifierUdp.flush(); notifier2Udp.flush(); return;}
-#else
-      if (!receiveDirect) {return;}
-      if (packetSize > UDP_IN_MAXSIZE || packetSize < 3) {return;}
-#endif
       realtimeIP = rgbUdp.remoteIP();
       DEBUG_PRINTLN(rgbUdp.remoteIP());
       #ifndef ARDUINO_ARCH_ESP32
       uint8_t lbuf[packetSize+1]; // WLEDMM: use global buffer on ESP32
       #endif
       rgbUdp.read(lbuf, packetSize);
-      realtimeLock(realtimeTimeoutMs, REALTIME_MODE_HYPERION);
-#ifdef ARDUINO_ARCH_ESP32
+      realtimeLock(realtimeTimeoutMs, REALTIME_MODE_GENERIC);
       if (realtimeOverride && !(realtimeMode && useMainSegmentOnly)) {notifierUdp.flush(); notifier2Udp.flush(); return;}
-#else
-      if (realtimeOverride && !(realtimeMode && useMainSegmentOnly)) {return;}
-#endif
       uint16_t id = 0;
       uint16_t totalLen = strip.getLengthTotal();
       for (int i = 0; i < packetSize -2; i += 3)
@@ -313,25 +302,14 @@ void handleNotifications()
     }
   }
 
-#ifdef ARDUINO_ARCH_ESP32
   if (!(receiveNotifications || receiveDirect)) {notifierUdp.flush(); notifier2Udp.flush(); return;}
-#else
-  if (!(receiveNotifications || receiveDirect)) {return;}
-#endif
 
   localIP = Network.localIP();
   //notifier and UDP realtime
-#ifdef ARDUINO_ARCH_ESP32
+
   if (!packetSize || packetSize > UDP_IN_MAXSIZE) {notifierUdp.flush(); notifier2Udp.flush(); return;}
   if (!isSupp && notifierUdp.remoteIP() == localIP) {notifierUdp.flush(); notifier2Udp.flush(); return;} //don't process broadcasts we send ourselves
-#else
-  if (!packetSize || packetSize > UDP_IN_MAXSIZE) {return;}
-  if (!isSupp && notifierUdp.remoteIP() == localIP) {return;} //don't process broadcasts we send ourselves
-#endif
 
-  #ifndef ARDUINO_ARCH_ESP32
-  uint8_t udpIn[packetSize +1];  // WLEDMM: use global buffer on ESP32
-  #endif
   uint16_t len;
   if (isSupp) len = notifier2Udp.read(udpIn, packetSize);
   else        len =  notifierUdp.read(udpIn, packetSize);
@@ -368,8 +346,8 @@ void handleNotifications()
   }
 
   //wled notifier, ignore if realtime packets active
-  if (udpIn[0] == 0 && !realtimeMode && receiveNotifications)
-  {
+  if (udpIn[0] == 0 && !realtimeMode && receiveNotifications) {
+
     //ignore notification if received within a second after sending a notification ourselves
     if (millis() - notificationSentTime < 1000) return;
     if (udpIn[1] > 199) return; //do not receive custom versions
@@ -528,109 +506,6 @@ void handleNotifications()
 
   if (!receiveDirect) return;
 
-  //TPM2.NET
-  if (udpIn[0] == 0x9c)
-  {
-    //WARNING: this code assumes that the final TMP2.NET payload is evenly distributed if using multiple packets (ie. frame size is constant)
-    //if the number of LEDs in your installation doesn't allow that, please include padding bytes at the end of the last packet
-    byte tpmType = udpIn[1];
-    if (tpmType == 0xaa) { //TPM2.NET polling, expect answer
-      sendTPM2Ack(); return;
-    }
-    if (tpmType != 0xda) return; //return if notTPM2.NET data
-
-    realtimeIP = (isSupp) ? notifier2Udp.remoteIP() : notifierUdp.remoteIP();
-    realtimeLock(realtimeTimeoutMs, REALTIME_MODE_TPM2NET);
-    if (realtimeOverride && !(realtimeMode && useMainSegmentOnly)) return;
-
-    tpmPacketCount++; //increment the packet count
-    if (tpmPacketCount == 1) tpmPayloadFrameSize = (udpIn[2] << 8) + udpIn[3]; //save frame size for the whole payload if this is the first packet
-    byte packetNum = udpIn[4]; //starts with 1!
-    byte numPackets = udpIn[5];
-
-    uint16_t id = (tpmPayloadFrameSize/3)*(packetNum-1); //start LED
-    uint16_t totalLen = strip.getLengthTotal();
-    for (size_t i = 6; i < tpmPayloadFrameSize + 4U; i += 3)
-    {
-      if (id < totalLen)
-      {
-        setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], 0);
-        id++;
-      }
-      else break;
-    }
-    if (tpmPacketCount == numPackets) //reset packet count and show if all packets were received
-    {
-      tpmPacketCount = 0;
-      strip.show();
-    }
-    return;
-  }
-
-  //UDP realtime: 1 warls 2 drgb 3 drgbw
-  if (udpIn[0] > 0 && udpIn[0] < 5)
-  {
-    realtimeIP = (isSupp) ? notifier2Udp.remoteIP() : notifierUdp.remoteIP();
-    DEBUG_PRINTLN(realtimeIP);
-    if (packetSize < 2) return;
-
-    if (udpIn[1] == 0)
-    {
-      realtimeTimeout = 0;
-      return;
-    } else {
-      realtimeLock(udpIn[1]*1000 +1, REALTIME_MODE_UDP);
-    }
-    if (realtimeOverride && !(realtimeMode && useMainSegmentOnly)) return;
-
-    uint16_t totalLen = strip.getLengthTotal();
-    if (udpIn[0] == 1 && packetSize > 5) //warls
-    {
-      for (int i = 2; i < packetSize -3; i += 4)
-      {
-        setRealtimePixel(udpIn[i], udpIn[i+1], udpIn[i+2], udpIn[i+3], 0);
-      }
-    } else if (udpIn[0] == 2 && packetSize > 4) //drgb
-    {
-      uint16_t id = 0;
-      for (int i = 2; i < packetSize -2; i += 3)
-      {
-        setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], 0);
-
-        id++; if (id >= totalLen) break;
-      }
-    } else if (udpIn[0] == 3 && packetSize > 6) //drgbw
-    {
-      uint16_t id = 0;
-      for (int i = 2; i < packetSize -3; i += 4)
-      {
-        setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], udpIn[i+3]);
-
-        id++; if (id >= totalLen) break;
-      }
-    } else if (udpIn[0] == 4 && packetSize > 7) //dnrgb
-    {
-      uint16_t id = ((udpIn[3] << 0) & 0xFF) + ((udpIn[2] << 8) & 0xFF00);
-      for (int i = 4; i < packetSize -2; i += 3)
-      {
-        if (id >= totalLen) break;
-        setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], 0);
-        id++;
-      }
-    } else if (udpIn[0] == 5 && packetSize > 8) //dnrgbw
-    {
-      uint16_t id = ((udpIn[3] << 0) & 0xFF) + ((udpIn[2] << 8) & 0xFF00);
-      for (int i = 4; i < packetSize -2; i += 4)
-      {
-        if (id >= totalLen) break;
-        setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], udpIn[i+3]);
-        id++;
-      }
-    }
-    strip.show();
-    return;
-  }
-
   // API over UDP
   udpIn[packetSize] = '\0';
 
@@ -647,7 +522,6 @@ void handleNotifications()
     releaseJSONBufferLock();
   }
 }
-
 
 void setRealtimePixel(uint16_t i, byte r, byte g, byte b, byte w)
 {
@@ -783,53 +657,53 @@ void sendSysInfoUDP()
 static       size_t sequenceNumber = 0; // this needs to be shared across all outputs
 static const byte   ART_NET_HEADER[12] PROGMEM = {0x41,0x72,0x74,0x2d,0x4e,0x65,0x74,0x00,0x00,0x50,0x00,0x0e};
 
-#if defined(ARDUINO_ARCH_ESP32P4)
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
 extern "C" {
   int p4_mul16x16(uint8_t* outpacket, uint8_t* brightness, uint16_t num_loops, uint8_t* pixelbuffer);
 }
 #endif
 
-uint8_t IRAM_ATTR_YN realtimeBroadcast(uint8_t type, IPAddress client, uint32_t length, uint8_t *buffer_in, uint8_t bri, bool isRGBW, uint8_t outputs, uint16_t leds_per_output, uint8_t fps_limit)  {
+uint8_t IRAM_ATTR __attribute__((hot)) realtimeBroadcast(uint8_t type, IPAddress client, uint32_t length, uint8_t* buffer_in, uint8_t bri, bool isRGBW, uint8_t outputs, uint16_t leds_per_output, uint8_t fps_limit, uint8_t color_order) {
 
   if (!(apActive || interfacesInited) || !client[0] || !length) return 1;  // network not initialised or dummy/unset IP address  031522 ajn added check for ap
 
   // For some reason, this is faster outside of the case block...
   //
-  #ifdef ESP32
-  static byte *packet_buffer = (byte *) heap_caps_calloc_prefer(530, sizeof(byte), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_SPIRAM);
-  #else
-  static byte *packet_buffer = (byte *) calloc(530, sizeof(byte));
-  #endif
+#ifdef ESP32
+  static byte* packet_buffer = (byte*)heap_caps_calloc_prefer(530, sizeof(byte), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_SPIRAM);
+#else
+  static byte* packet_buffer = (byte*)calloc(530, sizeof(byte));
+#endif
   if (packet_buffer[0] != 0x41) memcpy(packet_buffer, ART_NET_HEADER, 12); // copy in the Art-Net header if it isn't there already
 
   switch (type) {
-    case 0: // DDP
-    {
-      WiFiUDP ddpUdp; 
+  case 0: // DDP
+  {
+    WiFiUDP ddpUdp;
 
-      // calculate the number of UDP packets we need to send
-      size_t channelCount = length * (isRGBW? 4:3); // 1 channel for every R,G,B value
-      size_t packetCount = ((channelCount-1) / DDP_CHANNELS_PER_PACKET) +1;
+    // calculate the number of UDP packets we need to send
+    size_t channelCount = length * (isRGBW ? 4 : 3); // 1 channel for every R,G,B value
+    size_t packetCount = ((channelCount - 1) / DDP_CHANNELS_PER_PACKET) + 1;
 
-      // there are 3 channels per RGB pixel
-      uint32_t channel = 0; // TODO: allow specifying the start channel
-      // the current position in the buffer
-      size_t bufferOffset = 0;
+    // there are 3 channels per RGB pixel
+    uint32_t channel = 0; // TODO: allow specifying the start channel
+    // the current position in the buffer
+    size_t bufferOffset = 0;
 
-      for (size_t currentPacket = 0; currentPacket < packetCount; currentPacket++) {
-        if (sequenceNumber > 15) sequenceNumber = 0;
+    for (size_t currentPacket = 0; currentPacket < packetCount; currentPacket++) {
+      if (sequenceNumber > 15) sequenceNumber = 0;
 
-        if (!ddpUdp.beginPacket(client, DDP_DEFAULT_PORT)) {  // port defined in ESPAsyncE131.h
-          DEBUG_PRINTLN(F("DDP WiFiUDP.beginPacket returned an error"));
-          return 1; // problem
-        }
+      if (!ddpUdp.beginPacket(client, DDP_DEFAULT_PORT)) {  // port defined in ESPAsyncE131.h
+        DEBUG_PRINTLN(F("DDP WiFiUDP.beginPacket returned an error"));
+        return 1; // problem
+      }
 
-        // the amount of data is AFTER the header in the current packet
-        size_t packetSize = DDP_CHANNELS_PER_PACKET;
+      // the amount of data is AFTER the header in the current packet
+      size_t packetSize = DDP_CHANNELS_PER_PACKET;
 
-        uint8_t flags = DDP_FLAGS1_VER1;
-        if (currentPacket == (packetCount - 1U)) {
-          // last packet, set the push flag
+      uint8_t flags = DDP_FLAGS1_VER1;
+      if (currentPacket == (packetCount - 1U)) {
+        // last packet, set the push flag
           // TODO: determine if we want to send an empty push packet to each destination after sending the pixel data
           flags = DDP_FLAGS1_VER1 | DDP_FLAGS1_PUSH;
           if (channelCount % DDP_CHANNELS_PER_PACKET) {
@@ -900,35 +774,16 @@ uint8_t IRAM_ATTR_YN realtimeBroadcast(uint8_t type, IPAddress client, uint32_t 
       #endif
       unsigned long timer = micros();
 
-      // Volumetric test code
-      #ifdef ESP32 // Older ESP boards should not attempt this.
-      uint8_t volume_depth = outputs*leds_per_output/length;
-      static byte* buffer = nullptr; // Declare static buffer
-      static size_t buffer_size = 0; // Track the buffer size
-
-      if (volume_depth > 1) { // always assume to buffer output
-        size_t new_size = (length * (isRGBW ? 4 : 3) * volume_depth);
-        if (buffer == nullptr || buffer_size < new_size) {
-          if (buffer != nullptr) {
-            heap_caps_free(buffer);
-          }
-          buffer = (byte *) heap_caps_calloc_prefer(new_size+15, sizeof(byte), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
-          buffer_size = new_size;
-        }
-        memmove(buffer + (length * 3), buffer, length * 3 * (volume_depth - 1));
-        memcpy(buffer, buffer_in, length * 3);
-        length *= volume_depth;
-      } else {
-        buffer = buffer_in;
-      }
-      #else
-      buffer = buffer_in;
-      #endif
-
       AsyncUDP artnetudp;// AsyncUDP so we can just blast packets.
 
       const uint_fast16_t ARTNET_CHANNELS_PER_PACKET = isRGBW?512:510; // 512/4=128 RGBW LEDs, 510/3=170 RGB LEDs
-      
+
+      #ifdef WLEDMM_REMAP_AT_OUTPUT
+      uint32_t* mappingTable = strip.getCustomMappingTable();
+      uint32_t mappingTableSize = strip.getCustomMappingTableSize();
+      uint8_t my_bytes_per_pixel = isRGBW ? 4 : 3;
+      #endif
+
       uint_fast32_t bufferOffset = 0;
       uint_fast16_t hardware_output_universe = 0;
       
@@ -973,8 +828,33 @@ uint8_t IRAM_ATTR_YN realtimeBroadcast(uint8_t type, IPAddress client, uint32_t 
           bri = 0; // Set all brightness to 0 but keep all calculations the same and keep sending packets.
           #endif
 
-          #if defined(ARDUINO_ARCH_ESP32P4)
-          p4_mul16x16(packet_buffer+18, &bri, (packetSize >> 4)+1, buffer+bufferOffset);
+          #ifdef WLEDMM_REMAP_AT_OUTPUT
+          uint16_t packetNumPixels = packetSize / my_bytes_per_pixel;
+          uint32_t startPixel = bufferOffset / my_bytes_per_pixel;
+          for (uint_fast16_t i = 0; i < packetNumPixels; ++i) {
+            uint32_t mappedIdx = mappingTable[startPixel + i];
+            uint32_t sourceOffset = mappedIdx * my_bytes_per_pixel;
+            uint32_t destOffset = 18 + (i * my_bytes_per_pixel);
+
+            uint8_t r = (bri == 255) ? gamma8(buffer_in[sourceOffset]) : (gamma8(buffer_in[sourceOffset]) * bri) >> 8;
+            uint8_t g = (bri == 255) ? gamma8(buffer_in[sourceOffset + 1]) : (gamma8(buffer_in[sourceOffset + 1]) * bri) >> 8;
+            uint8_t b = (bri == 255) ? gamma8(buffer_in[sourceOffset + 2]) : (gamma8(buffer_in[sourceOffset + 2]) * bri) >> 8;
+
+            switch (color_order) {
+            case COL_ORDER_GRB: packet_buffer[destOffset] = g; packet_buffer[destOffset + 1] = r; packet_buffer[destOffset + 2] = b; break;
+            case COL_ORDER_RGB: default: packet_buffer[destOffset] = r; packet_buffer[destOffset + 1] = g; packet_buffer[destOffset + 2] = b; break;
+            case COL_ORDER_BRG: packet_buffer[destOffset] = b; packet_buffer[destOffset + 1] = r; packet_buffer[destOffset + 2] = g; break;
+            case COL_ORDER_RBG: packet_buffer[destOffset] = r; packet_buffer[destOffset + 1] = b; packet_buffer[destOffset + 2] = g; break;
+            case COL_ORDER_BGR: packet_buffer[destOffset] = b; packet_buffer[destOffset + 1] = g; packet_buffer[destOffset + 2] = r; break;
+            case COL_ORDER_GBR: packet_buffer[destOffset] = g; packet_buffer[destOffset + 1] = b; packet_buffer[destOffset + 2] = r; break;
+            }
+            if (isRGBW) {
+              packet_buffer[destOffset + 3] = (bri == 255) ? gamma8(buffer_in[sourceOffset + 3]) : (gamma8(buffer_in[sourceOffset + 3]) * bri) >> 8;
+            }
+          }
+          #else
+          #if defined(CONFIG_IDF_TARGET_ESP32P4)
+          p4_mul16x16(packet_buffer + 18, &bri, (packetSize >> 4) + 1, buffer + bufferOffset);
           #else
           if (bri == 255) { // speed hack - don't adjust brightness if full brightness
             memcpy(packet_buffer+18, buffer+bufferOffset, packetSize);
@@ -982,12 +862,13 @@ uint8_t IRAM_ATTR_YN realtimeBroadcast(uint8_t type, IPAddress client, uint32_t 
             for (uint_fast16_t i = 0; i < packetSize; i+=(isRGBW?4:3)) {
               // set brightness values in the packet - seems slightly faster than scale8()?
               // for some reason, doing 3 (or 4) at a time is 200 micros faster than 1 at a time.
-              packet_buffer[i+18] = (buffer[bufferOffset+i] * bri) >> 8;
-              packet_buffer[i+19] = (buffer[bufferOffset+i+1] * bri) >> 8;
-              packet_buffer[i+20] = (buffer[bufferOffset+i+2] * bri) >> 8; 
-              if (isRGBW) packet_buffer[i+21] = (buffer[bufferOffset+i+3] * bri) >> 8; 
+              packet_buffer[i + 18] = (buffer_in[bufferOffset + i] * bri) >> 8;
+              packet_buffer[i + 19] = (buffer_in[bufferOffset + i + 1] * bri) >> 8;
+              packet_buffer[i + 20] = (buffer_in[bufferOffset + i + 2] * bri) >> 8;
+              if (isRGBW) packet_buffer[i + 21] = (buffer_in[bufferOffset + i + 3] * bri) >> 8;
             }
           }
+          #endif
           #endif
 
           bufferOffset += packetSize;
