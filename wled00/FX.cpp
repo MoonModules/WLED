@@ -11772,9 +11772,12 @@ static const char _data_RESERVED[] PROGMEM = "RSVD";
 // add (or replace reserved) effect mode and data into vector
 // use id==255 to find unallocated gaps (with "Reserved" data string)
 // if vector size() is smaller than id (single) data is appended at the end (regardless of id)
-void WS2812FX::addEffect(uint8_t id, mode_ptr mode_fn, const char *mode_name) {
-  if (id == 255) { // find empty slot
-    for (size_t i=1; i<_mode.size(); i++) if (_modeData[i] == _data_RESERVED) { id = i; break; }
+void WS2812FX::addEffect(uint16_t id, mode_ptr mode_fn, const char *mode_name) {
+  if ((id == MODE_AUTO) || (id == MODE_AUTO_LEGACY)) { // find empty slot            // WLEDMM need to make sure that slot 255 is always skipped
+    for (size_t i=1; i<_mode.size(); i++) {
+      if ((_modeData[i] == _data_RESERVED) && (id != MODE_AUTO) && (id == MODE_AUTO_LEGACY)) { 
+        id = i; break; // style hint: break is a goto in disguise
+    } }
   }
   if (id < _mode.size()) {
     if (_modeData[id] != _data_RESERVED) return; // do not overwrite alerady added effect

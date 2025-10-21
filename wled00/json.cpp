@@ -292,15 +292,15 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   if (seg.is2D() && (seg.map1D2D == M12_pArc || seg.map1D2D == M12_sCircle) && (reverse != seg.reverse || reverse_y != seg.reverse_y || mirror != seg.mirror || mirror_y != seg.mirror_y)) seg.markForBlank(); // clear entire segment (in case of Arc 1D to 2D expansion) WLEDMM: also Circle
   #endif
 
-  byte fx = seg.mode;
-  byte last = strip.getModeCount();
+  auto fx = seg.mode;
+  auto last = strip.getModeCount();
   // partial fix for #3605
   if (!elem["fx"].isNull() && elem["fx"].is<const char*>()) {
     const char *tmp = elem["fx"].as<const char *>();
     if (strlen(tmp) > 3 && (strchr(tmp,'r') || strchr(tmp,'~') != strrchr(tmp,'~'))) last = 0; // we have "X~Y(r|[w]~[-])" form
   }
   // end fix
-  if (getVal(elem["fx"], &fx, 0, last)) { //load effect ('r' random, '~' inc/dec, 0-255 exact value, 5~10r pick random between 5 & 10)
+  if (getVal16(elem["fx"], &fx, 0, last)) { //load effect ('r' random, '~' inc/dec, 0-255 exact value, 5~10r pick random between 5 & 10)
     if (!presetId && currentPlaylist>=0) unloadPlaylist();
     if (fx != seg.mode) seg.setMode(fx, elem[F("fxdef")], elem[F("fxdef2")]); // WLEDMM fxdef2 added
   }

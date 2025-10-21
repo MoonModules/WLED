@@ -386,6 +386,11 @@ int getNumVal(const String* req, uint16_t pos);
 void parseNumber(const char* str, byte* val, byte minv=0, byte maxv=255);
 bool getVal(JsonVariant elem, byte* val, byte minv=0, byte maxv=255);
 bool updateVal(const char* req, const char* key, byte* val, byte minv=0, byte maxv=255);
+
+void parseNumber16(const char* str, uint16_t* val, uint16_t minv=0, uint16_t maxv=255); // the real thing in 16bit
+bool getVal16(JsonVariant elem, uint16_t* val, uint16_t vmin, uint16_t vmax=255); // same as above, with 2byte output buffer
+bool updateVal16(const char* req, const char* key, uint16_t* val, uint16_t minv=0, uint16_t maxv=255);
+
 void oappendUseDeflate(bool OnOff); // enable / disable string squeezing
 bool oappend(const char* txt); // append new c string to temp buffer efficiently
 bool oappendi(int i);          // append new number to temp buffer efficiently
@@ -395,9 +400,9 @@ void prepareHostname(char* hostname);
 bool isAsterisksOnly(const char* str, byte maxLen)  __attribute__((pure));
 bool requestJSONBufferLock(uint8_t module=255);
 void releaseJSONBufferLock();
-uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLen);
-uint8_t extractModeSlider(uint8_t mode, uint8_t slider, char *dest, uint8_t maxLen, uint8_t *var = nullptr);
-int16_t extractModeDefaults(uint8_t mode, const char *segVar);
+uint16_t extractModeName(uint16_t mode, const char *src, char *dest, uint16_t maxLen);
+uint16_t extractModeSlider(uint16_t mode, uint8_t slider, char *dest, uint16_t maxLen, uint8_t *var = nullptr);
+int16_t extractModeDefaults(uint16_t mode, const char *segVar);
 void checkSettingsPIN(const char *pin);
 uint16_t  __attribute__((pure)) crc16(const unsigned char* data_p, size_t length);   // WLEDMM: added attribute pure
 

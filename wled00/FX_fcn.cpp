@@ -440,7 +440,7 @@ void Segment::startTransition(uint16_t dur) {
   uint8_t _briT = currentBri(on ? opacity : 0);
   uint8_t _cctT = currentBri(cct, true);
   CRGBPalette16 _palT = CRGBPalette16(DEFAULT_COLOR); loadPalette(_palT, palette);
-  uint8_t _modeP = mode;
+  auto _modeP = mode;
   uint32_t _colorT[NUM_COLORS];
   for (size_t i=0; i<NUM_COLORS; i++) _colorT[i] = currentColor(i, colors[i]);
 
@@ -478,7 +478,7 @@ uint8_t IRAM_ATTR_YN Segment::currentBri(uint8_t briNew, bool useCct) const {
 }
 #endif
 
-uint8_t Segment::currentMode(uint8_t newMode) {
+uint16_t Segment::currentMode(uint16_t newMode) {
   return (progress()>32767U) ? newMode : (_t ? _t->_modeP : newMode); // change effect in the middle of transition
 }
 
@@ -590,7 +590,7 @@ void Segment::setOption(uint8_t n, bool val) {
   if (!(n == SEG_OPTION_SELECTED || n == SEG_OPTION_RESET || n == SEG_OPTION_TRANSITIONAL)) stateChanged = true; // send UDP/WS broadcast
 }
 
-void Segment::setMode(uint8_t fx, bool loadDefaults, bool sliderDefaultsOnly) {
+void Segment::setMode(uint16_t fx, bool loadDefaults, bool sliderDefaultsOnly) {
   //WLEDMM: return to old setting if not explicitly set
   static int16_t oldMap = -1;
   static int16_t oldSim = -1;
@@ -2144,7 +2144,7 @@ void WS2812FX::setTargetFps(uint8_t fps) {
   if (fps >= FPS_UNLIMITED) _frametime = 2;     // WLEDMM unlimited mode
 }
 
-void WS2812FX::setMode(uint8_t segid, uint8_t m) {
+void WS2812FX::setMode(uint8_t segid, uint16_t m) {
   if (segid >= _segments.size()) return;
 
   if (m >= getModeCount()) m = getModeCount() - 1;
