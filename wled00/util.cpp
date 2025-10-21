@@ -11,8 +11,8 @@ int getNumVal(const String* req, uint16_t pos)
 
 
 // wrapper for parseNumber16 to suppport byte target buffer
-void parseNumber(const char* str, byte* val, byte minv, byte maxv) { // wrapper for 8bit
-  uint16_t temp = 0;
+void parseNumber(const char* str, byte* val, byte minv, byte maxv) { // wrapper for 8bit buffer
+  uint16_t temp = *val;
   parseNumber16(str, &temp, (uint16_t)minv, (uint16_t)maxv);
   *val = constrain(temp, 0, 255);
 }
