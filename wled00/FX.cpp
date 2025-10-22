@@ -11779,14 +11779,14 @@ void WS2812FX::addEffect(uint16_t id, mode_ptr mode_fn, const char *mode_name) {
         id = i; break; // style hint: break is a goto in disguise
     } }
   }
-  if (id < _mode.size()) {
+  if ((id < _mode.size()) && (id != MODE_AUTO) && (id != MODE_AUTO_LEGACY)) { // do not overwrite legacy "auto" slot 255
     if (_modeData[id] != _data_RESERVED) return; // do not overwrite alerady added effect
     _mode[id]     = mode_fn;
     _modeData[id] = mode_name;
   } else {
     _mode.push_back(mode_fn);
     _modeData.push_back(mode_name);
-    if (_modeCount < _mode.size()) _modeCount++;
+    if (_modeCount < _mode.size()) _modeCount++; // toDo: check if this works when _modeCount goes from 254 (max 8bit) to 256 (first 16bit)
   }
 }
 
