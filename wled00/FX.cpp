@@ -11772,6 +11772,13 @@ static const char _data_RESERVED[] PROGMEM = "RSVD";
 // add (or replace reserved) effect mode and data into vector
 // use id==255 to find unallocated gaps (with "Reserved" data string)
 // if vector size() is smaller than id (single) data is appended at the end (regardless of id)
+///// 
+// WLEDMM extended to use 16bit effect IDs
+//   PoC: if id >= _mode.size(), we currently append at the tail and ignore the explicit id.
+//   TODO(WLED‑MM): honor explicit IDs by resizing/backfilling up to `id` and placing the effect
+//   at exactly that slot; update _modeCount = max(_modeCount, id+1).// PoC: if id >= _mode.size(), we currently append at the tail and ignore the explicit id.
+//   TODO(WLED‑MM): honor explicit IDs by resizing/backfilling up to `id` and placing the effect
+//   at exactly that slot; update _modeCount = max(_modeCount, id+1).
 void WS2812FX::addEffect(uint16_t id, mode_ptr mode_fn, const char *mode_name) {
   if ((id < _mode.size()) && (_modeData[id] != _data_RESERVED)) {
       DEBUG_PRINTF("addEffect(%d) -> ", id);

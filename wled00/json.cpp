@@ -293,7 +293,8 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   #endif
 
   uint16_t fx = seg.mode;
-  uint16_t last = max(strip.getModeCount()-1, 0);     // WLEDMM bugfix: make sure that fx= cannot go out of range (effects IDs start at 0)
+  uint16_t fxModeCount = strip.getModeCount();
+  uint16_t last = fxModeCount ? (uint16_t)(fxModeCount - 1) : 0;  // WLEDMM bugfix: make sure that fx= cannot go out of range (effects IDs start at 0)
   // partial fix for #3605
   if (!elem["fx"].isNull() && elem["fx"].is<const char*>()) {
     const char *tmp = elem["fx"].as<const char *>();
