@@ -292,8 +292,8 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   if (seg.is2D() && (seg.map1D2D == M12_pArc || seg.map1D2D == M12_sCircle) && (reverse != seg.reverse || reverse_y != seg.reverse_y || mirror != seg.mirror || mirror_y != seg.mirror_y)) seg.markForBlank(); // clear entire segment (in case of Arc 1D to 2D expansion) WLEDMM: also Circle
   #endif
 
-  auto fx = seg.mode;
-  auto last = strip.getModeCount();
+  uint16_t fx = seg.mode;
+  uint16_t last = min(strip.getModeCount()-1, 0);     // WLEDMM bugfix: make sure that fx= cannot go out of range (effects IDs start at 0)
   // partial fix for #3605
   if (!elem["fx"].isNull() && elem["fx"].is<const char*>()) {
     const char *tmp = elem["fx"].as<const char *>();

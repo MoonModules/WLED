@@ -64,7 +64,7 @@ void parseNumber16(const char* str, uint16_t* val, uint16_t minv, uint16_t maxv)
 bool getVal(JsonVariant elem, byte* val, byte vmin, byte vmax) {
   if (elem.is<int>()) {
 		if (elem < 0) return false; //ignore e.g. {"ps":-1}
-    *val = elem;
+    *val = elem;  // ToDO: check if we need a bounds test [vmin ... vmax] before assigning the result
     return true;
   } else if (elem.is<const char*>()) {
     const char* str = elem;
@@ -79,7 +79,7 @@ bool getVal(JsonVariant elem, byte* val, byte vmin, byte vmax) {
 bool getVal16(JsonVariant elem, uint16_t* val, uint16_t vmin, uint16_t vmax) { // same as above, with 2byte output buffer
   if (elem.is<int>()) {
 		if (elem < 0) return false; //ignore e.g. {"ps":-1}
-    *val = elem;
+    *val = elem;  // ToDO: check if we need a bounds test [vmin ... vmax] before assigning the result
     return true;
   } else if (elem.is<const char*>()) {
     const char* str = elem;
