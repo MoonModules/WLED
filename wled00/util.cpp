@@ -300,7 +300,8 @@ uint16_t extractModeName(uint16_t mode, const char *src, char *dest, uint16_t ma
   }
 
   if (src == JSON_palette_names && mode > (GRADIENT_PALETTE_COUNT + 13)) {
-    snprintf_P(dest, maxLen, PSTR("~ Custom %d ~"), 255-mode);
+    if (mode <= 255) snprintf_P(dest, maxLen, PSTR("~ Custom %d ~"), 255-mode);  // hmmm ... this function is abused to generate palette names
+    else snprintf_P(dest, maxLen, PSTR("~ Custom +%u ~"), mode - 255);            // fallback for mode > 255 ... this should not happen for palettes, better safe than sorry
     dest[maxLen-1] = '\0';
     return strlen(dest);
   }
