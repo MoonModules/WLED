@@ -65,7 +65,7 @@ class St7789DisplayUsermod : public Usermod {
     String knownSsid = "";
     IPAddress knownIp;
     uint8_t knownBrightness = 0;
-    uint8_t knownMode = 0;
+    uint16_t knownMode = 0;
     uint8_t knownPalette = 0;
     uint8_t knownEffectSpeed = 0;
     uint8_t knownEffectIntensity = 0;

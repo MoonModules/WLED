@@ -71,7 +71,7 @@ void decBrightness()
   }
 }
 
-void presetFallback(uint8_t presetID, uint8_t effectID, uint8_t paletteID)
+void presetFallback(uint8_t presetID, uint16_t effectID, uint8_t paletteID)
 {
   //USER_PRINTF("presetFallback1 %d %d %d\n", presetID, effectID, paletteID);
   //applyPreset(presetID, CALL_MODE_BUTTON_PRESET);
@@ -91,7 +91,7 @@ byte relativeChange(byte property, int8_t amount, byte lowerBoundary, byte highe
   return (byte)constrain(new_val, 0, 255);
 }
 
-void changeEffect(uint8_t fx)
+void changeEffect(uint16_t fx)
 {
   if (irApplyToAllSelected) {
     for (uint8_t i = 0; i < strip.getSegmentsNum(); i++) {

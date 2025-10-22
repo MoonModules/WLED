@@ -151,9 +151,9 @@ private:
   unsigned char Enc_A_prev = 0;
 
   bool currentEffectAndPaletteInitialized = false;
-  uint8_t effectCurrentIndex = 0;
+  uint16_t effectCurrentIndex = 0;
   uint8_t effectPaletteIndex = 0;
-  uint8_t knownMode = 0;
+  uint16_t knownMode = 0;
   uint8_t knownPalette = 0;
 
   uint8_t currentCCT = 128;
