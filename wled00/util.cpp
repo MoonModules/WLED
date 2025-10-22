@@ -15,13 +15,14 @@ void parseNumber(const char* str, byte* val, byte minv, byte maxv) { // wrapper 
   uint16_t temp = *val;
   parseNumber16(str, &temp, (uint16_t)minv, (uint16_t)maxv);
   *val = constrain(temp, 0, 255);
+  if ((temp > 255) && (minv == 0) && (maxv == 0)) *val = temp & 0x00FF; // 8bit support for "r" with min=max=0
 }
 
 //helper to get int value with in/decrementing support via ~ syntax
 void parseNumber16(const char* str, uint16_t* val, uint16_t minv, uint16_t maxv) // the real thing in 16bit
 {
   if (str == nullptr || str[0] == '\0') return;
-  if (str[0] == 'r') {*val = uint16_t(hw_random(minv,maxv?maxv:255)); return;} // maxv for random cannot be 0
+  if (str[0] == 'r') {*val = uint16_t(hw_random(minv,maxv?maxv:65535)); return;} // maxv for random cannot be 0, use full range
   bool wrap = false;
   if (str[0] == 'w' && strlen(str) > 1) {str++; wrap = true;}
   if (str[0] == '~') {
