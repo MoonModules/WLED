@@ -11773,21 +11773,44 @@ static const char _data_RESERVED[] PROGMEM = "RSVD";
 // use id==255 to find unallocated gaps (with "Reserved" data string)
 // if vector size() is smaller than id (single) data is appended at the end (regardless of id)
 void WS2812FX::addEffect(uint16_t id, mode_ptr mode_fn, const char *mode_name) {
+  if ((id < _mode.size()) && (_modeData[id] != _data_RESERVED)) {
+      DEBUG_PRINTF("addEffect(%d) -> ", id);
+      DEBUG_PRINTF(" already in use, finding a new slot for -> %s\n", mode_name);
+      id = MODE_AUTO;
+  }
+  if ((id >= _mode.size()) && (id != MODE_AUTO) && (id != MODE_AUTO_LEGACY)) {
+      DEBUG_PRINTF("!addEffect(%d) -> slot not existing, adding new slot\n", id);
+  }
+
   if ((id == MODE_AUTO) || (id == MODE_AUTO_LEGACY)) { // find empty slot            // WLEDMM need to make sure that slot 255 is always skipped
     for (size_t i=1; i<_mode.size(); i++) {
       if ((_modeData[i] == _data_RESERVED) && (i != MODE_AUTO) && (i != MODE_AUTO_LEGACY)) { 
         id = i; break; // style hint: break is a goto in disguise
     } }
   }
+
   if ((id < _mode.size()) && (id != MODE_AUTO) && (id != MODE_AUTO_LEGACY)) { // do not overwrite legacy "auto" slot 255
-    if (_modeData[id] != _data_RESERVED) return; // do not overwrite alerady added effect
+    if (_modeData[id] != _data_RESERVED) {                                    // do not overwrite alerady added effect
+      USER_PRINTF("!addEffect(%d)  failed - existing effect cannot be replaced. <=> %s\n", id, mode_name);
+      return;
+    }                                                                         // all good, insert into existing RSVD slot
     _mode[id]     = mode_fn;
     _modeData[id] = mode_name;
   } else {
+    if (_modeCount == MODE_AUTO_LEGACY && ((id == MODE_AUTO) || (id == MODE_AUTO_LEGACY))) {
+      // add dummy entry to protect slot 255 = MODE_AUTO_LEGACY
+      DEBUG_PRINTF("+addEffect(%d)  creating dummy effect 255, modecount = %d.\n", id, _modeCount);
+      _mode.push_back(&mode_static);
+      _modeData.push_back(_data_RESERVED);
+      if (_modeCount < _mode.size()) _modeCount++;
+    }
+    // new slot needed -> append to end of vector
     _mode.push_back(mode_fn);
     _modeData.push_back(mode_name);
+    id = _modeCount;
     if (_modeCount < _mode.size()) _modeCount++; // toDo: check if this works when _modeCount goes from 254 (max 8bit) to 256 (first 16bit)
   }
+  DEBUG_PRINTF("addEffect(%d) => %s\n", id, mode_name);
 }
 
 void WS2812FX::setupEffectData() {

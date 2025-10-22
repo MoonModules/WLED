@@ -370,7 +370,12 @@ bool strip_uses_global_leds(void) __attribute__((pure));  // WLEDMM implemented 
 #define FX_MODE_PS1DSONICBOOM          226
 #define FX_MODE_PS1DSPRINGY            227
 
-#define MODE_COUNT                     228
+#if defined(USERMOD_ANIMARTRIX) && !defined(WLED_DISABLE_PARTICLESYSTEM2D)
+#define MODE_COUNT                     275 // keep some room for animartix effects
+#else
+#define MODE_COUNT                     228 // default including ParticleFX
+#endif
+
 #define MODE_AUTO                      65000 // magic value to add/remove effects at runtime
 #define MODE_AUTO_LEGACY               255   // magic value #2, for legacy code still using addEffect(255, ....
 
