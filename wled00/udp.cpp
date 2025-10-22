@@ -37,7 +37,7 @@ void notify(byte callMode, bool followUp)
   udpOut[5] = B(col);
   udpOut[6] = nightlightActive;
   udpOut[7] = nightlightDelayMins;
-  udpOut[8] = byte(mainseg.mode);  // WLEDMM toDo: need workaround for 16bit mode numbers
+  udpOut[8] = min(mainseg.mode, uint16_t(255));  // WLEDMM toDo: need workaround for 16bit mode numbers - critical as this affects webUI
   udpOut[9] = mainseg.speed;
   udpOut[10] = W(col);
   //compatibilityVersionByte:
@@ -107,7 +107,7 @@ void notify(byte callMode, bool followUp)
     udpOut[8 +ofs] = selseg.offset & 0xFF;
     udpOut[9 +ofs] = selseg.options & 0x8F; //only take into account selected, mirrored, on, reversed, reverse_y (for 2D); ignore freeze, reset, transitional
     udpOut[10+ofs] = selseg.opacity;
-    udpOut[11+ofs] = byte(selseg.mode);  // WLEDMM toDo: need workaround for 16bit mode numbers
+    udpOut[11+ofs] = min(selseg.mode, uint16_t(255));  // WLEDMM toDo: need workaround for 16bit mode numbers
     udpOut[12+ofs] = selseg.speed;
     udpOut[13+ofs] = selseg.intensity;
     udpOut[14+ofs] = selseg.palette;
