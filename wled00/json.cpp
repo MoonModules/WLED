@@ -293,15 +293,14 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   #endif
 
   uint16_t fx = seg.mode;
-  uint16_t fxModeCount = strip.getModeCount();
-  uint16_t last = fxModeCount ? (uint16_t)(fxModeCount - 1) : 0;  // WLEDMM bugfix: make sure that fx= cannot go out of range (effects IDs start at 0)
+  uint16_t last = strip.getModeCount();           // WLEDMM safe, because strip.getModeCount() is always >0
   // partial fix for #3605
   if (!elem["fx"].isNull() && elem["fx"].is<const char*>()) {
     const char *tmp = elem["fx"].as<const char *>();
     if (strlen(tmp) > 3 && (strchr(tmp,'r') || strchr(tmp,'~') != strrchr(tmp,'~'))) last = 0; // we have "X~Y(r|[w]~[-])" form
   }
   // end fix
-  if (getVal16(elem["fx"], &fx, 0, last)) { //load effect ('r' random, '~' inc/dec, 0-255 exact value, 5~10r pick random between 5 & 10)
+  if (getVal16(elem["fx"], &fx, 0, last)) { //load effect ('r' random, '~' inc/dec, 0-65535 exact value, 5~10r pick random between 5 & 10)
     if (!presetId && currentPlaylist>=0) unloadPlaylist();
     if (fx != seg.mode) seg.setMode(fx, elem[F("fxdef")], elem[F("fxdef2")]); // WLEDMM fxdef2 added
   }

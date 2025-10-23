@@ -11,15 +11,15 @@ int getNumVal(const String* req, uint16_t pos)
 
 
 // wrapper for parseNumber16 to suppport byte target buffer
-void parseNumber(const char* str, byte* val, byte minv, byte maxv) { // wrapper for 8bit buffer
+void parseNumber(const char* str, byte* val, byte minv, byte maxv) { // wrapper for 8bit buffer; maxv is "exclusive"
   uint16_t temp = *val;
   parseNumber16(str, &temp, (uint16_t)minv, (uint16_t)maxv);
-  *val = constrain(temp, 0, 255);
-  if ((temp > 255) && (minv == 0) && (maxv == 0)) *val = temp & 0x00FF; // 8bit support for "r" with min=max=0
+  //*val = constrain(temp, 0, 255);  // unfortunately this is not compatible with legacy 8bit "r" = random
+  *val = temp & 0x00FF;              // always works correctly, assuming *str is strictly 8bit
 }
 
 //helper to get int value with in/decrementing support via ~ syntax
-void parseNumber16(const char* str, uint16_t* val, uint16_t minv, uint16_t maxv) // the real thing in 16bit
+void parseNumber16(const char* str, uint16_t* val, uint16_t minv, uint16_t maxv) // the real thing in 16bit; maxv is "exclusive"
 {
   if (str == nullptr || str[0] == '\0') return;
   if (str[0] == 'r') {*val = uint16_t(hw_random(minv,maxv?maxv:65535)); return;} // maxv for random cannot be 0, use full range
@@ -687,7 +687,7 @@ char *cleanUpName(char *in) {
   return(in);
 }
 
-// 32 bit hardware random number generator, inlining uses more code, use hw_random16() if speed is critical (see fcn_declare.h)
+// 32 bit hardware random number generator, inlining uses more code, use hw_random16() if speed is critical (see fcn_declare.h). results are "exclusive" upperlimit
 uint32_t hw_random(uint32_t upperlimit) {
   uint32_t rnd = hw_random();
   uint64_t scaled = uint64_t(rnd) * uint64_t(upperlimit);
