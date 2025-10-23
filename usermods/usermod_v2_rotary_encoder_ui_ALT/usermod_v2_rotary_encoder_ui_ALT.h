@@ -353,7 +353,7 @@ void RotaryEncoderUIUsermod::sortModesAndPalettes() {
 
 byte *RotaryEncoderUIUsermod::re_initIndexArray(int numModes) {
   byte *indexes = (byte *)malloc(sizeof(byte) * numModes);
-  for (byte i = 0; i < numModes; i++) {
+  for (uint16_t i = 0; i < numModes; i++) {              // WLEDMM changed to uint16_t to avoid infinite loop with 16bit mode IDs
     indexes[i] = i;
   }
   return indexes;
@@ -630,7 +630,7 @@ void RotaryEncoderUIUsermod::displayNetworkInfo() {
 void RotaryEncoderUIUsermod::findCurrentEffectAndPalette() {
   if (modes_alpha_indexes == nullptr) return; // WLEDMM bugfix
   currentEffectAndPaletteInitialized = true;
-  for (uint8_t i = 0; i < strip.getModeCount(); i++) {
+  for (uint16_t i = 0; i < strip.getModeCount(); i++) {   // WLEDMM changed to uint16_t to avoid infinite loop with 16bit mode IDs
     if (modes_alpha_indexes[i] == effectCurrent) {
       effectCurrentIndex = i;
       break;
