@@ -71,7 +71,7 @@ void decBrightness()
   }
 }
 
-void presetFallback(uint8_t presetID, uint8_t effectID, uint8_t paletteID)
+void presetFallback(uint8_t presetID, uint16_t effectID, uint8_t paletteID)
 {
   //USER_PRINTF("presetFallback1 %d %d %d\n", presetID, effectID, paletteID);
   //applyPreset(presetID, CALL_MODE_BUTTON_PRESET);
@@ -91,7 +91,17 @@ byte relativeChange(byte property, int8_t amount, byte lowerBoundary, byte highe
   return (byte)constrain(new_val, 0, 255);
 }
 
-void changeEffect(uint8_t fx)
+// 16‑bit variant for effect IDs
+uint16_t relativeChange16(uint16_t property, int16_t amount, uint16_t lowerBoundary, uint16_t higherBoundary)
+{
+  int32_t new_val = (int32_t)property + amount;
+  if (lowerBoundary >= higherBoundary) return property;
+  if (new_val > higherBoundary) new_val = higherBoundary;
+  if (new_val < lowerBoundary)  new_val = lowerBoundary;
+  return (uint16_t)new_val;
+}
+
+void changeEffect(uint16_t fx)
 {
   if (irApplyToAllSelected) {
     for (uint8_t i = 0; i < strip.getSegmentsNum(); i++) {
@@ -508,8 +518,8 @@ void decodeIR44(uint32_t code)
     case IR44_WARMWHITE   : changeColor(COLOR_WARMWHITE,     63); changeEffect(FX_MODE_STATIC);  break;
     case IR44_COLDWHITE   : changeColor(COLOR_COLDWHITE,    191); changeEffect(FX_MODE_STATIC);  break;
     case IR44_COLDWHITE2  : changeColor(COLOR_COLDWHITE2,   255); changeEffect(FX_MODE_STATIC);  break;
-    case IR44_REDPLUS     : changeEffect(relativeChange(effectCurrent,  1, 0, strip.getModeCount() -1));               break;
-    case IR44_REDMINUS    : changeEffect(relativeChange(effectCurrent, -1, 0, strip.getModeCount() -1));               break;
+    case IR44_REDPLUS     : changeEffect(relativeChange16(effectCurrent,  1, 0, strip.getModeCount() -1));               break;
+    case IR44_REDMINUS    : changeEffect(relativeChange16(effectCurrent, -1, 0, strip.getModeCount() -1));               break;
     case IR44_GREENPLUS   : changePalette(relativeChange(effectPalette,  1, 0, strip.getPaletteCount() -1)); break;
     case IR44_GREENMINUS  : changePalette(relativeChange(effectPalette, -1, 0, strip.getPaletteCount() -1)); break;
     case IR44_BLUEPLUS    : changeEffectIntensity( 16);                  break;
@@ -568,7 +578,7 @@ void decodeIR6(uint32_t code)
     case IR6_POWER:        toggleOnOff();                                                    break;
     case IR6_CHANNEL_UP:   incBrightness();                                                  break;
     case IR6_CHANNEL_DOWN: decBrightness();                                                  break;
-    case IR6_VOLUME_UP:    changeEffect(relativeChange(effectCurrent, 1, 0, strip.getModeCount() -1)); break;
+    case IR6_VOLUME_UP:    changeEffect(relativeChange16(effectCurrent, 1, 0, strip.getModeCount() -1)); break;
     case IR6_VOLUME_DOWN:  changePalette(relativeChange(effectPalette, 1, 0, strip.getPaletteCount() -1));
       switch(lastIR6ColourIdx) {
         case 0: changeColor(COLOR_RED);       break;
@@ -606,7 +616,7 @@ void decodeIR9(uint32_t code)
     case IR9_DOWN       : decBrightness();                                                  break;
     case IR9_LEFT       : changeEffectSpeed(-16);                                           break;
     case IR9_RIGHT      : changeEffectSpeed(16);                                            break;
-    case IR9_SELECT     : changeEffect(relativeChange(effectCurrent, 1, 0, strip.getModeCount() -1)); break;
+    case IR9_SELECT     : changeEffect(relativeChange16(effectCurrent, 1, 0, strip.getModeCount() -1)); break;
     default: return;
   }
   lastValidCode = code;
@@ -621,8 +631,8 @@ void decodeIR24MC(uint32_t code)
     case IR24_MC_OFF        : if (bri > 0) briLast = bri; bri = 0; break;
     case IR24_MC_AUTO       : changeEffect(FX_MODE_FADE);          break;
     case IR24_MC_ON         : bri = briLast;                       break;
-    case IR24_MC_MODES      : changeEffect(relativeChange(effectCurrent,  1, 0, strip.getModeCount() -1)); break; //WLEDMM: sound and non sound modes
-    case IR24_MC_MODE       : changeEffect(relativeChange(effectCurrent, -1, 0, strip.getModeCount() -1)); break; //WLEDMM: sound and non sound modes
+    case IR24_MC_MODES      : changeEffect(relativeChange16(effectCurrent,  1, 0, strip.getModeCount() -1)); break; //WLEDMM: sound and non sound modes
+    case IR24_MC_MODE       : changeEffect(relativeChange16(effectCurrent, -1, 0, strip.getModeCount() -1)); break; //WLEDMM: sound and non sound modes
     case IR24_MC_BRIGHTER   : incBrightness();                     break;
     case IR24_MC_DARKER     : decBrightness();                     break;
     case IR24_MC_QUICK      : changeEffectSpeed( 16);              break;
@@ -711,7 +721,7 @@ void decodeIRJson(uint32_t code)
         decBrightness();
       } else if (cmdStr.startsWith(F("!presetF"))) { //!presetFallback
         uint8_t p1 = fdo["PL"] | 1;
-        uint8_t p2 = fdo["FX"] | random8(strip.getModeCount() -1);
+        uint16_t p2 = fdo["FX"] | random16(strip.getModeCount() -1);
         uint8_t p3 = fdo["FP"] | 0;
         presetFallback(p1, p2, p3);
       }

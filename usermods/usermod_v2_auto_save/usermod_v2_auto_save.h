@@ -57,7 +57,7 @@ class AutoSaveUsermod : public Usermod {
     uint8_t knownBrightness = 0;
     uint8_t knownEffectSpeed = 0;
     uint8_t knownEffectIntensity = 0;
-    uint8_t knownMode = 0;
+    uint16_t knownMode = 0;
     uint8_t knownPalette = 0;
 
     #ifdef USERMOD_FOUR_LINE_DISPLAY
@@ -133,7 +133,7 @@ class AutoSaveUsermod : public Usermod {
       if (!autoSaveAfterSec || !enabled || strip.isUpdating() || currentPreset>0) return;  // setting 0 as autosave seconds disables autosave
 
       unsigned long now = millis();
-      uint8_t currentMode = strip.getMainSegment().mode;
+      uint16_t currentMode = strip.getMainSegment().mode;
       uint8_t currentPalette = strip.getMainSegment().palette;
 
       unsigned long wouldAutoSaveAfter = now + autoSaveAfterSec*1000;

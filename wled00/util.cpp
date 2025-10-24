@@ -10,11 +10,19 @@ int getNumVal(const String* req, uint16_t pos)
 }
 
 
+// wrapper for parseNumber16 to suppport byte target buffer
+void parseNumber(const char* str, byte* val, byte minv, byte maxv) { // wrapper for 8bit buffer; maxv is "exclusive"
+  uint16_t temp = *val;
+  parseNumber16(str, &temp, (uint16_t)minv, (uint16_t)maxv);
+  //*val = constrain(temp, 0, 255);  // unfortunately this is not compatible with legacy 8bit "r" = random
+  *val = temp & 0x00FF;              // always works correctly, assuming *str is strictly 8bit
+}
+
 //helper to get int value with in/decrementing support via ~ syntax
-void parseNumber(const char* str, byte* val, byte minv, byte maxv)
+void parseNumber16(const char* str, uint16_t* val, uint16_t minv, uint16_t maxv) // the real thing in 16bit; maxv is "exclusive"
 {
   if (str == nullptr || str[0] == '\0') return;
-  if (str[0] == 'r') {*val = random8(minv,maxv?maxv:255); return;} // maxv for random cannot be 0
+  if (str[0] == 'r') {*val = uint16_t(hw_random(minv,maxv?maxv:65535)); return;} // maxv for random cannot be 0, use full range
   bool wrap = false;
   if (str[0] == 'w' && strlen(str) > 1) {str++; wrap = true;}
   if (str[0] == '~') {
@@ -38,31 +46,46 @@ void parseNumber(const char* str, byte* val, byte minv, byte maxv)
     }
     return;
   } else if (minv == maxv && minv == 0) { // limits "unset" i.e. both 0
-    byte p1 = atoi(str);
+    uint16_t p1 = atoi(str);
     const char* str2 = strchr(str,'~'); // min/max range (for preset cycle, e.g. "1~5~")
     if (str2) {
-      byte p2 = atoi(++str2);           // skip ~
+      uint16_t p2 = atoi(++str2);           // skip ~
       if (p2 > 0) {
         while (isdigit(*(++str2)));     // skip digits
-        parseNumber(str2, val, p1, p2);
+        parseNumber16(str2, val, p1, p2);
         return;
       }
     }
   }
-  *val = atoi(str);
+  *val = uint16_t(atoi(str));
 }
 
 
 bool getVal(JsonVariant elem, byte* val, byte vmin, byte vmax) {
   if (elem.is<int>()) {
 		if (elem < 0) return false; //ignore e.g. {"ps":-1}
-    *val = elem;
+    *val = elem;  // ToDO: check if we need a bounds test [vmin ... vmax] before assigning the result
     return true;
   } else if (elem.is<const char*>()) {
     const char* str = elem;
     size_t len = strnlen(str, 12);
     if (len == 0 || len > 10) return false;
     parseNumber(str, val, vmin, vmax);
+    return true;
+  }
+  return false; //key does not exist
+}
+
+bool getVal16(JsonVariant elem, uint16_t* val, uint16_t vmin, uint16_t vmax) { // same as above, with 2byte output buffer
+  if (elem.is<int>()) {
+		if (elem < 0) return false; //ignore e.g. {"ps":-1}
+    *val = elem;  // ToDO: check if we need a bounds test [vmin ... vmax] before assigning the result
+    return true;
+  } else if (elem.is<const char*>()) {
+    const char* str = elem;
+    size_t len = strnlen(str, 12);
+    if (len == 0 || len > 10) return false;
+    parseNumber16(str, val, vmin, vmax);
     return true;
   }
   return false; //key does not exist
@@ -75,6 +98,15 @@ bool updateVal(const char* req, const char* key, byte* val, byte minv, byte maxv
   if (v) v += strlen(key);
   else return false;
   parseNumber(v, val, minv, maxv);
+  return true;
+}
+
+bool updateVal16(const char* req, const char* key, uint16_t* val, uint16_t minv, uint16_t maxv)
+{
+  const char *v = strstr(req, key);
+  if (v) v += strlen(key);
+  else return false;
+  parseNumber16(v, val, minv, maxv);
   return true;
 }
 
@@ -248,7 +280,7 @@ void releaseJSONBufferLock()
 
 // extracts effect mode (or palette) name from names serialized string
 // caller must provide large enough buffer for name (including SR extensions)!
-uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLen)
+uint16_t extractModeName(uint16_t mode, const char *src, char *dest, uint16_t maxLen)
 {
   if (src == JSON_mode_names || src == nullptr) {
     if (mode < strip.getModeCount()) {
@@ -268,7 +300,8 @@ uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLe
   }
 
   if (src == JSON_palette_names && mode > (GRADIENT_PALETTE_COUNT + 13)) {
-    snprintf_P(dest, maxLen, PSTR("~ Custom %d ~"), 255-mode);
+    if (mode <= 255) snprintf_P(dest, maxLen, PSTR("~ Custom %d ~"), 255-mode);  // hmmm ... this function is abused to generate palette names
+    else snprintf_P(dest, maxLen, PSTR("~ Custom +%u ~"), mode - 255);            // fallback for mode > 255 ... this should not happen for palettes, better safe than sorry
     dest[maxLen-1] = '\0';
     return strlen(dest);
   }
@@ -305,7 +338,7 @@ uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLe
 
 
 // extracts effect slider data (1st group after @)
-uint8_t extractModeSlider(uint8_t mode, uint8_t slider, char *dest, uint8_t maxLen, uint8_t *var)
+uint16_t extractModeSlider(uint16_t mode, uint8_t slider, char *dest, uint16_t maxLen, uint8_t *var)
 {
   dest[0] = '\0'; // start by clearing buffer
 
@@ -380,7 +413,7 @@ uint8_t extractModeSlider(uint8_t mode, uint8_t slider, char *dest, uint8_t maxL
 
 
 // extracts mode parameter defaults from last section of mode data (e.g. "Juggle@!,Trail;!,!,;!;sx=16,ix=240,1d")
-int16_t extractModeDefaults(uint8_t mode, const char *segVar)
+int16_t extractModeDefaults(uint16_t mode, const char *segVar)
 {
   if (mode < strip.getModeCount()) {
     char lineBuffer[256] = { '\0' };
@@ -654,7 +687,7 @@ char *cleanUpName(char *in) {
   return(in);
 }
 
-// 32 bit hardware random number generator, inlining uses more code, use hw_random16() if speed is critical (see fcn_declare.h)
+// 32 bit hardware random number generator, inlining uses more code, use hw_random16() if speed is critical (see fcn_declare.h). results are "exclusive" upperlimit
 uint32_t hw_random(uint32_t upperlimit) {
   uint32_t rnd = hw_random();
   uint64_t scaled = uint64_t(rnd) * uint64_t(upperlimit);

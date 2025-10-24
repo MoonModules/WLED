@@ -158,7 +158,7 @@ class FourLineDisplayUsermod : public Usermod {
     uint8_t knownBrightness = 0;
     uint8_t knownEffectSpeed = 0;
     uint8_t knownEffectIntensity = 0;
-    uint8_t knownMode = 0;
+    uint16_t knownMode = 0;
     uint8_t knownPalette = 0;
     uint8_t knownMinute = 99;
     uint8_t knownHour = 99;

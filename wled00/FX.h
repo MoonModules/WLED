@@ -370,7 +370,14 @@ bool strip_uses_global_leds(void) __attribute__((pure));  // WLEDMM implemented 
 #define FX_MODE_PS1DSONICBOOM          226
 #define FX_MODE_PS1DSPRINGY            227
 
-#define MODE_COUNT                     228
+#if defined(USERMOD_ANIMARTRIX) && !defined(WLED_DISABLE_PARTICLESYSTEM2D)
+#define MODE_COUNT                     275 // keep some room for animartix effects
+#else
+#define MODE_COUNT                     228 // default including ParticleFX
+#endif
+
+#define MODE_AUTO                      65000 // magic value to add/remove effects at runtime
+#define MODE_AUTO_LEGACY               255   // magic value #2, for legacy code still using addEffect(255, ....
 
 typedef enum mapping1D2D {
   M12_Pixels = 0,
@@ -392,7 +399,7 @@ typedef struct Segment {
     uint8_t  speed;
     uint8_t  intensity;
     uint8_t  palette;
-    uint8_t  mode;
+    uint16_t  mode;
     union {
       uint16_t options; //bit pattern: msb first: [transposed mirrorY reverseY] transitional (tbd) paused needspixelstate mirrored on reverse selected
       struct {
@@ -481,7 +488,7 @@ typedef struct Segment {
       uint8_t       _cctT;        // temporary CCT
       CRGBPalette16 _palT;        // temporary palette
       uint8_t       _prevPaletteBlends; // number of previous palette blends (there are max 255 blends possible)
-      uint8_t       _modeP;       // previous mode/effect
+      uint16_t       _modeP;       // previous mode/effect
       //uint16_t      _aux0, _aux1; // previous mode/effect runtime data
       //uint32_t      _step, _call; // previous mode/effect runtime data
       //byte         *_data;        // previous mode/effect runtime data
@@ -616,7 +623,7 @@ typedef struct Segment {
     void    setCCT(uint16_t k);
     void    setOpacity(uint8_t o);
     void    setOption(uint8_t n, bool val);
-    void    setMode(uint8_t fx, bool loadDefaults = false, bool sliderDefaultsOnly = false);
+    void    setMode(uint16_t fx, bool loadDefaults = false, bool sliderDefaultsOnly = false);
     void    setPalette(uint8_t pal);
     uint8_t differs(Segment& b) const;
     void    refreshLightCapabilities(void);
@@ -659,7 +666,7 @@ typedef struct Segment {
       }
     }
 
-    uint8_t  currentMode(uint8_t modeNew);
+    uint16_t currentMode(uint16_t modeNew);
     uint32_t currentColor(uint8_t slot, uint32_t colorNew);
     CRGBPalette16 &loadPalette(CRGBPalette16 &tgt, uint8_t pal) const;
     void     setCurrentPalette(void);
@@ -862,10 +869,10 @@ class WS2812FX {  // 96 bytes
   typedef uint16_t (*mode_ptr)(void); // pointer to mode function
   typedef void (*show_callback)(void); // pre show callback
   typedef struct ModeData {
-    uint8_t     _id;   // mode (effect) id
+    uint16_t    _id;   // mode (effect) id
     mode_ptr    _fcn;  // mode (effect) function
     const char *_data; // mode (effect) name and its UI control data
-    ModeData(uint8_t id, uint16_t (*fcn)(void), const char *data) : _id(id), _fcn(fcn), _data(data) {}
+    ModeData(uint16_t id, uint16_t (*fcn)(void), const char *data) : _id(id), _fcn(fcn), _data(data) {}
   } mode_data_t;
 
   static WS2812FX* instance;
@@ -944,7 +951,7 @@ class WS2812FX {  // 96 bytes
       finalizeInit(),
       waitUntilIdle(void),   // WLEDMM
       service(void),
-      setMode(uint8_t segid, uint8_t m),
+      setMode(uint8_t segid, uint16_t m),
       setColor(uint8_t slot, uint32_t c),
       setCCT(uint16_t k),
       setBrightness(uint8_t b, bool direct = false),
@@ -964,7 +971,7 @@ class WS2812FX {  // 96 bytes
 
     void setColor(uint8_t slot, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0) { setColor(slot, RGBW32(r,g,b,w)); }
     void fill(uint32_t c) { for (int i = 0; i < getLengthTotal(); i++) setPixelColor(i, c); } // fill whole strip with color (inline)
-    void addEffect(uint8_t id, mode_ptr mode_fn, const char *mode_name); // add effect to the list; defined in FX.cpp
+    void addEffect(uint16_t id, mode_ptr mode_fn, const char *mode_name); // add effect to the list; defined in FX.cpp
     void setupEffectData(void); // add default effects to the list; defined in FX.cpp
 
     // outsmart the compiler :) by correctly overloading
@@ -1004,7 +1011,7 @@ class WS2812FX {  // 96 bytes
     inline uint8_t getCurrSegmentId(void)  const { return _segment_index; }
     inline uint8_t getMainSegmentId(void)  const { return _mainSegment; }
     inline uint8_t getTargetFps()  const { return _targetFps; }
-    inline uint8_t getModeCount()  const { return _modeCount; }
+    inline uint16_t getModeCount()  const { return _modeCount; }
     inline static constexpr uint8_t getMaxSegments(void)  { return MAX_NUM_SEGMENTS; }  // returns maximum number of supported segments (fixed value)
     inline static constexpr uint8_t getPaletteCount()  { return 13 + GRADIENT_PALETTE_COUNT; }  // will only return built-in palette count
 
@@ -1031,8 +1038,7 @@ class WS2812FX {  // 96 bytes
     inline uint32_t segColor(uint8_t i)  const { return _colors_t[i]; }
 
     const char *
-      getModeData(uint8_t id = 0)  const { return (id && id<_modeCount) ? _modeData[id] : PSTR("Solid"); }
-
+    getModeData(uint16_t id = 0)  const { return (id && id<_modeCount) ? _modeData[id] : PSTR("Solid"); }
     const char **
       getModeDataSrc(void) { return &(_modeData[0]); } // vectors use arrays for underlying data
 
@@ -1144,7 +1150,7 @@ class WS2812FX {  // 96 bytes
       bool _triggered            : 1;
     };
 
-    uint8_t                  _modeCount;
+    uint16_t                 _modeCount;
     std::vector<mode_ptr>    _mode;     // SRAM footprint: 4 bytes per element
     std::vector<const char*> _modeData; // mode (effect) name and its slider control data array
 

@@ -37,7 +37,7 @@ void notify(byte callMode, bool followUp)
   udpOut[5] = B(col);
   udpOut[6] = nightlightActive;
   udpOut[7] = nightlightDelayMins;
-  udpOut[8] = mainseg.mode;
+  udpOut[8] = min(mainseg.mode, uint16_t(255));  // WLEDMM toDo: need workaround for 16bit mode numbers - critical as this affects webUI
   udpOut[9] = mainseg.speed;
   udpOut[10] = W(col);
   //compatibilityVersionByte:
@@ -107,7 +107,7 @@ void notify(byte callMode, bool followUp)
     udpOut[8 +ofs] = selseg.offset & 0xFF;
     udpOut[9 +ofs] = selseg.options & 0x8F; //only take into account selected, mirrored, on, reversed, reverse_y (for 2D); ignore freeze, reset, transitional
     udpOut[10+ofs] = selseg.opacity;
-    udpOut[11+ofs] = selseg.mode;
+    udpOut[11+ofs] = min(selseg.mode, uint16_t(255));  // WLEDMM toDo: need workaround for 16bit mode numbers
     udpOut[12+ofs] = selseg.speed;
     udpOut[13+ofs] = selseg.intensity;
     udpOut[14+ofs] = selseg.palette;
@@ -431,7 +431,7 @@ void handleNotifications()
           selseg.options = (selseg.options & 0x0071U) | (udpIn[9 +ofs] & 0x0E); // ignore selected, freeze, reset & transitional
           selseg.setOpacity(udpIn[10+ofs]);
           if (applyEffects) {
-            strip.setMode(id,  udpIn[11+ofs]);
+            strip.setMode(id,  udpIn[11+ofs]);        // WLEDMM ToDo: need to add support for 16bit effect IDs
             selseg.speed     = udpIn[12+ofs];
             selseg.intensity = udpIn[13+ofs];
             selseg.palette   = udpIn[14+ofs];
@@ -472,7 +472,7 @@ void handleNotifications()
         for (size_t i = 0; i < strip.getSegmentsNum(); i++) {
           Segment& seg = strip.getSegment(i);
           if (!seg.isActive() || !seg.isSelected()) continue;
-          seg.setMode(udpIn[8]);
+          seg.setMode(udpIn[8]);                             // WLEDMM ToDo: need to add support for 16bit effect IDs
           seg.speed = udpIn[9];
           if (version > 2) seg.intensity = udpIn[16];
           if (version > 4) seg.setPalette(udpIn[19]);
