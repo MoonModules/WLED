@@ -126,7 +126,6 @@ void initServer()
     request->send(response);
     //request->send_P(200, "text/html", PAGE_liveviewws);
   });
-  #ifndef WLED_DISABLE_2D
   server.on("/liveview2D", HTTP_GET, [](AsyncWebServerRequest *request){
     if (handleIfNoneMatchCacheHeader(request)) return;
     AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", PAGE_liveviewws2D, PAGE_liveviewws2D_length);
@@ -135,7 +134,6 @@ void initServer()
     request->send(response);
     //request->send_P(200, "text/html", PAGE_liveviewws);
   });
-  #endif
 #else
   server.on("/liveview", HTTP_GET, [](AsyncWebServerRequest *request){
     if (handleIfNoneMatchCacheHeader(request)) return;
@@ -689,9 +687,7 @@ void serveSettings(AsyncWebServerRequest* request, bool post)
 #endif
     case 8:   response = request->beginResponse_P(200, "text/html", PAGE_settings_um,   PAGE_settings_um_length);   break;
     case 9:   response = request->beginResponse_P(200, "text/html", PAGE_update,        PAGE_update_length);        break;
-#ifndef WLED_DISABLE_2D
     case 10:  response = request->beginResponse_P(200, "text/html", PAGE_settings_2D,   PAGE_settings_2D_length);   break;
-#endif
     case 251: {
       correctPIN = !strlen(settingsPIN); // lock if a pin is set
       createEditHandler(correctPIN);

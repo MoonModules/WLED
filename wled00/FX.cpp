@@ -139,9 +139,11 @@ static uint16_t mode_oops(void) {
   const uint16_t width  = SEGMENT.is2D() ? SEGMENT.virtualWidth() : SEGMENT.virtualLength();
   const uint16_t height = SEGMENT.virtualHeight();
 
+#ifndef WLED_DISABLE_2D
   // 2D fallback: akemi in blue
   if (SEGMENT.is2D() && (width > 3) && (height > 3))
     return mode_2DAkemi_core(false);
+#endif
 
   // 1D fallback: rainbow
   return mode_rainbow_cycle();

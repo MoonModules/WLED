@@ -747,7 +747,6 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     releaseJSONBufferLock();
   }
 
-  #ifndef WLED_DISABLE_2D
   //2D panels
   if (subPage == 10)
   {
@@ -796,7 +795,6 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       Segment::maxHeight = 1;
     }
   }
-  #endif
 
   if ((subPage == 2) || (subPage == 3) || (subPage == 10)) {
     suspendStripService = false; // WLEDMM release lock

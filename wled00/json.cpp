@@ -66,7 +66,6 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   if (id >= strip.getMaxSegments()) return false;
 
   //WLEDMM: add compatibility for SR presets
-  #ifndef WLED_DISABLE_2D
     // Serial.printf("before %d: %s %s %s %s\n", id, elem["start"].as<std::string>().c_str(), elem["stop"].as<std::string>().c_str(), elem["startY"].as<std::string>().c_str(), elem["stopY"].as<std::string>().c_str());
   if (strip.isMatrix && !elem["start"].isNull() && !elem["stop"].isNull() && elem["startY"].isNull() && elem["stopY"].isNull()) {
     uint16_t start1=elem["start"], stop1=elem["stop"];
@@ -76,7 +75,6 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     elem["stopY"]= Segment::maxWidth?((stop1-1) / Segment::maxWidth) + 1:0;
     // Serial.printf("after %s %s %s %s\n", elem["start"].as<std::string>().c_str(), elem["stop"].as<std::string>().c_str(), elem["startY"].as<std::string>().c_str(), elem["stopY"].as<std::string>().c_str());
   }
-  #endif
   if (!elem["c1x"].isNull()) elem["c1"] = elem["c1x"];
   if (!elem["c2x"].isNull()) elem["c2"] = elem["c2x"];
   if (!elem["c3x"].isNull()) elem["c3"] = elem["c3x"];
@@ -276,21 +274,17 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   }
   #endif
 
-  #ifndef WLED_DISABLE_2D
   bool reverse  = seg.reverse;
   bool mirror   = seg.mirror;
-  #endif
   seg.selected  = elem["sel"] | seg.selected;
   seg.reverse   = elem["rev"] | seg.reverse;
   seg.mirror    = elem["mi"]  | seg.mirror;
-  #ifndef WLED_DISABLE_2D
   bool reverse_y = seg.reverse_y;
   bool mirror_y  = seg.mirror_y;
   seg.reverse_y  = elem["rY"]  | seg.reverse_y;
   seg.mirror_y   = elem["mY"]  | seg.mirror_y;
   seg.transpose  = elem[F("tp")] | seg.transpose;
   if (seg.is2D() && (seg.map1D2D == M12_pArc || seg.map1D2D == M12_sCircle) && (reverse != seg.reverse || reverse_y != seg.reverse_y || mirror != seg.mirror || mirror_y != seg.mirror_y)) seg.markForBlank(); // clear entire segment (in case of Arc 1D to 2D expansion) WLEDMM: also Circle
-  #endif
 
   byte fx = seg.mode;
   byte last = strip.getModeCount();
@@ -676,13 +670,11 @@ void serializeSegment(JsonObject& root, Segment& seg, byte id, bool forPreset, b
   root["sel"] = seg.isSelected();
   root["rev"] = seg.reverse;
   root["mi"]  = seg.mirror;
-  #ifndef WLED_DISABLE_2D
   if (strip.isMatrix) {
     root["rY"] = seg.reverse_y;
     root["mY"] = seg.mirror_y;
     root[F("tp")] = seg.transpose;
   }
-  #endif
   root["o1"]  = seg.check1;
   root["o2"]  = seg.check2;
   root["o3"]  = seg.check3;
@@ -924,13 +916,11 @@ void serializeInfo(JsonObject root)
   //leds[F("actseg")] = strip.getActiveSegmentsNum();
   //leds[F("seglock")] = false; //might be used in the future to prevent modifications to segment config
 
-  #ifndef WLED_DISABLE_2D
   if (strip.isMatrix) {
     JsonObject matrix = leds.createNestedObject("matrix");
     matrix["w"] = Segment::maxWidth;
     matrix["h"] = Segment::maxHeight;
   }
-  #endif
 
   uint8_t totalLC = 0;
   JsonArray lcarr = leds.createNestedArray(F("seglc"));
@@ -1572,18 +1562,16 @@ bool serveLiveLeds(AsyncWebServerRequest* request, uint32_t wsClient)
 
   uint16_t used = strip.getLengthTotal();
   uint16_t n = (used -1) /MAX_LIVE_LEDS +1; //only serve every n'th LED if count over MAX_LIVE_LEDS
-#ifndef WLED_DISABLE_2D
   if (strip.isMatrix) {
-    // ignore anything behid matrix (i.e. extra strip)
+    // ignore anything behind matrix (i.e. extra strip)
     used = Segment::maxWidth*Segment::maxHeight; // always the size of matrix (more or less than strip.getLengthTotal())
     n = 1;
     if (used > MAX_LIVE_LEDS) n = 2;
     if (used > MAX_LIVE_LEDS*4) n = 4;
   }
-#endif
 
   DynamicBuffer buffer(9 + (9*MAX_LIVE_LEDS) + 7 + 5 + 6 + 5 + 6 + 5 + 2);  
-  char* buf = buffer.data();      // assign buffer for oappnd() functions
+  char* buf = buffer.data();      // assign buffer for oappend() functions
   strncpy_P(buffer.data(), PSTR("{\"leds\":["), buffer.size());
   buf += 9; // sizeof(PSTR()) from last line
 

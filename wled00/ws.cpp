@@ -200,7 +200,6 @@ static bool sendLiveLedsWs(uint32_t wsClient)  // WLEDMM added "static"
   size_t used;// = strip.getLengthTotal();
   size_t n;// = ((used -1)/MAX_LIVE_LEDS_WS) +1; //only serve every n'th LED if count over MAX_LIVE_LEDS_WS
   //WLEDMM skipping lines done right 
-  #ifndef WLED_DISABLE_2D
     if (strip.isMatrix) {
       used = Segment::maxWidth * Segment::maxHeight;
       if (used > MAX_LIVE_LEDS_WS*4)
@@ -213,10 +212,6 @@ static bool sendLiveLedsWs(uint32_t wsClient)  // WLEDMM added "static"
       used = strip.getLengthTotal();
       n = ((used -1)/MAX_LIVE_LEDS_WS) +1; //only serve every n'th LED if count over MAX_LIVE_LEDS_WS
     }
-  #else
-    used = strip.getLengthTotal();
-    n = ((used -1)/MAX_LIVE_LEDS_WS) +1; //only serve every n'th LED if count over MAX_LIVE_LEDS_WS
-  #endif
   size_t pos = (strip.isMatrix ? 4 : 2);
   size_t bufSize = pos + (used/n)*3;
   
@@ -244,24 +239,20 @@ static bool sendLiveLedsWs(uint32_t wsClient)  // WLEDMM added "static"
 
   buffer[0] = 'L';
   buffer[1] = 1; //version
-  #ifndef WLED_DISABLE_2D
     if (strip.isMatrix) {
       buffer[1] = 2; //version
       //WLEDMM skipping lines done right 
       buffer[2] = MIN(Segment::maxWidth/n, (uint16_t) 255); // WLEDMM prevent overflow on buffer type uint8_t
       buffer[3] = MIN(Segment::maxHeight/n, (uint16_t) 255);
     }
-  #endif
 
   uint8_t stripBrightness = strip.getBrightness();
   for (size_t i = 0; pos < bufSize -2; i += n)
   {
   //WLEDMM skipping lines done right 
-  #ifndef WLED_DISABLE_2D
      if (strip.isMatrix && n > 1) {
       if ((i/Segment::maxWidth)%(n)) i += Segment::maxWidth * (n-1);
     }
-  #endif
     //uint32_t c = restoreColorLossy(strip.getPixelColor(i), stripBrightness); // WLEDMM full bright preview - does _not_ recover ABL reductions
     uint32_t c = strip.getPixelColorRestored(i);
     // WLEDMM begin: preview with color gamma correction

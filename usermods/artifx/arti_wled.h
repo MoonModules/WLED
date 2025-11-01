@@ -194,12 +194,10 @@ float ARTI::arti_external_function(uint8_t function, float par1, float par2, flo
         SEGMENT.drawLine(par1, par2, par3, par4, par5);
         return floatNull;
       case F_drawArc:
-        #ifndef WLED_DISABLE_2D
           if (par5 == floatNull)
             SEGMENT.drawArc(par1, par2, par3, par4);
           else
             SEGMENT.drawArc(par1, par2, par3, par4, par5); //fillColor
-        #endif
         return floatNull;
       case F_constrain:
         return constrain(par1, par2, par3);
@@ -214,11 +212,9 @@ float ARTI::arti_external_function(uint8_t function, float par1, float par2, flo
       case F_millis:
         return millis();
 
-#ifndef WLED_DISABLE_2D
       case F_jsonToPixels:
         SEGMENT.jsonToPixels(SEGMENT.name,(uint8_t)par1);
         return floatNull;
-#endif
 
       default: {}
     }
