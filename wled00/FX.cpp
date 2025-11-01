@@ -2680,7 +2680,6 @@ uint16_t ripple_base()
       uint8_t propF = propagation & 0xFF;
       uint8_t amp = (ripplestate < 17) ? triwave8((ripplestate-1)*8) : map(ripplestate,17,255,255,2);
 
-      #ifndef WLED_DISABLE_2D
       if (SEGMENT.is2D()) {
         propI /= 2;
         uint16_t cx = rippleorigin >> 8;
@@ -2690,7 +2689,6 @@ uint16_t ripple_base()
         if ((propI > 0) && (unsigned(cx + propI) < cols) && (unsigned(cy) < rows))  // WLEDMM
           SEGMENT.drawCircle(cx, cy, propI, color_blend(SEGMENT.getPixelColorXY(cx + propI, cy), col, mag), true);
       } else
-      #endif
       {
         int left = rippleorigin - propI -1;
         for (int v = left; v < left +4; v++) {

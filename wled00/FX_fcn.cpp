@@ -295,14 +295,9 @@ void Segment::resetIfRequired() {
 void Segment::setUpLeds() {
   // deallocation happens in resetIfRequired() as it is called when segment changes or in destructor
   if (Segment::_globalLeds) {
-    #ifndef WLED_DISABLE_2D
     ledsrgb = &Segment::_globalLeds[start + startY*Segment::maxWidth];
     ledsrgbSize = length() * sizeof(CRGB); // also set this when using global leds.
     //USER_PRINTF("\nsetUpLeds() Global LEDs: startX=%d stopx=%d startY=%d stopy=%d maxwidth=%d; length=%d, size=%d\n\n", start, stop, startY, stopY, Segment::maxWidth, length(), ledsrgbSize/3);
-    #else
-    ledsrgb = &Segment::_globalLeds[start];
-    ledsrgbSize = length() * sizeof(CRGB); // also set this when using global leds.
-    #endif
   } else if (length() > 0) { //WLEDMM we always want a new buffer //softhack007 quickfix - avoid malloc(0) which is undefined behaviour (should not happen, but i've seen it)
     //#if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && defined(WLED_USE_PSRAM)
     //if (psramFound())
@@ -516,9 +511,7 @@ void Segment::handleTransition() {
 void Segment::setUp(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, uint16_t ofs, uint16_t i1Y, uint16_t i2Y) {
   //return if neither bounds nor grouping have changed
   bool boundsUnchanged = (start == i1 && stop == i2);
-  #ifndef WLED_DISABLE_2D
   if (Segment::maxHeight>1) boundsUnchanged &= (startY == i1Y && stopY == i2Y); // 2D
-  #endif
   if (boundsUnchanged
       && (!grp || (grouping == grp && spacing == spc))
       && (ofs == UINT16_MAX || ofs == offset)) return;
@@ -535,12 +528,10 @@ void Segment::setUp(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, uint16_t
   stop = i2 > Segment::maxWidth*Segment::maxHeight ? min(i2,strip.getLengthTotal()) : (i2 > Segment::maxWidth ? Segment::maxWidth : max((uint16_t)1,i2));  // WLEDMM: use native min/max
   startY = 0;
   stopY  = 1;
-  #ifndef WLED_DISABLE_2D
   if (Segment::maxHeight>1) { // 2D
     if (i1Y < Segment::maxHeight) startY = i1Y;
     stopY = i2Y > Segment::maxHeight ? Segment::maxHeight : max((uint16_t)1,i2Y);         // WLEDMM: use native min/max
   }
-  #endif
   if (grp) {
     grouping = grp;
     spacing = spc;
@@ -648,7 +639,6 @@ void Segment::setPalette(uint8_t pal) {
 
 uint16_t Segment::nrOfVStrips() const {
   uint16_t vLen = 1;
-#ifndef WLED_DISABLE_2D
   if (is2D()) {
     switch (map1D2D) {
       case M12_pBar:
@@ -662,7 +652,6 @@ uint16_t Segment::nrOfVStrips() const {
         break;
     }
   }
-#endif
   return vLen;
 }
 
@@ -819,7 +808,6 @@ void Segment::deletejMap() {
 
 
 // Constants for mapping mode "Pinwheel"
-#ifndef WLED_DISABLE_2D
 constexpr int Pinwheel_Steps_Small = 72;       // no holes up to 16x16
 constexpr int Pinwheel_Size_Small  = 16;       // larger than this -> use "Medium"
 constexpr int Pinwheel_Steps_Medium = 192;     // no holes up to 32x32
@@ -862,11 +850,10 @@ static int getPinwheelLength(int vW, int vH) {
   // else
   return Pinwheel_Steps_LL;
 }
-#endif
+
 
 // 1D strip
 uint16_t Segment::calc_virtualLength() const {
-#ifndef WLED_DISABLE_2D
   if (is2D()) {
     uint16_t vW = calc_virtualWidth();
     uint16_t vH = calc_virtualHeight();
@@ -905,7 +892,6 @@ uint16_t Segment::calc_virtualLength() const {
     }
     return vLen;
   }
-#endif
   uint16_t groupLen = groupLength();
   uint16_t vLength = (length() + groupLen - 1) / groupLen;
   if (mirror && width() > 1) vLength = (vLength + 1) /2;  // divide by 2 if mirror, leave at least a single LED // WLEDMM bugfix for pseudo 2d strips
@@ -941,14 +927,11 @@ static void xyFromBlock(uint16_t &x,uint16_t &y, uint16_t i, uint16_t vW, uint16
 void IRAM_ATTR_YN WLED_O2_ATTR __attribute__((hot)) Segment::setPixelColor(int i, uint32_t col) //WLEDMM: IRAM_ATTR conditionally
 {
   if (!isActive()) return; // not active
-#ifndef WLED_DISABLE_2D
   int vStrip = i>>16; // hack to allow running on virtual strips (2D segment columns/rows)
-#endif
   i &= 0xFFFF;
 
   if (i >= virtualLength() || i<0) return;  // if pixel would fall out of segment just exit
 
-#ifndef WLED_DISABLE_2D
   if (is2D()) {
     uint16_t vH = virtualHeight();  // segment height in logical pixels
     uint16_t vW = virtualWidth();
@@ -1129,7 +1112,6 @@ void IRAM_ATTR_YN WLED_O2_ATTR __attribute__((hot)) Segment::setPixelColor(int i
       return;
     }
   }
-#endif
 
   if (ledsrgb) ledsrgb[i] = col;
 
@@ -1215,12 +1197,9 @@ void Segment::setPixelColor(float i, uint32_t col, bool aa)
 uint32_t WLED_O2_ATTR __attribute__((hot)) Segment::getPixelColor(int i) const
 {
   if (!isActive()) return 0; // not active
-#ifndef WLED_DISABLE_2D
   int vStrip = i>>16;
-#endif
   i &= 0xFFFF;
 
-#ifndef WLED_DISABLE_2D
   if (is2D()) {
     uint16_t vH = virtualHeight();  // segment height in logical pixels
     uint16_t vW = virtualWidth();
@@ -1310,7 +1289,6 @@ uint32_t WLED_O2_ATTR __attribute__((hot)) Segment::getPixelColor(int i) const
       }
     return 0;
   }
-#endif
 
   if (ledsrgb) return RGBW32(ledsrgb[i].r, ledsrgb[i].g, ledsrgb[i].b, 0);
 
@@ -1533,7 +1511,6 @@ void __attribute__((hot)) Segment::fadeToBlackBy(uint8_t fadeBy) {
  */
 void __attribute__((hot)) Segment::blur(uint8_t blur_amount, bool smear) {
   if (!isActive() || blur_amount == 0) return; // optimization: 0 means "don't blur"
-#ifndef WLED_DISABLE_2D
   if (is2D()) {
     // compatibility with 2D
     const uint_fast32_t cols = virtualWidth();
@@ -1542,7 +1519,6 @@ void __attribute__((hot)) Segment::blur(uint8_t blur_amount, bool smear) {
     for (uint_fast32_t k = 0; k < cols; k++) blurCol(k, blur_amount, smear); // blur all columns
     return;
   }
-#endif
   uint8_t keep = smear ? 255 : 255 - blur_amount;
   uint8_t seep = blur_amount >> 1;
   unsigned vlength = virtualLength();
@@ -2316,24 +2292,15 @@ void WS2812FX::resetSegments(bool boundsOnly) { //WLEDMM add boundsonly
   DEBUG_PRINTF("resetSegments %d %dx%d\n", boundsOnly, Segment::maxWidth, Segment::maxHeight);
   if (!boundsOnly) {
     _segments.clear(); // destructs all Segment as part of clearing
-    #ifndef WLED_DISABLE_2D
     segment seg = isMatrix ? Segment(0, Segment::maxWidth, 0, Segment::maxHeight) : Segment(0, _length);
-    #else
-    segment seg = Segment(0, _length);
-    #endif
     _segments.push_back(seg);
     _mainSegment = 0;
   } else { //WLEDMM boundsonly
     for (segment &seg : _segments) {
-      #ifndef WLED_DISABLE_2D
       seg.start = 0;
       seg.stop = Segment::maxWidth;
       seg.startY = 0;
       seg.stopY = Segment::maxHeight;
-      #else
-      seg.start = 0;
-      seg.stop = _length;
-      #endif
       seg.allocLeds();
     }
   }
@@ -2345,14 +2312,12 @@ void WS2812FX::makeAutoSegments(bool forceReset) {
     uint16_t segStops [MAX_NUM_SEGMENTS] = {0};
     size_t s = 0;
 
-    #ifndef WLED_DISABLE_2D
     // 2D segment is the 1st one using entire matrix
     if (isMatrix) {
       segStarts[0] = 0;
       segStops[0]  = Segment::maxWidth*Segment::maxHeight;
       s++;
     }
-    #endif
 
     for (size_t i = s; i < busses.getNumBusses(); i++) {
       Bus* b = busses.getBus(i);
@@ -2360,10 +2325,8 @@ void WS2812FX::makeAutoSegments(bool forceReset) {
       segStarts[s] = b->getStart();
       segStops[s]  = segStarts[s] + b->getLength();
 
-      #ifndef WLED_DISABLE_2D
       if (isMatrix && segStops[s] <= Segment::maxWidth*Segment::maxHeight) continue; // ignore buses comprising matrix
       if (isMatrix && segStarts[s] < Segment::maxWidth*Segment::maxHeight) segStarts[s] = Segment::maxWidth*Segment::maxHeight;
-      #endif
 
       //check for overlap with previous segments
       for (size_t j = 0; j < s; j++) {
@@ -2380,11 +2343,9 @@ void WS2812FX::makeAutoSegments(bool forceReset) {
     _segments.clear();
     _segments.reserve(s); // prevent reallocations
     // there is always at least one segment (but we need to differentiate between 1D and 2D)
-    #ifndef WLED_DISABLE_2D
     if (isMatrix)
       _segments.push_back(Segment(0, Segment::maxWidth, 0, Segment::maxHeight));
     else
-    #endif
       _segments.push_back(Segment(segStarts[0], segStops[0]));
     for (size_t i = 1; i < s; i++) {
       _segments.push_back(Segment(segStarts[i], segStops[i]));
@@ -2396,17 +2357,12 @@ void WS2812FX::makeAutoSegments(bool forceReset) {
     //expand the main seg to the entire length, but only if there are no other segments, or reset is forced
     else if (getActiveSegmentsNum() == 1) {
       size_t i = getLastActiveSegmentId();
-      #ifndef WLED_DISABLE_2D
       _segments[i].start  = 0;
       _segments[i].stop   = Segment::maxWidth;
       _segments[i].startY = 0;
       _segments[i].stopY  = Segment::maxHeight;
       _segments[i].grouping = 1;
       _segments[i].spacing  = 0;
-      #else
-      _segments[i].start = 0;
-      _segments[i].stop  = _length;
-      #endif
     }
   }
   _mainSegment = 0;
@@ -2418,7 +2374,6 @@ void WS2812FX::fixInvalidSegments() {
   //make sure no segment is longer than total (sanity check)
   for (size_t i = getSegmentsNum()-1; i > 0; i--) {
     if (isMatrix) {
-    #ifndef WLED_DISABLE_2D
       if (_segments[i].start >= Segment::maxWidth * Segment::maxHeight) {
         // 1D segment at the end of matrix
         if (_segments[i].start >= _length || _segments[i].startY > 0 || _segments[i].stopY > 1) { _segments.erase(_segments.begin()+i); continue; }
@@ -2428,7 +2383,6 @@ void WS2812FX::fixInvalidSegments() {
       if (_segments[i].start >= Segment::maxWidth || _segments[i].startY >= Segment::maxHeight) { _segments.erase(_segments.begin()+i); continue; }
       if (_segments[i].stop  >  Segment::maxWidth)  _segments[i].stop  = Segment::maxWidth;
       if (_segments[i].stopY >  Segment::maxHeight) _segments[i].stopY = Segment::maxHeight;
-    #endif
     } else {
       if (_segments[i].start >= _length) { _segments.erase(_segments.begin()+i); continue; }
       if (_segments[i].stop  >  _length) _segments[i].stop = _length;
