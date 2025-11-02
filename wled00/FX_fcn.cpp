@@ -292,7 +292,7 @@ void Segment::resetIfRequired() {
   }
 }
 
-void Segment::setUpLeds() {
+void Segment::setUpLeds(bool blank, bool force) {
   // deallocation happens in resetIfRequired() as it is called when segment changes or in destructor
   if (Segment::_globalLeds) {
     ledsrgb = &Segment::_globalLeds[start + startY*Segment::maxWidth];
@@ -307,6 +307,7 @@ void Segment::setUpLeds() {
     allocLeds(); //WLEDMM
     //USER_PRINTF("\nsetUpLeds() local LEDs: startX=%d stopx=%d startY=%d stopy=%d maxwidth=%d; length=%d, size=%d\n\n", start, stop, startY, stopY, Segment::maxWidth, length(), ledsrgbSize/3);
   }
+  if (blank && (force || !Segment::_globalLeds)) fill(BLACK); // HB presets support - don't clear segment LEDs when global buffer is used.
 }
 
 CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) const {

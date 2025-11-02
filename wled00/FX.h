@@ -640,7 +640,7 @@ typedef struct Segment {
       */
     inline void markForReset(void) { reset = true; }  // setOption(SEG_OPTION_RESET, true)
     inline void markForBlank(void) { needsBlank = true; } // WLEDMM serialize "blank" requests, avoid parallel drawing from different task
-    void setUpLeds(void);   // set up leds[] array for loseless getPixelColor()
+    void setUpLeds(bool blank = false, bool force = false);   // set up leds[] array for loseless getPixelColor(); blank => fill(BLACK); force => create buffer even when global leds are used (ParticleFX)
 
     // transition functions
     void     startTransition(uint16_t dur); // transition has to start before actual segment values change
