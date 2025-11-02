@@ -10,12 +10,10 @@
 #include "FX.h"
 #include "fcn_declare.h"
 
-#ifdef WLEDMM_FASTPATH
 #undef SEGMENT
 #undef SEGENV
-#define SEGMENT (*strip._currentSeg) // saves us many calls to strip._segments[strip.getCurrSegmentId()]
+#define SEGMENT (*strip._currentSeg) // saves us many calls to strip._segments[strip.getCurrSegmentId()], and makes the firmware a bit smaller due to removed method calls.
 #define SEGENV SEGMENT
-#endif
 
 #if !(defined(WLED_DISABLE_PARTICLESYSTEM2D) && defined(WLED_DISABLE_PARTICLESYSTEM1D))
   #include "FXparticleSystem.h"

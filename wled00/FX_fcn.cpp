@@ -1878,9 +1878,7 @@ void WS2812FX::service() {
   _isServicing = true;
   _segment_index = 0;
   for (segment &seg : _segments) {
-#ifdef WLEDMM_FASTPATH
     _currentSeg = &seg;
-#endif
     // reset the segment runtime data if needed
     seg.resetIfRequired();
 
