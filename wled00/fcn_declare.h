@@ -483,6 +483,7 @@ uint8_t cos8_t(uint8_t theta);
 float sin_approx(float theta); // uses integer math (converted to float), accuracy +/-0.0015 (compared to sinf())
 float cos_approx(float theta);
 float tan_approx(float x);
+uint32_t sqrt32_bw(uint32_t x);
 //float atan2_t(float y, float x);
 //float acos_t(float x);
 //float asin_t(float x);

@@ -110,6 +110,30 @@ float tan_approx(float x) {
   return res;
 }
 
+// bit-wise integer square root calculation (exact) by @dedehai
+uint32_t sqrt32_bw(uint32_t x) {
+  uint32_t res = 0;
+  uint32_t bit;
+  uint32_t num = x; // use 32bit for faster calculation
+
+  if(num < 1 << 10)  bit = 1 << 10; // speed optimization for small numbers < 32^2
+  else if (num < 1 << 20) bit = 1 << 20; // speed optimization for medium numbers < 1024^2
+  else bit = 1 << 30; // start with highest power of 4 <= 2^32
+
+  while (bit > num) bit >>= 2; // reduce iterations
+
+  while (bit != 0) {
+    if (num >= res + bit) {
+      num -= res + bit;
+      res = (res >> 1) + bit;
+    } else {
+      res >>= 1;
+    }
+    bit >>= 2;
+  }
+  return res;
+}
+
 #if 0  // WLEDMM we prefer libm functions that are accurate and fast.
 #define ATAN2_CONST_A 0.1963f
 #define ATAN2_CONST_B 0.9817f
