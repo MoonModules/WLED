@@ -951,7 +951,7 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
 
     int numBits = (xoffset+1 < font.width_bytes) ? 8: (w - 8*(font.width_bytes-1) ); // 8 for full bytes, remaining bits for last partial byte
     for (int j = 0; j<numBits; j++) { // paint character - single row of pixels (width)
-      int x0 = x + (w-1) - j + pixels_offset;
+      int x0 = x + (numBits-1) - j + pixels_offset;
       if (unsigned(x0) < cols) { // WLEDMM same as "x0 > 0 && x0 < cols"
         if ((bits>>(j+(8-numBits))) & 0x01) { // bit set & drawing on-screen
         setPixelColorXY(x0, y0, fgCol);
