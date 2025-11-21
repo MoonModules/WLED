@@ -9,6 +9,8 @@
 #undef WLED_ENABLE_FULL_FONTS
 #endif
 
+// tiny 3x5 (reduced)
+#include "src/font/clear_font_3x5.h"
 
 // pull in all fonts
 #include "src/font/console_font_4x6.h"
@@ -16,6 +18,13 @@
 #include "src/font/console_font_5x12.h"
 #include "src/font/console_font_6x8.h"
 #include "src/font/console_font_7x9.h"
+
+// Large
+#include "src/font/console_font_12x16.h" // 2 bytes per row
+#include "src/font/console_font_12x24.h" // 2 bytes per row
+#include "src/font/console_font_16x32.h" // 2 bytes per row
+// Ultra-Large
+#include "src/font/console_font_25x57.h" // 4 bytes per row
 
 
 // fontInfo struct returned by getFontInfo

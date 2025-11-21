@@ -46,7 +46,16 @@
 **
 */
 
-static const unsigned char clear_3x5[] PROGMEM = {
+#if !defined(WLED_ENABLE_FULL_FONTS)
+constexpr uint16_t clear_font_3x5_first = 32; // index 0 = code 32 ""
+constexpr uint16_t clear_font_3x5_last = 126; // last index = code 126 "~"
+#else
+// reduced font, no extended part
+constexpr uint16_t clear_font_3x5_first = 32; // index 0 = code 32 ""
+constexpr uint16_t clear_font_3x5_last = 126; // last index = code 126 "~"
+#endif
+
+static const unsigned char clear_font_3x5[] PROGMEM = {
     0x00, 0x00, 0x00, 0x00, 0x00,       /* 0x20 space */
     0x80, 0x80, 0x80, 0x00, 0x80,       /* 0x21 exclam */
     0xA0, 0xA0, 0x00, 0x00, 0x00,       /* 0x22 quotedbl */
@@ -142,6 +151,8 @@ static const unsigned char clear_3x5[] PROGMEM = {
     0x80, 0x80, 0x00, 0x80, 0x80,       /* 0x7C bar */
     0xC0, 0x40, 0x20, 0x40, 0xC0,       /* 0x7D braceright */
     0x60, 0xC0, 0x00, 0x00, 0x00,       /* 0x7E asciitilde */
+
+#if 0 // WLEDMM extended ASCII part disabled: seems to be from an unknown codepage, plus lots of missing glyphs 
     0x80, 0x00, 0x80, 0x80, 0x80,       /* 0xA1 exclamdown */
     0x40, 0xE0, 0x80, 0xE0, 0x40,       /* 0xA2 cent */
     0x60, 0x40, 0xE0, 0x40, 0xE0,       /* 0xA3 sterling */
@@ -229,4 +240,5 @@ static const unsigned char clear_3x5[] PROGMEM = {
     0xC0, 0x60, 0x40, 0xA0, 0x40,       /* 0xF5 otilde */
     0xA0, 0x00, 0x40, 0xA0, 0x40,       /* 0xF6 odieresis */
     0x40, 0x00, 0xE0, 0x00, 0x40,       /* 0xF7 divide */
+#endif
 };
