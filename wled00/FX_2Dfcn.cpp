@@ -931,7 +931,7 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
   uint32_t bgCol = SEGCOLOR(1);
 
   //if (w<5 || w>6 || h!=8) return;
-  if (drawShadow) w++; // one more column for shadow on right side
+  if (drawShadow && ((w % 8) != 0)) w++; // one more column for shadow on right side
   for (int i = 0; i<h; i++) { //  // paint character - top down by row (height)
     int y0 = y + i;
     if (y0 < 0) continue; // drawing off-screen
