@@ -9,23 +9,35 @@
 #undef WLED_ENABLE_FULL_FONTS
 #endif
 
-// tiny 3x5 (reduced)
-#include "src/font/clear_font_3x5.h"
+// preliminary - for testing
+#define WLED_ENABLE_TINY_FONT
+#define WLED_ENABLE_LARGE_FONTS
+#if defined(ARDUINO_ARCH_ESP32) && !defined(WLEDMM_SAVE_FLASH)
+  #define WLED_ENABLE_XXXL_FONT
+#endif
 
-// pull in all fonts
+// tiny 3x5 font (reduced)
+#ifdef WLED_ENABLE_TINY_FONT
+#include "src/font/clear_font_3x5.h"
+#endif
+
+// standard fonts
 #include "src/font/console_font_4x6.h"
 #include "src/font/console_font_5x8.h"
 #include "src/font/console_font_5x12.h"
 #include "src/font/console_font_6x8.h"
 #include "src/font/console_font_7x9.h"
 
-// Large
+// Large fonts
+#ifdef WLED_ENABLE_LARGE_FONTS
 #include "src/font/console_font_12x16.h" // 2 bytes per row
 #include "src/font/console_font_12x24.h" // 2 bytes per row
 #include "src/font/console_font_16x32.h" // 2 bytes per row
-// Ultra-Large
+#endif
+// Ultra-Large font
+#ifdef WLED_ENABLE_XXXL_FONT
 #include "src/font/console_font_25x57.h" // 4 bytes per row
-
+#endif
 
 // fontInfo struct returned by getFontInfo
 typedef struct {
@@ -82,6 +94,49 @@ inline FontInfo_t getFontInfo(unsigned width, unsigned height) {
     break;
 
     // you can add any custom fonts here
+#ifdef WLED_ENABLE_TINY_FONT
+    case 15: // tiny 3x5 font (reduced)
+      font.raw        = clear_font_3x5;
+      font.isProgMem  = true;
+      font.firstChar  = clear_font_3x5_first;
+      font.lastChar   = clear_font_3x5_last;
+      font.width_bytes= 1;
+    break;
+#endif
+
+#ifdef WLED_ENABLE_LARGE_FONTS
+    case 192: // 12x16 font
+      font.raw        = console_font_12x16;
+      font.isProgMem  = true;
+      font.firstChar  = console_font_12x16_first;
+      font.lastChar   = console_font_12x16_last;
+      font.width_bytes= 2;
+    break;
+    case 288: // 12x24 font
+      font.raw        = console_font_12x24;
+      font.isProgMem  = true;
+      font.firstChar  = console_font_12x24_first;
+      font.lastChar   = console_font_12x24_last;
+      font.width_bytes= 2;
+    break;
+    case 512: // 16x32 font
+      font.raw        = console_font_16x32;
+      font.isProgMem  = true;
+      font.firstChar  = console_font_16x32_first;
+      font.lastChar   = console_font_16x32_last;
+      font.width_bytes= 2;
+    break;
+#endif
+
+#ifdef WLED_ENABLE_XXXL_FONT
+    case 1425: // 25x57 font
+      font.raw        = console_font_25x57;
+      font.isProgMem  = true;
+      font.firstChar  = console_font_25x57_first;
+      font.lastChar   = console_font_25x57_last;
+      font.width_bytes= 4;
+    break;
+#endif
 
     default: // no font
       font.raw        = nullptr;
