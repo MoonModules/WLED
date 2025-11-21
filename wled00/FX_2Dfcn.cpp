@@ -949,7 +949,7 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
     if (col2 != BLACK) col = ColorFromPalette(grad, (i+1)*255/h, 255, NOBLEND);
     uint32_t fgCol = uint32_t(col) & 0x00FFFFFF; // WLEDMM cache color value
 
-    int numBits = (xoffset+1 < font.width_bytes) ? 8: (w % 8); // 8 for full bytes, width % 8 for last partial byte
+    int numBits = (xoffset+1 < font.width_bytes) ? 8: (w - 8*(font.width_bytes-1) ); // 8 for full bytes, remaining bits for last partial byte
     for (int j = 0; j<numBits; j++) { // paint character - single row of pixels (width)
       int x0 = x + (w-1) - j + pixels_offset;
       if (unsigned(x0) < cols) { // WLEDMM same as "x0 > 0 && x0 < cols"
