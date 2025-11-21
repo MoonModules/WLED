@@ -939,12 +939,12 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
     uint8_t bits = 0;
     uint8_t bits_up = 0; // WLEDMM this is the previous line: font[(chr * h) + i -1]
 
-    for(offset=0; offset < font.width_bytes; offset++) { // handle wide fonts
-    int pixels_offset = offset * w; // pixel offset inside row
+    for(int xoffset=0; xoffset < font.width_bytes; xoffset++) { // handle wide fonts
+    int pixels_offset = xoffset * w; // pixel offset inside row
 
     // get 8 pixels (byte) from raw font data
-    bits = pgm_read_byte_near(&font.raw[(chr * h * font.width_bytes) + i + offset]);
-    if ((i>0) && drawShadow) bits_up = pgm_read_byte_near(&font.raw[(chr * h * font.width_bytes) + i + offset -font.width_bytes]);
+    bits = pgm_read_byte_near(&font.raw[(chr * h * font.width_bytes) + i + xoffset]);
+    if ((i>0) && drawShadow) bits_up = pgm_read_byte_near(&font.raw[(chr * h * font.width_bytes) + i + xoffset -font.width_bytes]);
 
     if (col2 != BLACK) col = ColorFromPalette(grad, (i+1)*255/h, 255, NOBLEND);
     uint32_t fgCol = uint32_t(col) & 0x00FFFFFF; // WLEDMM cache color value
