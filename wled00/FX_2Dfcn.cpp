@@ -940,7 +940,7 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
     uint8_t bits_up = 0; // WLEDMM this is the previous line: font[(chr * h) + i -1]
 
     for(int xoffset=0; xoffset < font.width_bytes; xoffset++) { // handle wide fonts
-    int pixels_offset = xoffset * w; // pixel offset inside row
+    int pixels_offset = xoffset * 8; // pixel offset inside row -> 8 bits per byte
 
     // get 8 pixels (byte) from raw font data
     bits = pgm_read_byte_near(&font.raw[(chr * h*font.width_bytes) + i*font.width_bytes + xoffset]);
