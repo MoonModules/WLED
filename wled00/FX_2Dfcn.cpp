@@ -890,6 +890,7 @@ void Segment::drawText(const unsigned char* text, size_t maxLen, int16_t x, int1
 
 #if defined(WLED_ENABLE_FULL_FONTS)
   FontInfo_t font = getFontInfo(w, h);                    // use central font selection legic
+  if (font.raw == nullptr) return;                        // font invalid or not found
   uint16_t decoded_text[WLED_MAX_SEGNAME_LEN+1] = { 0 };  // UTF-16 converted text. Cannot be longer than WLED_MAX_SEGNAME_LEN
   size_t utf16_index = 0;
   for(const unsigned char* now = text; now != nullptr && now[0] != '\0'; now = nextUnicode(now, maxLen)) {
@@ -919,7 +920,9 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
   const uint16_t cols = virtualWidth();
   const uint16_t rows = virtualHeight();
   FontInfo_t font = getFontInfo(w, h);                      // use central font selection logic
-  if (!font.isProgMem || font.width_bytes > 1) return;      // do nothing for not (yet) supported font features: width_bytes > 1, !isProgMem
+  if (font.raw == nullptr) return;                          // font invalid or not found
+  //if (!font.isProgMem || font.width_bytes > 1) return;    
+  if (!font.isProgMem) return;                              // do nothing for not (yet) supported font features: !isProgMem
   if (chr < font.firstChar || chr > font.lastChar) return;  // do nothing when out of limits
   chr = chr - font.firstChar;                               // adjust chr to point to the first allowed character byte
 
@@ -936,17 +939,18 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
     uint8_t bits = 0;
     uint8_t bits_up = 0; // WLEDMM this is the previous line: font[(chr * h) + i -1]
 
-    // for wide fonts, we can add a loop here :for(offset=0, offset < font.width_bytes; offset++) {}
+    for(offset=0; offset < font.width_bytes; offset++) { // handle wide fonts
+    int pixels_offset = offset * w; // pixel offset inside row
 
     // get 8 pixels (byte) from raw font data
-    bits = pgm_read_byte_near(&font.raw[(chr * h) + i]);
-    if ((i>0) && drawShadow) bits_up = pgm_read_byte_near(&font.raw[(chr * h) + i -1]);
+    bits = pgm_read_byte_near(&font.raw[(chr * h * font.width_bytes) + i + offset]);
+    if ((i>0) && drawShadow) bits_up = pgm_read_byte_near(&font.raw[(chr * h * font.width_bytes) + i + offset -font.width_bytes]);
 
     if (col2 != BLACK) col = ColorFromPalette(grad, (i+1)*255/h, 255, NOBLEND);
     uint32_t fgCol = uint32_t(col) & 0x00FFFFFF; // WLEDMM cache color value
 
     for (int j = 0; j<w; j++) { // paint character - single row of pixels (width)
-      int x0 = x + (w-1) - j;
+      int x0 = x + (w-1) - j + pixels_offset;
       if (unsigned(x0) < cols) { // WLEDMM same as "x0 > 0 && x0 < cols"
         if ((bits>>(j+(8-w))) & 0x01) { // bit set & drawing on-screen
         setPixelColorXY(x0, y0, fgCol);
@@ -960,6 +964,7 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
         }
       }
     }
+  }
   }
 }
 
