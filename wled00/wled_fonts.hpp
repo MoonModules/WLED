@@ -9,6 +9,8 @@
 #undef WLED_ENABLE_FULL_FONTS
 #endif
 
+#if !defined(WLED_DISABLE_2D) // don't include any font in 1D-only builds - saves up to 12Kb of flash
+
 // preliminary - for testing
 #define WLED_ENABLE_TINY_FONT
 #define WLED_ENABLE_LARGE_FONTS
@@ -39,6 +41,8 @@
 #include "src/font/console_font_25x57.h" // 4 bytes per row
 #endif
 
+#endif
+
 // fontInfo struct returned by getFontInfo
 typedef struct {
   unsigned firstChar;           // first supported glyph (32 for standard "reduced" fonts)
@@ -56,6 +60,7 @@ inline FontInfo_t getFontInfo(unsigned width, unsigned height) {
 
   unsigned pixels = width * height;
   switch (pixels) {
+#if !defined(WLED_DISABLE_2D) // no fonts in 1D-only builds
     // WLED standard fonts (PROGMEM)
     case 24: // 4x6 font
       font.raw        = console_font_4x6;
@@ -136,6 +141,8 @@ inline FontInfo_t getFontInfo(unsigned width, unsigned height) {
       font.lastChar   = console_font_25x57_last;
       font.width_bytes= 4;
     break;
+#endif
+
 #endif
 
     default: // no font

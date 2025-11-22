@@ -938,6 +938,7 @@ void serializeInfo(JsonObject root)
   //root[F("cn")] = F(WLED_CODENAME);    //WLEDMM removed
   root[F("release")] = FPSTR(releaseString);
   root[F("rel")] = FPSTR(releaseString); //WLEDMM to add bin name
+  root[F("deviceId")] = getDeviceId();
 
   JsonObject leds = root.createNestedObject("leds");
   leds[F("count")] = strip.getLengthTotal();
