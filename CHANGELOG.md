@@ -1,4 +1,4 @@
-## [WLED upstream](https://github.com/Aircoookie/WLED/tree/0_14_1) changelog
+## [WLED upstream](https://github.com/wled/WLED/tree/0_14_1) changelog
 
 #### Build 2403290
 -   WLED 0.14.3 release

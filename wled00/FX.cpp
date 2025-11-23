@@ -8855,8 +8855,8 @@ static const char _data_FX_MODE_2DWAVINGCELL[] PROGMEM = "Waving Cell@!,,Amplitu
 /* 
    @title     MoonModules WLED - GEQ 3D Effect
    @file      included in FX.cpp
-   @repo      https://github.com/MoonModules/WLED, submit changes to this file as PRs to MoonModules/WLED
-   @Authors   https://github.com/MoonModules/WLED/commits/mdev/
+   @repo      https://github.com/MoonModules/WLED-MM, submit changes to this file as PRs to MoonModules/WLED-MM
+   @Authors   https://github.com/MoonModules/WLED-MM/commits/mdev/
    @Copyright © 2024 Github MoonModules Commit Authors (contact moonmodules@icloud.com for details)
    @license   Licensed under the EUPL-1.2 or later
 */
@@ -9002,8 +9002,8 @@ static const char _data_FX_MODE_GEQLASER[] PROGMEM = "GEQ 3D ☾@Speed,Front Fil
 /* 
    @title     MoonModules WLED - Painbrush Effect
    @file      included in FX.cpp
-   @repo      https://github.com/MoonModules/WLED, submit changes to this file as PRs to MoonModules/WLED
-   @Authors   https://github.com/MoonModules/WLED/commits/mdev/
+   @repo      https://github.com/MoonModules/WLED-MM, submit changes to this file as PRs to MoonModules/WLED-MM
+   @Authors   https://github.com/MoonModules/WLED-MM/commits/mdev/
    @Copyright © 2024 Github MoonModules Commit Authors (contact moonmodules@icloud.com for details)
    @license   GNU GENERAL PUBLIC LICENSE Version 3, 29 June 2007
 

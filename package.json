@@ -13,14 +13,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MoonModules/WLED.git"
+    "url": "git+https://github.com/MoonModules/WLED-MM.git"
   },
   "author": "",
   "license": "EUPL-1.2",
   "bugs": {
-    "url": "https://github.com/MoonModules/WLED/issues"
+    "url": "https://github.com/MoonModules/WLED-MM/issues"
   },
-  "homepage": "https://github.com/MoonModules/WLED#readme",
+  "homepage": "https://github.com/MoonModules/WLED-MM#readme",
   "dependencies": {
     "clean-css": "^4.2.3",
     "html-minifier-terser": "^5.1.1",

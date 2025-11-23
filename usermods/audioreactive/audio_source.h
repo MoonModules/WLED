@@ -3,9 +3,9 @@
 /* 
    @title     MoonModules WLED - audioreactive usermod
    @file      audio_source.h
-   @repo      https://github.com/MoonModules/WLED, submit changes to this file as PRs to MoonModules/WLED
-   @Authors   https://github.com/MoonModules/WLED/commits/mdev/
-   @Copyright © 2024 Github MoonModules Commit Authors (contact moonmodules@icloud.com for details)
+   @repo      https://github.com/MoonModules/WLED-MM, submit changes to this file as PRs to MoonModules/WLED-MM
+   @Authors   https://github.com/MoonModules/WLED-MM/commits/mdev/
+   @Copyright © 2024,2025 Github MoonModules Commit Authors (contact moonmodules@icloud.com for details)
    @license   Licensed under the EUPL-1.2 or later
 
 */

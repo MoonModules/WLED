@@ -63,7 +63,10 @@ function adoptVersionAndRepo(html) {
     // Replace we
     html = strReplace(html, "https://github.com/atuline/WLED", repoUrl);
     html = strReplace(html, "https://github.com/Aircoookie/WLED", repoUrl);
+    html = strReplace(html, "https://github.com/wled-dev/WLED", repoUrl);
+    html = strReplace(html, "https://github.com/wled/WLED", repoUrl);
     html = strReplace(html, "https://github.com/MoonModules/WLED", repoUrl); //WLEDMM
+    html = strReplace(html, "https://github.com/MoonModules/WLED-MM", repoUrl); //WLEDMM
   }
   let version = packageJson.version;
   if (version) {
