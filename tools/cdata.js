@@ -63,10 +63,10 @@ function adoptVersionAndRepo(html) {
     // Replace we
     html = strReplace(html, "https://github.com/atuline/WLED", repoUrl);
     html = strReplace(html, "https://github.com/Aircoookie/WLED", repoUrl);
-    html = strReplace(html, "https://github.com/wled-dev/WLED", repoUrl);
-    html = strReplace(html, "https://github.com/wled/WLED", repoUrl);
-    html = strReplace(html, "https://github.com/MoonModules/WLED", repoUrl); //WLEDMM
-    html = strReplace(html, "https://github.com/MoonModules/WLED-MM", repoUrl); //WLEDMM
+    // html = strReplace(html, "https://github.com/wled-dev/WLED", repoUrl); // replacing upstream break "credits"
+    // html = strReplace(html, "https://github.com/wled/WLED", repoUrl);
+    // html = strReplace(html, "https://github.com/MoonModules/WLED", repoUrl); //WLEDMM
+    // html = strReplace(html, "https://github.com/MoonModules/WLED-MM", repoUrl); //WLEDMM - not necessary to replace ourselves ;-)
   }
   let version = packageJson.version;
   if (version) {
@@ -416,6 +416,12 @@ const char PAGE_dmxmap[] PROGMEM = R"=====()=====";
     {
       file: "404.htm",
       name: "PAGE_404",
+      method: "gzip",
+      filter: "html-minify",
+    },
+    {
+      file: "404mini.htm",
+      name: "PAGE_404_mini",
       method: "gzip",
       filter: "html-minify",
     },

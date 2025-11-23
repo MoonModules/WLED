@@ -443,7 +443,13 @@ void initServer()
     if(espalexa.handleAlexaApiCall(request)) return;
     #endif
     if(handleFileRead(request, request->url())) return;
+#if defined(WLEDMM_SAVE_FLASH) || !defined(ARDUINO_ARCH_ESP32)
+    // small 404 variant
+    AsyncWebServerResponse *response = request->beginResponse_P(404, "text/html", PAGE_404_mini, PAGE_404_mini_length);
+#else
+    // 404 variant with easter egg
     AsyncWebServerResponse *response = request->beginResponse_P(404, "text/html", PAGE_404, PAGE_404_length);
+#endif
     response->addHeader(FPSTR(s_content_enc),"gzip");
     setStaticContentCacheHeaders(response);
     request->send(response);
