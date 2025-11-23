@@ -6790,6 +6790,13 @@ uint16_t mode_2Dfloatingblobs(void) {
 static const char _data_FX_MODE_2DBLOBS[] PROGMEM = "Blobs@!,# blobs,Blur;!;!;2;c1=8";
 
 
+// preliminary - for testing
+#define WLED_ENABLE_TINY_FONT
+#define WLED_ENABLE_LARGE_FONTS
+#if defined(ARDUINO_ARCH_ESP32) && !defined(WLEDMM_SAVE_FLASH)
+  #define WLED_ENABLE_XXXL_FONT
+#endif
+
 ////////////////////////////
 //     2D Scrolling text  //
 ////////////////////////////
@@ -6805,16 +6812,51 @@ uint16_t mode_2Dscrollingtext(void) {
 
   int letterWidth;
   int letterHeight;
-  switch (map(SEGMENT.custom2, 0, 255, 1, 6)) {
+  #if 0 // legacy
+  switch (map(SEGMENT.custom2, 0, 255, 1, 5)) {
     default:
-    case 1: letterWidth = 3; letterHeight =  5; break;
-    case 2: letterWidth = 4; letterHeight =  6; break;
-    case 3: letterWidth = 5; letterHeight =  8; break;
-    case 4: letterWidth = 6; letterHeight =  8; break;
-    case 5: letterWidth = 7; letterHeight =  9; break;
-    case 6: letterWidth = 5; letterHeight = 12; break;
+    case 1: letterWidth = 4; letterHeight =  6; break;
+    case 2: letterWidth = 5; letterHeight =  8; break;
+    case 3: letterWidth = 6; letterHeight =  8; break;
+    case 4: letterWidth = 7; letterHeight =  9; break;
+    case 5: letterWidth = 5; letterHeight = 12; break;
   }
-  const int yoffset = map(SEGMENT.intensity, 0, 255, -rows/2, rows/2) + (rows-letterHeight)/2;
+  #else
+
+  unsigned max_font = 5; // legacy: 0..5
+  #ifdef WLED_ENABLE_LARGE_FONTS
+    max_font += 3; // 3 more
+  #endif
+  #ifdef WLED_ENABLE_XXXL_FONT
+    max_font += 1;  // 1 more
+  #endif
+
+  switch (map2(SEGMENT.custom2, 0, 255, 0, max_font)) {
+    case 0:
+    #ifdef WLED_ENABLE_TINY_FONT
+      letterWidth = 3; letterHeight =  5; break; // tiny 3x5 font (reduced)
+    #endif
+    case 1: letterWidth = 4; letterHeight =  6; break;
+    case 2: letterWidth = 5; letterHeight =  8; break;
+    case 3: letterWidth = 6; letterHeight =  8; break;
+    case 4: letterWidth = 7; letterHeight =  9; break;
+    default:
+    case 5: letterWidth = 5; letterHeight = 12; break;
+    #ifdef WLED_ENABLE_LARGE_FONTS
+    case 6: letterWidth =12; letterHeight = 16; break; // 12x16 font
+    case 7: letterWidth =12; letterHeight = 24; break; // 12x24 font
+    case 8: letterWidth =16; letterHeight = 32; break; // 16x32 font
+    #endif
+    #if defined(WLED_ENABLE_XXXL_FONT) && defined(WLED_ENABLE_LARGE_FONTS)
+    case 9: letterWidth =25; letterHeight = 57; break; // 25x57 font
+    #endif
+    #if defined(WLED_ENABLE_XXXL_FONT) && !defined(WLED_ENABLE_LARGE_FONTS)
+    case 6: letterWidth =25; letterHeight = 57; break; // 25x57 font
+    #endif
+  }
+  #endif
+
+  const int yoffset = map2(SEGMENT.intensity, 0, 255, -rows/2, rows/2) + (rows-letterHeight)/2;
   char text[WLED_MAX_SEGNAME_LEN+1] = {'\0'};
   unsigned maxLen = (SEGMENT.name) ? min(WLED_MAX_SEGNAME_LEN, (int)strlen(SEGMENT.name)) : 0;  // WLEDMM make it robust against too long segment names
 
