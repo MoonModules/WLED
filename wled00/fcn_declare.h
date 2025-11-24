@@ -484,16 +484,19 @@ uint8_t cos8_t(uint8_t theta);
 float sin_approx(float theta); // uses integer math (converted to float), accuracy +/-0.0015 (compared to sinf())
 float cos_approx(float theta);
 float tan_approx(float x);
-//float atan2_t(float y, float x);
-//float acos_t(float x);
-//float asin_t(float x);
-//template <typename T> T atan_t(T x);
-//float floor_t(float x);
-//float fmod_t(float num, float denom);
+#if defined(WLED_USE_UNREAL_MATH)
+float atan2_t(float y, float x);
+float acos_t(float x);
+float asin_t(float x);
+template <typename T> T atan_t(T x);
+float floor_t(float x);
+float fmod_t(float num, float denom);
+#endif
 #define sin_t sin_approx
 #define cos_t cos_approx
 #define tan_t tan_approx
 
+#if !defined(WLED_USE_UNREAL_MATH)
 #include <math.h>  // standard math functions. use a lot of flash
 #define atan2_t atan2f
 #define asin_t asinf
@@ -501,6 +504,7 @@ float tan_approx(float x);
 #define atan_t atanf
 #define fmod_t fmodf
 #define floor_t floorf
+#endif
 /*
 #define sin_t sinf
 #define cos_t cosf
