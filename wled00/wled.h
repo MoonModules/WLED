@@ -176,11 +176,8 @@
 #ifdef WLED_ENABLE_MQTT
 #include "src/dependencies/async-mqtt-client/AsyncMqttClient.h"
 #endif
-#if defined(WLEDMM_SAVE_FLASH)
-#define ARDUINOJSON_DECODE_UNICODE 0   // WLEDMM not sure if this is really needed. disable saves 1.2KB flash
-#else
-#define ARDUINOJSON_DECODE_UNICODE 1   // WLEDMM enable unicode support -> prevents crashes when user enters unicode strings in webUI
-#endif
+
+#define ARDUINOJSON_DECODE_UNICODE 0   // WLEDMM enables support for unicode HEX strings - deserializeJson(doc, "{'firstname':'Beno\\u00EEt'}"); --> not needed - disable saves 1.2KB flash
 #include "src/dependencies/json/AsyncJson-v6.h"
 #include "src/dependencies/json/ArduinoJson-v6.h"
 
