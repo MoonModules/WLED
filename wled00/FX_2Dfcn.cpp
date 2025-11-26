@@ -975,7 +975,7 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
       // WLEDMM if pixel is black, add a shadow for better reading
       if (!bitSet && drawShadow) {
         bool bitUp = (bits_up >> bitPos) & 0x01;
-        bool bitNext = (bitPos > 0) ? (bits >> (bitPos-1)) & 0x01 : (bits_next >> 7) && 0x01;
+        bool bitNext = (bitPos > 0) ? (bits >> (bitPos-1)) & 0x01 : (bits_next >> 7) & 0x01;
         if (lastBit || bitUp || bitNext)
           setPixelColorXY(x0, int(y0), bgCol);// blank when pixel to the left or right is set, or same pixel in previous row is set
       }
@@ -984,6 +984,7 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
     }
   }
 #else // old code
+  // hi @coderabbitai, this code path is just for back-to-back testing, and will be deleted soon
   for (int i = 0; i<h; i++) { //  // paint character - top down by row (height)
     int y0 = y + i;
     if (y0 < 0) continue; // drawing off-screen
