@@ -883,7 +883,7 @@ bool Segment::jsonToPixels(char * name, uint8_t fileNr) {
 #endif
 
 // unicode-aware wrapper for drawCharacter(), to be called from  mode_2Dscrollingtext()
-void Segment::drawText(const unsigned char* text, size_t maxLen, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2, bool drawShadow) {
+void Segment::drawText(const unsigned char* text, size_t maxLen, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2, bool drawShadow, int rotate) {
   if (!isActive()) return; // not active
   //size_t maxLetters = WLED_MAX_SEGNAME_LEN;
   const size_t numberOfChars = strnlen((const char *) text, maxLen); // size in bytes // toDo check if this is needed - duplicate of maxLen?
@@ -909,19 +909,24 @@ void Segment::drawText(const unsigned char* text, size_t maxLen, int16_t x, int1
 #endif
   // pass characters to drawCharacter()
   for (int i = 0; i < textLength; i++) {
-    SEGMENT.drawCharacter((unsigned char) decoded_text[i], x + w*i, y, w, h, color, col2, drawShadow);
+    SEGMENT.drawCharacter((unsigned char) decoded_text[i], x + w*i, y, w, h, color, col2, drawShadow, rotate);
   }
 }
 
 // draws a raster font character on canvas
 // only supports: 4x6=24, 5x8=40, 5x12=60, 6x8=48 and 7x9=63 fonts ATM
-void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2, bool drawShadow) {
+void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2, bool drawShadow, int rotate) {
   if (!isActive()) return; // not active
-  const uint16_t cols = virtualWidth();
-  const uint16_t rows = virtualHeight();
+  // rotated letters support - WLEDMM style without complicates switch cases
+  bool trans = (rotate == 1) || (rotate == -1);                   // -90 or 90 degrees => swap x and y
+  //bool revX = (rotate == -1) || (rotate == -2) || (rotate == 2);// -90, -180 = 180 degrees => invert X (correct)
+  bool revX = (rotate == -1) || (rotate == 2);                    // -90, 180 degrees => invert X (inverts scolling with -180 degrees => nice)
+  bool revY = (rotate == 1) || (rotate == -2) || (rotate == 2);   //  90, -180 = 180 degrees => invert Y
+  const uint16_t cols = trans ? virtualHeight() : virtualWidth();
+  const uint16_t rows = trans ? virtualWidth()  : virtualHeight();
+
   FontInfo_t font = getFontInfo(w, h);                      // use central font selection logic
   if (font.raw == nullptr) return;                          // font invalid or not found
-  //if (!font.isProgMem || font.width_bytes > 1) return;    
   if (!font.isProgMem) return;                              // do nothing for not (yet) supported font features: !isProgMem
   if (chr < font.firstChar || chr > font.lastChar) return;  // do nothing when out of limits
   chr = chr - font.firstChar;                               // adjust chr to point to the first allowed character byte
@@ -968,16 +973,21 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
         else bits_next = 0;
       }
 
+      // WLEDMM rotation = invert and transpose
+      int screenX = revX ? (cols-1-x0): x0;
+      int screenY = revY ? (rows-1-y0): y0;
+      if (trans) std::swap(screenX, screenY);
+
       //now lets paint it !
       uint8_t bitPos = 7 - (j & 0x07); // pixel index = j % 8, reverse for left-to-right
       bool bitSet = (bits >> bitPos) & 0x01;
-      if (bitSet) setPixelColorXY(x0, y0, fgCol);
+      if (bitSet) setPixelColorXY(screenX, screenY, fgCol);
       // WLEDMM if pixel is black, add a shadow for better reading
       if (!bitSet && drawShadow) {
         bool bitUp = (bits_up >> bitPos) & 0x01;
         bool bitNext = (bitPos > 0) ? (bits >> (bitPos-1)) & 0x01 : (bits_next >> 7) & 0x01;
         if (lastBit || bitUp || bitNext)
-          setPixelColorXY(x0, y0, bgCol);// blank when pixel to the left or right is set, or same pixel in previous row is set
+          setPixelColorXY(screenX, screenY, bgCol);// blank when pixel to the left or right is set, or same pixel in previous row is set
       }
       lastBit = bitSet; // remember pixel to left
       readNext = bitPos == 0x00; // last bit used?

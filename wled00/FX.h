@@ -824,10 +824,10 @@ typedef struct Segment {
     void drawArc(unsigned x0, unsigned y0, int radius, uint32_t color, uint32_t fillColor = 0);
     inline void drawArc(unsigned x0, unsigned y0, int radius, CRGB color, CRGB fillColor = BLACK) { drawArc(x0, y0, radius, uint32_t(color) & 0x00FFFFFF, uint32_t(fillColor) & 0x00FFFFFF); } // automatic inline
 
-    void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2 = 0, bool drawShadow = false);
+    void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2 = 0, bool drawShadow = false, int rotate = 0);
     inline void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGB c, CRGB c2) { drawCharacter(chr, x, y, w, h, uint32_t(c) & 0x00FFFFFF, uint32_t(c2) & 0x00FFFFFF); } // automatic inline
     // unicode-aware wrapper for drawCharacter(), to be called from  mode_2Dscrollingtext()
-    void drawText(const unsigned char* text, size_t maxLen, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2 = 0, bool drawShadow = false);
+    void drawText(const unsigned char* text, size_t maxLen, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2 = 0, bool drawShadow = false, int rotate = 0);
     // #if !WLED_ENABLE_FULL_FONTS => drawText() will fall back to just forwarding each char to drawCharacter()
 
     void wu_pixel(uint32_t x, uint32_t y, CRGB c);
