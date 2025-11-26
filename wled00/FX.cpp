@@ -98,6 +98,7 @@ static float mapf(float x, float in_min, float in_max, float out_min, float out_
 
 // more accurate integer version of map() - based on map3() proposed in https://forum.arduino.cc/t/how-map-loses-precision-and-how-to-fix-it/371026/3
 // rounding instead of truncation, better handling of inverted ranges
+// Important: don't use when the input range is very small, because the output is such cases is worse than map()
 static long map2(long x, long in_min, long in_max, long out_min, long out_max)
 {
   long out_range = out_max - out_min;
@@ -111,6 +112,19 @@ static long map2(long x, long in_min, long in_max, long out_min, long out_max)
   else return out_min; // input range is 0 - Result is actually infinity but long has no such thing. The least negative long is another choice.
 
   return ((x - in_min) * out_range) / in_range + out_min;
+}
+
+// better "map" that can be used when in_min = out_min = 0. 
+// Fast and accurate (error always below 0.5)
+static inline uint32_t map0(uint32_t val, uint32_t in_max, uint32_t out_max) {
+   if (in_max == 0) return 0; // avoid division by zero
+   return ( (val*out_max) + (in_max/2) ) / in_max;     // +(in_max/2) for rounding
+}
+// a variant of map0() that handles output ranges not starting at 0 - but still requires val in [0 ... in_max]
+static inline int32_t map0(uint32_t val, uint32_t in_max, int32_t out_min, int32_t out_max) {
+  if (out_min > out_max) std::swap(out_min, out_max); // a hack, just to treat inverted ranges without producing overflows
+  int range = out_max - out_min;
+  return int(map0(val, in_max, unsigned(range))) + out_min;
 }
 
 
