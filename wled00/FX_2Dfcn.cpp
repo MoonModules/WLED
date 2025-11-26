@@ -971,13 +971,13 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
       //now lets paint it !
       uint8_t bitPos = 7 - (j & 0x07); // pixel index = j % 8, reverse for left-to-right
       bool bitSet = (bits >> bitPos) & 0x01;
-      if (bitSet) setPixelColorXY(x0, int(y0), fgCol);
+      if (bitSet) setPixelColorXY(x0, y0, fgCol);
       // WLEDMM if pixel is black, add a shadow for better reading
       if (!bitSet && drawShadow) {
         bool bitUp = (bits_up >> bitPos) & 0x01;
         bool bitNext = (bitPos > 0) ? (bits >> (bitPos-1)) & 0x01 : (bits_next >> 7) & 0x01;
         if (lastBit || bitUp || bitNext)
-          setPixelColorXY(x0, int(y0), bgCol);// blank when pixel to the left or right is set, or same pixel in previous row is set
+          setPixelColorXY(x0, y0, bgCol);// blank when pixel to the left or right is set, or same pixel in previous row is set
       }
       lastBit = bitSet; // remember pixel to left
       readNext = bitPos == 0x00; // last bit used?
