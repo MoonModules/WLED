@@ -528,8 +528,8 @@ ${inforow("Filesystem",i.fs.u + "/" + i.fs.t + " kB (" +Math.round(i.fs.u*100/i.
 ${inforow("Environment",i.arch + " " + i.core + " (" + i.lwip + ")")}
 ${theap>0?inforow("Total heap",theap," kB"):""}
 ${i.minfreeheap?inforow("Max used heap",((i.totalheap-i.minfreeheap)/1000).toFixed(1)," kB"):""}
-${i.tpram?inforow("Total PSRAM",(i.tpram/1024).toFixed(1)," kB"):""}
-${i.psusedram?((i.tpram-i.psusedram)>16383?inforow("Max Used PSRAM",((i.tpram-i.psusedram)/1024).toFixed(1)," kB"):inforow("Max Used PSRAM",(i.tpram-i.psusedram)," B")):""}
+${i.tpsram?inforow("Total PSRAM",(i.tpsram/1024).toFixed(1)," kB"):""}
+${i.psusedram?((i.tpsram-i.psusedram)>16383?inforow("Max Used PSRAM",((i.tpsram-i.psusedram)/1024).toFixed(1)," kB"):inforow("Max Used PSRAM",(i.tpsram-i.psusedram)," B")):""}
 ${i.e32model?inforow(i.e32model,i.e32cores +" core(s)"," "+i.e32speed+" Mhz"):""}
 ${i.e32flash?inforow("Flash "+i.e32flash+" MB"+", mode "+i.e32flashmode+i.e32flashtext,i.e32flashspeed," Mhz"):""}
 <!-- WLEDMM end--> 

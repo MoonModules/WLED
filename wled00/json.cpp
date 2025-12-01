@@ -1,4 +1,5 @@
 #include "wled.h"
+#include "ota_update.h"
 
 #include "palettes.h"
 
@@ -736,26 +737,7 @@ void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segme
     #endif
 
     // WLEDMM print error message to netDebug - esp32 only, as 8266 flash is very limited
-#if defined(ARDUINO_ARCH_ESP32) && !defined(WLEDMM_SAVE_FLASH)
-    String errPrefix = F("\nWLED error: ");
-    String warnPrefix = F("WLED warning: ");
-    switch(errorFlag) {
-      case ERR_NONE: break;
-      case ERR_DENIED:    USER_PRINTLN(errPrefix + F("Permission denied.")); break;
-      case ERR_NOBUF:     USER_PRINTLN(warnPrefix + F("JSON buffer was not released in time, request timeout.")); break;
-      case ERR_JSON:      USER_PRINTLN(errPrefix + F("JSON parsing failed (input too large?).")); break;
-      case ERR_FS_BEGIN:  USER_PRINTLN(errPrefix + F("Could not init filesystem (no partition?).")); break;
-      case ERR_FS_QUOTA:  USER_PRINTLN(errPrefix + F("FS is full or the maximum file size is reached.")); break;
-      case ERR_FS_PLOAD:  USER_PRINTLN(warnPrefix + F("Tried loading a preset that does not exist.")); break;
-      case ERR_FS_IRLOAD: USER_PRINTLN(warnPrefix + F("Tried loading an IR JSON cmd, but \"ir.json\" file does not exist.")); break;
-      case ERR_FS_RMLOAD: USER_PRINTLN(warnPrefix + F("Tried loading a remote JSON cmd, but \"remote.json\" file does not exist.")); break;
-      case ERR_FS_GENERAL: USER_PRINTLN(errPrefix + F("general unspecified filesystem error.")); break;
-      default: USER_PRINT(errPrefix + F("error code = ")); USER_PRINTLN(errorFlag); break;
-    }
-#else
     if (errorFlag) { USER_PRINT(F("\nWLED error code = ")); USER_PRINTLN(errorFlag); }
-#endif
-
     if (errorFlag) {root[F("error")] = errorFlag; errorFlag = ERR_NONE;} //prevent error message to persist on screen
 
     root["ps"] = (currentPreset > 0) ? currentPreset : -1;
@@ -938,8 +920,8 @@ void serializeInfo(JsonObject root)
   //root[F("cn")] = F(WLED_CODENAME);    //WLEDMM removed
   root[F("release")] = FPSTR(releaseString);
   root[F("rel")] = FPSTR(releaseString); //WLEDMM to add bin name
-
- // root[F("deviceId")] = getDeviceId();  // temporarily disabled, as getDeviceId() causes a crash on some esp32 boards.
+  //root[F("repo")] = repoString;        // WLEDMM not availeable
+  root[F("deviceId")] = getDeviceId();
 
   JsonObject leds = root.createNestedObject("leds");
   leds[F("count")] = strip.getLengthTotal();
@@ -1083,6 +1065,9 @@ void serializeInfo(JsonObject root)
 
   root[F("lwip")] = 0; //deprecated
   root[F("totalheap")] = ESP.getHeapSize(); //WLEDMM
+  #ifndef WLED_DISABLE_OTA
+  root[F("bootloaderSHA256")] = getBootloaderSHA256Hex();
+  #endif
   #else
   root[F("arch")] = "esp8266";
   root[F("core")] = ESP.getCoreVersion();
@@ -1104,7 +1089,7 @@ void serializeInfo(JsonObject root)
   #endif
   #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
   if (psramFound()) {
-    root[F("tpram")] = ESP.getPsramSize(); //WLEDMM
+    root[F("tpsram")] = ESP.getPsramSize(); //WLEDMM
     root[F("psram")] = ESP.getFreePsram();
     root[F("psusedram")] = ESP.getMinFreePsram();
     #if CONFIG_ESP32S3_SPIRAM_SUPPORT  // WLEDMM -S3 has "qspi" or "opi" PSRAM mode
@@ -1117,7 +1102,7 @@ void serializeInfo(JsonObject root)
   }
   #else
   // for testing
-  //  root[F("tpram")] = 4194304; //WLEDMM
+  //  root[F("tpsram")] = 4194304; //WLEDMM
   //  root[F("psram")] = 4193000;
   //  root[F("psusedram")] = 3083000;
   #endif
@@ -1133,8 +1118,18 @@ void serializeInfo(JsonObject root)
   root[F("e32code")] = (int)getRestartReason();
   root[F("e32text")] = restartCode2Info(getRestartReason());
 
-  static char msgbuf[32];
+  static char msgbuf[42];
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 3)
+  // use the full revision if we can
+    esp_chip_info_t chip_info;
+    esp_chip_info(&chip_info);
+    snprintf(msgbuf, sizeof(msgbuf)-1, "%s v%u.%u", 
+        ESP.getChipModel(), 
+        unsigned(chip_info.full_revision / 100),   // full revision is in (major * 100 + minor) format
+        unsigned(chip_info.full_revision % 100));
+#else
   snprintf(msgbuf, sizeof(msgbuf)-1, "%s rev.%d", ESP.getChipModel(), ESP.getChipRevision());
+#endif
   root[F("e32model")] = msgbuf;
   root[F("e32cores")] = ESP.getChipCores();
   root[F("e32speed")] = ESP.getCpuFreqMHz();

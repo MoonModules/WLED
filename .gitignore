@@ -27,3 +27,4 @@ compile_commands.json
 /wled00/Release
 /wled00/wled00.ino.cpp
 /wled00/html_*.h
+_codeql_detected_source_root

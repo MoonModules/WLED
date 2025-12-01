@@ -717,11 +717,11 @@ ${inforow("Uptime",getRuntimeStr(i.uptime))}
 ${inforow("Filesystem",i.fs.u + "/" + i.fs.t + " kB, " +Math.round(i.fs.u*100/i.fs.t) + "%")}
 ${theap>0?inforow("Heap ☾",((i.totalheap-i.freeheap)/1000).toFixed(0)+"/"+theap.toFixed(0)+" kB",", "+Math.round((i.totalheap-i.freeheap)/(10*theap))+"%"):inforow("Free heap",heap," kB")}  <!--WLEDMM different for 8266-->
 ${i.minfreeheap?inforow("Max used heap ☾",((i.totalheap-i.minfreeheap)/1000).toFixed(0)+" kB",", "+Math.round((i.totalheap-i.minfreeheap)/(10*theap))+"%"):""} 
-${i.psram?inforow("PSRAM ☾",((i.tpram-i.psram)/1024).toFixed(0)+"/"+(i.tpram/1024).toFixed(0)+" kB",", "+((i.tpram-i.psram)*100.0/i.tpram).toFixed(1)+"%"):""} 
-${i.psusedram?inforow("Max used PSRAM ☾",((i.tpram-i.psusedram)/1024).toFixed(0)+" kB",", "+((i.tpram-i.psusedram)*100.0/i.tpram).toFixed(1)+"%"):""} 
+${i.psram?inforow("PSRAM ☾",((i.tpsram-i.psram)/1024).toFixed(0)+"/"+(i.tpsram/1024).toFixed(0)+" kB",", "+((i.tpsram-i.psram)*100.0/i.tpsram).toFixed(1)+"%"):""} 
+${i.psusedram?inforow("Max used PSRAM ☾",((i.tpsram-i.psusedram)/1024).toFixed(0)+" kB",", "+((i.tpsram-i.psusedram)*100.0/i.tpsram).toFixed(1)+"%"):""} 
 ${i.freestack?inforow("Free stack ☾",(i.freestack/1000).toFixed(3)," kB"):""} <!--WLEDMM-->
 <tr><td colspan=2><hr style="height:1px;border-width:0;color:SeaGreen;background-color:SeaGreen"></td></tr>
-${i.tpram?inforow("PSRAM " + (i.psrmode?"("+i.psrmode+" mode) ":"") + " ☾",(i.tpram/1024/1024).toFixed(0)," MB"):inforow("NO PSRAM found.", "")}
+${i.tpsram?inforow("PSRAM " + (i.psrmode?"("+i.psrmode+" mode) ":"") + " ☾",(i.tpsram/1024/1024).toFixed(0)," MB"):inforow("NO PSRAM found.", "")}
 ${i.e32flash?inforow("Flash mode "+i.e32flashmode+i.e32flashtext + " ☾",i.e32flash+" MB, "+i.e32flashspeed," Mhz"):""}
 ${i.e32model?inforow(i.e32model + " ☾",i.e32cores +" core(s),"," "+i.e32speed+" Mhz"):""}
 ${inforow("Environment",i.arch + " " + i.core + " (" + i.lwip + ")")}
@@ -2229,6 +2229,7 @@ function requestJson(command=null)
 		if (json.info) {
 			let i = json.info;
 			parseInfo(i);
+			checkVersionUpgrade(i); // Check for version upgrade
 			populatePalettes(i);
 			if (isInfo) populateInfo(i);
 		}
@@ -3685,6 +3686,184 @@ function mergeDeep(target, ...sources)
 		}
 	}
 	return mergeDeep(target, ...sources);
+}
+// Version reporting feature
+var versionCheckDone = false;
+
+function checkVersionUpgrade(info) {
+	// Only check once per page load
+	if (versionCheckDone) return;
+	versionCheckDone = true;
+
+	// Fetch version-info.json using existing /edit endpoint
+	fetch('/edit?edit=/version-info.json', {
+		method: 'get'
+	})
+		.then(res => {
+			if (res.status === 404) {
+				// File doesn't exist - first install, show install prompt
+				showVersionUpgradePrompt(info, null, info.ver);
+				return null;
+			}
+			if (!res.ok) {
+				throw new Error('Failed to fetch version-info.json');
+			}
+			return res.json();
+		})
+		.then(versionInfo => {
+			if (!versionInfo) return; // 404 case already handled
+
+			// Check if user opted out
+			if (versionInfo.neverAsk) return;
+
+			// Check if version has changed
+			const currentVersion = info.ver;
+			const storedVersion = versionInfo.version || '';
+
+			if (storedVersion && storedVersion !== currentVersion) {
+				// Version has changed, show upgrade prompt
+				showVersionUpgradePrompt(info, storedVersion, currentVersion);
+			} else if (!storedVersion) {
+				// Empty version in file, show install prompt
+				showVersionUpgradePrompt(info, null, currentVersion);
+			}
+		})
+		.catch(e => {
+			console.log('Failed to load version-info.json', e);
+		});
+}
+
+function showVersionUpgradePrompt(info, oldVersion, newVersion) {
+	// Determine if this is an install or upgrade
+	const isInstall = !oldVersion;
+	
+	// Create overlay and dialog
+	const overlay = d.createElement('div');
+	overlay.id = 'versionUpgradeOverlay';
+	overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+	
+	const dialog = d.createElement('div');
+	dialog.style.cssText = 'background:var(--c-1);border-radius:10px;padding:25px;max-width:500px;margin:20px;box-shadow:0 4px 6px rgba(0,0,0,0.3);';
+	
+	// Build contextual message based on install vs upgrade
+	const title = isInstall 
+		? '🎉 Thank you for installing WLED-MM!' 
+		: '🎉 WLED-MM Upgrade Detected!';
+	
+	const description = isInstall
+		? `You are now running WLED-MM <strong>${newVersion}</strong>.`
+		: `Your WLED-MM has been upgraded from <strong>${oldVersion}</strong> to <strong>${newVersion}</strong>.`;
+	
+	const question = 'Would you like to help the WLED development team by reporting your installation? This helps us understand what hardware and versions are being used.'
+
+	dialog.innerHTML = `
+		<h2 style="margin-top:0;color:var(--c-f);">${title}</h2>
+		<p style="color:var(--c-f);">${description}</p>
+		<p style="color:var(--c-f);">${question}</p>
+		<div style="margin-top:20px;">
+			<button id="versionReportYes" class="btn">Yes</button>
+			<button id="versionReportNo" class="btn">Not Now</button>
+			<button id="versionReportNever" class="btn">Never Ask</button>
+		</div>
+	`;
+	
+	overlay.appendChild(dialog);
+	d.body.appendChild(overlay);
+	
+	// Add event listeners
+	gId('versionReportYes').addEventListener('click', () => {
+		reportUpgradeEvent(oldVersion, newVersion);
+		d.body.removeChild(overlay);
+	});
+	
+	gId('versionReportNo').addEventListener('click', () => {
+		// Don't update version, will ask again on next load
+		d.body.removeChild(overlay);
+	});
+	
+	gId('versionReportNever').addEventListener('click', () => {
+		updateVersionInfo(newVersion, true);
+		d.body.removeChild(overlay);
+		showToast('You will not be asked again.');
+	});
+}
+
+function reportUpgradeEvent(oldVersion, newVersion) {
+	showToast('Reporting upgrade...');
+	
+	// Fetch fresh data from /json/info endpoint as requested
+	fetch('/json/info', {
+		method: 'get'
+	})
+	.then(res => res.json())
+	.then(infoData => {
+		// Map to UpgradeEventRequest structure per OpenAPI spec
+		// Required fields: deviceId, version, previousVersion, releaseName, chip, ledCount, isMatrix, bootloaderSHA256
+		const upgradeData = {
+				deviceId: infoData.deviceId,                     // Use anonymous unique device ID
+				version: infoData.ver || '',                     // Current version string
+				previousVersion: oldVersion || '',               // Previous version from version-info.json
+				releaseName: infoData.release || '',             // Release name (e.g., "WLED 0.15.0")
+				chip: infoData.arch || '',                       // Chip architecture (esp32, esp8266, etc)
+				ledCount: infoData.leds ? infoData.leds.count : 0,  // Number of LEDs
+				isMatrix: !!(infoData.leds && infoData.leds.matrix),  // Whether it's a 2D matrix setup
+				bootloaderSHA256: infoData.bootloaderSHA256 || '',   // Bootloader SHA256 hash - not yet availeable in WLEDMM
+				brand: infoData.brand,                           // Device brand (always present)
+				product: infoData.product,                       // Product name (always present)
+				flashSize: infoData.flash                        // Flash size (always present)
+		};
+		// Add optional fields if available
+		if (infoData.tpsram !== undefined) upgradeData.psramSize = Math.round(infoData.tpsram / (1024 * 1024));  // convert bytes to MB - tpsram is MM specific
+		// Note: partitionSizes not currently available in /json/info endpoint
+		//    it is availeable in WLEDMM => infoData.t = total FS size in bytes
+
+		// Make AJAX call to postUpgradeEvent API
+		return fetch('https://usage.wled.me/api/usage/upgrade', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(upgradeData)
+		});
+	})
+	.then(res => {
+		if (res.ok) {
+			showToast('Thank you for reporting!');
+			updateVersionInfo(newVersion, false);
+		} else {
+			showToast('Report failed. Please try again later.', true);
+			// Do NOT update version info on failure - user will be prompted again
+		}
+	})
+	.catch(e => {
+		console.log('Failed to report upgrade', e);
+		showToast('Report failed. Please try again later.', true);
+		// Do NOT update version info on error - user will be prompted again
+	});
+}
+
+function updateVersionInfo(version, neverAsk) {
+	const versionInfo = {
+		version: version,
+		neverAsk: neverAsk
+	};
+	
+	// Create a Blob with JSON content and use /upload endpoint
+	const blob = new Blob([JSON.stringify(versionInfo)], { type: 'application/json' });
+	const formData = new FormData();
+	formData.append('data', blob, 'version-info.json');
+	
+	fetch('/upload', {
+		method: 'POST',
+		body: formData
+	})
+	.then(res => res.text())
+	.then(data => {
+		console.log('Version info updated', data);
+	})
+	.catch(e => {
+		console.log('Failed to update version-info.json', e);
+	});
 }
 
 size();

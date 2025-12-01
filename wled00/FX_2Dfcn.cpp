@@ -44,7 +44,7 @@ void WS2812FX::setUpMatrix() {
       return;
     }
 
-    USER_PRINTF("setUpMatrix %d x %d\n", Segment::maxWidth, Segment::maxHeight);
+    DEBUG_PRINTF("setUpMatrix %d x %d\n", Segment::maxWidth, Segment::maxHeight);
     
     // WLEDMM check if mapping table is necessary (avoiding heap fragmentation)
 #if defined(WLED_ENABLE_HUB75MATRIX)
@@ -66,7 +66,7 @@ void WS2812FX::setUpMatrix() {
     if (Segment::maxWidth * Segment::maxHeight > customMappingTableSize) {
       size_t size = max(ledmapMaxSize, size_t(Segment::maxWidth * Segment::maxHeight)); // TroyHacks
       if (!needLedMap) size = 0;                                                        // softhack007
-      USER_PRINTF("setupmatrix customMappingTable alloc %d from %d\n", size, customMappingTableSize);
+      DEBUG_PRINTF("setupmatrix customMappingTable alloc %d from %d\n", size, customMappingTableSize);
       //if (customMappingTable != nullptr) delete[] customMappingTable;
       //customMappingTable = new(std::nothrow) uint16_t[size];
 

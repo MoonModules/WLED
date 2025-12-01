@@ -11,18 +11,56 @@
 #endif
 #include "html_cpal.h"
 
-/*
- * Integrated HTTP web server page declarations
- */
-
-bool handleIfNoneMatchCacheHeader(AsyncWebServerRequest* request);
-void setStaticContentCacheHeaders(AsyncWebServerResponse *response);
-
 // define flash strings once (saves flash memory)
 static const char s_redirecting[] PROGMEM = "Redirecting...";
 static const char s_content_enc[] PROGMEM = "Content-Encoding";
 static const char s_unlock_ota [] PROGMEM = "Please unlock OTA in security settings!";
 static const char s_unlock_cfg [] PROGMEM = "Please unlock settings using PIN code!";
+static const char s_cache_control[]  PROGMEM = "Cache-Control";
+//static const char s_no_store[]       PROGMEM = "no-store";
+//static const char s_expires[]        PROGMEM = "Expires";
+
+/*
+ * Integrated HTTP web server page declarations
+ */
+
+static void generateEtag(char *etag, uint16_t eTagSuffix) {
+  sprintf_P(etag, PSTR("%u-%02x-%04x"), WEB_BUILD_TIME, cacheInvalidate, eTagSuffix);
+}
+
+static void setStaticContentCacheHeaders(AsyncWebServerResponse *response, int code=200, uint16_t eTagSuffix = 0) {
+  // Only send ETag for 200 (OK) responses
+  if (code != 200) return;
+
+  // https://medium.com/@codebyamir/a-web-developers-guide-to-browser-caching-cc41f3b73e7c
+  #ifndef WLED_DEBUG
+  // this header name is misleading, "no-cache" will not disable cache,
+  // it just revalidates on every load using the "If-None-Match" header with the last ETag value
+  response->addHeader(FPSTR(s_cache_control), F("no-cache"));
+  #else
+  response->addHeader(FPSTR(s_cache_control), F("no-store,max-age=0"));  // prevent caching if debug build
+  #endif
+  char etag[32] = {'\0'};
+  generateEtag(etag, eTagSuffix);
+  response->addHeader(F("ETag"), etag);
+}
+
+static bool handleIfNoneMatchCacheHeader(AsyncWebServerRequest *request, int code=200, uint16_t eTagSuffix = 0) {
+  // Only send 304 (Not Modified) if response code is 200 (OK)
+  if (code != 200) return false;
+
+  AsyncWebHeader *header = request->getHeader(F("If-None-Match"));
+  char etag[32] = {'\0'};
+  generateEtag(etag, eTagSuffix);
+  if (header && header->value() == etag) {
+    AsyncWebServerResponse *response = request->beginResponse(304);
+    setStaticContentCacheHeaders(response, code, eTagSuffix);
+    request->send(response);
+    return true;
+  }
+  return false;
+}
+
 
 //Is this an IP?
 bool isIp(String str) {
@@ -390,13 +428,13 @@ void initServer()
   });
   #endif
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    USER_PRINT("Client request"); //WLEDMM: want to see if client connects to wled
+    DEBUG_PRINT("Client request"); //WLEDMM: want to see if client connects to wled
     #ifdef ARDUINO_ARCH_ESP32
     DEBUG_PRINTF("%s min free stack %d\n", pcTaskGetTaskName(NULL), uxTaskGetStackHighWaterMark(NULL)); //WLEDMM
     #endif
     if (captivePortal(request)) return;
     serveIndexOrWelcome(request);
-    USER_PRINTLN(" done"); //WLEDMM: want to see if client connects to wled
+    DEBUG_PRINTLN(" done"); //WLEDMM: want to see if client connects to wled
   });
 
   #ifdef WLED_ENABLE_PIXART
@@ -451,7 +489,7 @@ void initServer()
     AsyncWebServerResponse *response = request->beginResponse_P(404, "text/html", PAGE_404, PAGE_404_length);
 #endif
     response->addHeader(FPSTR(s_content_enc),"gzip");
-    setStaticContentCacheHeaders(response);
+    setStaticContentCacheHeaders(response, 404);
     request->send(response);
     //request->send_P(404, "text/html", PAGE_404);
   });
@@ -465,31 +503,6 @@ void serveIndexOrWelcome(AsyncWebServerRequest *request)
   } else {
     serveSettings(request);
   }
-}
-
-bool handleIfNoneMatchCacheHeader(AsyncWebServerRequest* request)
-{
-  AsyncWebHeader* header = request->getHeader("If-None-Match");
-  if (header && header->value() == String(VERSION)) {
-    request->send(304);
-    return true;
-  }
-  return false;
-}
-
-void setStaticContentCacheHeaders(AsyncWebServerResponse *response)
-{
-  char tmp[12];
-  // https://medium.com/@codebyamir/a-web-developers-guide-to-browser-caching-cc41f3b73e7c
-  #ifndef WLED_DEBUG
-  //this header name is misleading, "no-cache" will not disable cache,
-  //it just revalidates on every load using the "If-None-Match" header with the last ETag value
-  response->addHeader(F("Cache-Control"),"no-cache");
-  #else
-  response->addHeader(F("Cache-Control"),"no-store,max-age=0"); // prevent caching if debug build
-  #endif
-  sprintf_P(tmp, PSTR("%8d-%02x"), VERSION, cacheInvalidate);
-  response->addHeader(F("ETag"), tmp);
 }
 
 void serveIndex(AsyncWebServerRequest* request)
@@ -606,7 +619,7 @@ void serveSettingsJS(AsyncWebServerRequest* request)
   
   AsyncWebServerResponse *response;
   response = request->beginResponse(200, "application/javascript", buf);
-  response->addHeader(F("Cache-Control"),"no-store");
+  response->addHeader(FPSTR(s_cache_control),F("no-store"));
   response->addHeader(F("Expires"),"0");
   request->send(response);
 }
