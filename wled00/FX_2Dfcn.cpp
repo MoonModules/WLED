@@ -47,7 +47,7 @@ void WS2812FX::setUpMatrix() {
     DEBUG_PRINTF("setUpMatrix %d x %d\n", Segment::maxWidth, Segment::maxHeight);
     
     // WLEDMM check if mapping table is necessary (avoiding heap fragmentation)
-#if defined(WLED_ENABLE_HUB75MATRIX)
+//#if defined(WLED_ENABLE_HUB75MATRIX)
     bool needLedMap = (loadedLedmap >0);              // ledmap loaded
     needLedMap |= WLED_FS.exists(F("/2d-gaps.json")); // gapFile found
     needLedMap |= panel.size() > 1;                   // 2D config: more than one panel
@@ -58,9 +58,9 @@ void WS2812FX::setUpMatrix() {
       needLedMap |= p.bottomStart | p.rightStart;        // panel not top left, or not left->light
       needLedMap |= (p.xOffset > 0) || (p.yOffset > 0);  // panel does not start at (0,0)
     }
-#else
-    bool needLedMap = true;                              // always use ledMaps on non-HUB75 builds
-#endif
+//#else
+//    bool needLedMap = true;                              // un-comment to always use ledMaps on non-HUB75 builds
+//#endif
 
     //WLEDMM recreate customMappingTable if more space needed
     if (Segment::maxWidth * Segment::maxHeight > customMappingTableSize) {
