@@ -1089,7 +1089,7 @@ bool allocateParticleSystemMemory2D(uint32_t numparticles, uint32_t numsources, 
   if (sizecontrol)
     requiredmemory += sizeof(PSsizeControl) * numparticles;
   requiredmemory += sizeof(PSsource) * numsources;
-  requiredmemory += sizeof(CRGB) * uint32_t(SEGMENT.calc_virtualWidth()) * uint32_t(SEGMENT.calc_virtualHeight()); // virtualLength not reliable, better to use vWidth * vHeight
+  requiredmemory += sizeof(CRGB) * uint32_t(SEGMENT.calc_virtualWidth()) * uint32_t(SEGMENT.calc_virtualHeight()); // WLEDMM virtualLength not reliable, better to use vWidth * vHeight
   requiredmemory += additionalbytes + 3; // add 3 to ensure there is room for stuffing bytes
   //requiredmemory = (requiredmemory + 3) & ~0x03; // align memory block to next 4-byte boundary
   PSPRINTLN("mem alloc: " + String(requiredmemory));
