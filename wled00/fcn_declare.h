@@ -89,6 +89,9 @@ extern uint8_t gammaT[256];    // colors.cpp
 inline uint8_t gamma8(uint8_t value) { return gammaT[value];}           // WLEDMM inlined for speed
 inline uint8_t fast_unGamma8(uint8_t value) { return gammaTinv[value];}
 
+#define gamma32inv(c) unGamma24(c)      // WLEDMM alias for upstream compatibility
+#define gamma8inv(c)  fast_unGamma8(c)  // WLEDMM alias for upstream compatibility
+
 //dmx_output.cpp
 void initDMXOutput();
 void handleDMXOutput();
@@ -395,7 +398,10 @@ void userConnected();
 void userLoop();
 
 //util.cpp
-int getNumVal(const String* req, uint16_t pos);
+#define inoise8 perlin8   // fastled legacy alias
+#define inoise16 perlin16 // fastled legacy alias
+#define hex2int(a) (((a)>='0' && (a)<='9') ? (a)-'0' : ((a)>='A' && (a)<='F') ? (a)-'A'+10 : ((a)>='a' && (a)<='f') ? (a)-'a'+10 : 0)
+int  __attribute__((pure)) getNumVal(const String* req, uint16_t pos);
 void parseNumber(const char* str, byte* val, byte minv=0, byte maxv=255);
 bool getVal(JsonVariant elem, byte* val, byte minv=0, byte maxv=255);
 bool updateVal(const char* req, const char* key, byte* val, byte minv=0, byte maxv=255);
@@ -412,7 +418,7 @@ uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLe
 uint8_t extractModeSlider(uint8_t mode, uint8_t slider, char *dest, uint8_t maxLen, uint8_t *var = nullptr);
 int16_t extractModeDefaults(uint8_t mode, const char *segVar);
 void checkSettingsPIN(const char *pin);
-uint16_t  __attribute__((pure)) crc16(const unsigned char* data_p, size_t length);   // WLEDMM: added attribute pure
+uint16_t __attribute__((pure)) crc16(const unsigned char* data_p, size_t length);   // WLEDMM: added attribute pure
 String computeSHA1(const String& input);
 String getDeviceId();
 uint16_t beatsin88_t(accum88 beats_per_minute_88, uint16_t lowest = 0, uint16_t highest = 65535, uint32_t timebase = 0, uint16_t phase_offset = 0);
@@ -424,6 +430,16 @@ um_data_t* simulateSound(uint8_t simulationId);
 uint8_t get_random_wheel_index(uint8_t pos);
 CRGB getCRGBForBand(int x, uint8_t *fftResult, int pal); //WLEDMM netmindz ar palette
 char *cleanUpName(char *in); // to clean up a name that was read from file
+uint32_t hashInt(uint32_t s);
+int32_t perlin1D_raw(uint32_t x, bool is16bit = false);
+int32_t perlin2D_raw(uint32_t x, uint32_t y, bool is16bit = false);
+int32_t perlin3D_raw(uint32_t x, uint32_t y, uint32_t z, bool is16bit = false);
+uint16_t perlin16(uint32_t x);
+uint16_t perlin16(uint32_t x, uint32_t y);
+uint16_t perlin16(uint32_t x, uint32_t y, uint32_t z);
+uint8_t perlin8(uint16_t x);
+uint8_t perlin8(uint16_t x, uint16_t y);
+uint8_t perlin8(uint16_t x, uint16_t y, uint16_t z);
 
 // fast (true) random numbers using hardware RNG, all functions return values in the range lowerlimit to upperlimit-1
 // note: for true random numbers with high entropy, do not call faster than every 200ns (5MHz)
