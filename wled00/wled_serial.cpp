@@ -93,9 +93,12 @@ bool canUseSerial(void) {   // WLEDMM returns true if Serial can be used for deb
 
 void handleSerial()
 {
+#if !ARDUINO_USB_CDC_ON_BOOT
+  // some USB-CDC boards.json set RX and TX to the USB+ and USB- pins. These pins cannot be assigned to other purposes, so always availeable 
   if (pinManager.isPinAllocated(hardwareRX)) return;
-  if (!Serial) return;              // arduino docs: `if (Serial)` indicates whether or not the USB CDC serial connection is open. For all non-USB CDC ports, this will always return true
+#endif
   if (((pinManager.isPinAllocated(hardwareTX)) && (pinManager.getPinOwner(hardwareTX) != PinOwner::DebugOut))) return; // WLEDMM serial TX is necessary for adalight / TPM2
+  if (!Serial) return;              // arduino docs: `if (Serial)` indicates whether or not the USB CDC serial connection is open. For all non-USB CDC ports, this will always return true
 
   #ifdef WLED_ENABLE_ADALIGHT
   static auto state = AdaState::Header_A;

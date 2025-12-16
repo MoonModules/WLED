@@ -91,6 +91,22 @@
   #endif
 #endif
 
+#ifndef WLED_MAX_SEGNAME_LEN
+  #ifdef ESP8266
+    #define WLED_MAX_SEGNAME_LEN 32
+  #else
+    #define WLED_MAX_SEGNAME_LEN 48  // WLEDMM upstream uses 64, but 48 seems to be a good compromise between flexibility and memory needed
+  #endif
+#else
+  #if WLED_MAX_SEGNAME_LEN<32
+    #undef WLED_MAX_SEGNAME_LEN
+    #define WLED_MAX_SEGNAME_LEN 32
+  #else
+    #warning WLED UI does not support your modified maximum segment name length!
+  #endif
+#endif
+
+
 //Usermod IDs
 #define USERMOD_ID_RESERVED               0     //Unused. Might indicate no usermod present
 #define USERMOD_ID_UNSPECIFIED            1     //Default value for a general user mod that does not specify a custom ID
@@ -293,7 +309,7 @@
 #define BTN_TYPE_TOUCH_SWITCH     9    //WLEDMM not yet supported
 
 //Ethernet board types
-#define WLED_NUM_ETH_TYPES       12 //WLEDMM +1 for Olimex ESP32-Gateway
+#define WLED_NUM_ETH_TYPES       15 //WLEDMM +1 for Olimex ESP32-Gateway
 
 #define WLED_ETH_NONE             0
 #define WLED_ETH_WT32_ETH01       1
@@ -306,7 +322,10 @@
 #define WLED_ETH_QUINLED_OCTA     8
 #define WLED_ETH_ABCWLEDV43ETH    9
 #define WLED_ETH_SERG74          10
-#define WLED_ETH_OLIMEX_GTW      11
+#define WLED_ETH_ESP32_POE_WROVER 11
+#define WLED_ETH_LILYGO_T_POE_PRO 12
+#define WLED_ETH_GLEDOPTO         13
+#define WLED_ETH_OLIMEX_GTW      14
 
 //Hue error codes
 #define HUE_ERROR_INACTIVE        0
@@ -594,8 +613,10 @@
 //         error only in MM, not in upstream... tbd: find out why
 #ifdef ARDUINO_ARCH_ESP32
   #define IRAM_ATTR_YN IRAM_ATTR
+  #define DRAM_ATTR_YN DRAM_ATTR
 #else
   #define IRAM_ATTR_YN
+  #define DRAM_ATTR_YN 
 #endif
 
 #define WLED_O2_ATTR __attribute__((optimize("O2")))

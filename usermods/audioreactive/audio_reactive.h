@@ -3,9 +3,9 @@
 /* 
    @title     MoonModules WLED - audioreactive usermod
    @file      audio_reactive.h
-   @repo      https://github.com/MoonModules/WLED, submit changes to this file as PRs to MoonModules/WLED
-   @Authors   https://github.com/MoonModules/WLED/commits/mdev/
-   @Copyright © 2024 Github MoonModules Commit Authors (contact moonmodules@icloud.com for details)
+   @repo      https://github.com/MoonModules/WLED-MM, submit changes to this file as PRs to MoonModules/WLED-MM
+   @Authors   https://github.com/MoonModules/WLED-MM/commits/mdev/
+   @Copyright © 2024,2025 Github MoonModules Commit Authors (contact moonmodules@icloud.com for details)
    @license   Licensed under the EUPL-1.2 or later
 
 */
@@ -136,15 +136,19 @@ static bool udpSyncConnected = false;         // UDP connection status -> true i
 
 // audioreactive variables
 #ifdef ARDUINO_ARCH_ESP32
+#ifndef SR_AGC // Automatic gain control mode
+  #ifdef SR_SQUELCH
+   #define SR_AGC 1 //  default "squelch" was provided --> default mode = on
+  #else
+   #define SR_AGC 0 // default mode = off
+  #endif
+#endif
+
 static float    micDataReal = 0.0f;             // MicIn data with full 24bit resolution - lowest 8bit after decimal point
 static float    multAgc = 1.0f;                 // sample * multAgc = sampleAgc. Our AGC multiplier
 static float    sampleAvg = 0.0f;               // Smoothed Average sample - sampleAvg < 1 means "quiet" (simple noise gate)
 static float    sampleAgc = 0.0f;               // Smoothed AGC sample
-#ifdef SR_SQUELCH
-static uint8_t  soundAgc = 1;                   // Automagic gain control: 0 - none, 1 - normal, 2 - vivid, 3 - lazy (config value) - enable AGC if default "squelch" was provided
-#else
-static uint8_t  soundAgc = 0;                   // Automagic gain control: 0 - none, 1 - normal, 2 - vivid, 3 - lazy (config value)
-#endif
+static uint8_t  soundAgc = SR_AGC;              // Automagic gain control: 0 - none, 1 - normal, 2 - vivid, 3 - lazy (config value) - enable AGC if default "squelch" was provided
 
 #endif
 static float    volumeSmth = 0.0f;              // either sampleAvg or sampleAgc depending on soundAgc; smoothed sample
@@ -1750,7 +1754,15 @@ class AudioReactive : public Usermod {
       // add info for UI
       if ((receivedPacket.frameCounter > 0) && (lastFrameCounter > 0)) receivedFormat = 3; // v2+
       else receivedFormat = 2; // v2
-      // check sequence
+
+         // Simpler 8-bit rollover-safe sequence check:
+         // (int8_t)(cur - prev) > 0  => cur is ahead of prev by 1..127
+         //                        0 => duplicate, 
+		 //                      < 0 => older
+         //    bool sequenceOK = !audioSyncSequence || receivedPacket.frameCounter == 0 ||   // always accept legacy "0"
+         //    ((int8_t)(receivedPacket.frameCounter - lastFrameCounter) > 0);
+
+	  // check sequence
       bool sequenceOK = false;
       if(receivedPacket.frameCounter > lastFrameCounter) sequenceOK = true;                  // sequence OK
       if((lastFrameCounter < 12) && (receivedPacket.frameCounter > 248)) sequenceOK = false; // prevent sequence "roll-back" due to late packets (1->254)

@@ -707,7 +707,7 @@ img {
 #wbal  .sliderdisplay { background: linear-gradient(90deg, #ff8f1f 0%, #fff 50%, #cbdbff); }
 
 /* wrapper divs hidden by default */
-#liveview, #liveview2D, #roverstar, #pql
+#liveview, #liveview2D, #roverstar, #pql,
 #rgbwrap, #swrap, #hwrap, #kwrap, #wwrap, #wbal, #qcs-w, #hexw,
 .clear-icon, .edit-icon, .ptxt {
 	display: none;

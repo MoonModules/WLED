@@ -765,9 +765,19 @@ void getSettingsJS(AsyncWebServerRequest* request, byte subPage, char* dest) //W
     sappends('m',SET_F("(\"sip\")[0]"),(char*)F("WLEDMM ")); //WLEDMM server message
     olen -= 2; //delete ";
     oappend(versionString);
-    oappend(SET_F(" (build "));
+    oappend(SET_F(" ("));
     oappendi(VERSION);
-    oappend(SET_F(")\";"));
+    oappend(SET_F(")<br><small>\\\""));
+    oappend(releaseString);
+    oappend(SET_F(".bin\\\"<br>(Processor: "));
+    oappend(
+      #if defined(ARDUINO_ARCH_ESP32)
+            ESP.getChipModel()
+      #else
+            "ESP8266"
+      #endif
+    );
+    oappend(SET_F(")</small>\";"));
     oappend(SET_F("sd=\""));
     oappend(serverDescription);
     oappend(SET_F("\";"));
@@ -861,7 +871,7 @@ void getSettingsJS(AsyncWebServerRequest* request, byte subPage, char* dest) //W
     oappend(versionString);
     oappend(SET_F(" "));
     oappend((char*)FPSTR(releaseString));
-    oappend(SET_F(".bin<br>("));
+    oappend(SET_F(".bin<br><small>("));
     #if defined(CONFIG_IDF_TARGET_ESP32C3)
     oappend(SET_F("ESP32-C3"));
     #elif defined(CONFIG_IDF_TARGET_ESP32S3)
@@ -875,7 +885,7 @@ void getSettingsJS(AsyncWebServerRequest* request, byte subPage, char* dest) //W
     #endif
     oappend(SET_F(" build "));
     oappendi(VERSION);
-    oappend(SET_F(")\";"));
+    oappend(SET_F(")</small>\";"));
   }
 
   if (subPage == 10) // 2D matrices

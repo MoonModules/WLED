@@ -16,6 +16,10 @@
 bool canUseSerial(void);                        // WLEDMM implemented in wled_serial.cpp
 void strip_wait_until_idle(String whoCalledMe); // WLEDMM implemented in FX_fcn.cpp
 bool strip_uses_global_leds(void) __attribute__((pure));  // WLEDMM implemented in FX_fcn.cpp
+#ifdef WLED_ENABLE_GIF
+struct Segment;                                 // forward declaration
+void endImagePlayback(Segment *seg);            // implemented in image_loader.cpp
+#endif
 
 #define FASTLED_INTERNAL //remove annoying pragma messages
 #define USE_GET_MILLISECOND_TIMER
@@ -86,6 +90,8 @@ extern BusManager busses; // same as wled.h
   #endif
   #endif
 #endif
+
+#define MAX_SEGMENT_OVERDATA ((MAX_SEGMENT_DATA) + (MAX_SEGMENT_DATA)/2) // WLEDMM 50% extra overdraft budget
 
 /* How much data bytes each segment should max allocate to leave enough space for other segments,
   assuming each segment uses the same amount of data. 256 for ESP8266, 640 for ESP32. */
@@ -303,7 +309,8 @@ extern BusManager busses; // same as wled.h
 #define FX_MODE_GRAVFREQ               158
 #define FX_MODE_DJLIGHT                159
 #define FX_MODE_2DFUNKYPLANK           160
-#define FX_MODE_2DCENTERBARS           161
+//#define FX_MODE_2DCENTERBARS           161
+#define FX_MODE_SHIMMER                161  // gap fill, non SR 1D effect
 #define FX_MODE_2DPULSER               162
 #define FX_MODE_BLURZ                  163
 #define FX_MODE_2DDRIFT                164
@@ -583,6 +590,9 @@ typedef struct Segment {
       #ifdef ARDUINO_ARCH_ESP32
       strip_wait_until_idle("~Segment()");
       #endif
+      #ifdef WLED_ENABLE_GIF
+      endImagePlayback(this);
+      #endif
 
       if ((Segment::_globalLeds == nullptr) && !strip_uses_global_leds() && (ledsrgb != nullptr)) {free(ledsrgb); ledsrgb = nullptr;}  // WLEDMM we need "!strip_uses_global_leds()" to avoid crashes (#104)
       if (name) { delete[] name; name = nullptr; }
@@ -611,7 +621,7 @@ typedef struct Segment {
     inline uint8_t  getLightCapabilities(void) const { return _capabilities; }
 
     static size_t   getUsedSegmentData(void)    { return _usedSegmentData; } // WLEDMM size_t
-    static void     addUsedSegmentData(int len) { _usedSegmentData += len; }
+    static void     addUsedSegmentData(int len) { _usedSegmentData = max(0, int(_usedSegmentData + len)); }  // WLEDMM prevent negative alloc
 
     void    allocLeds(); //WLEDMM
     inline static const CRGBPalette16 &getCurrentPalette(void) { return Segment::_currentPalette; }
@@ -628,7 +638,7 @@ typedef struct Segment {
 
     // runtime data functions
     inline size_t dataSize(void) const { return _dataLen; }
-    bool allocateData(size_t len);
+    bool allocateData(size_t len, bool allowOverdraft = false);
     void deallocateData(void);
     void resetIfRequired(void);
     void startFrame(void); // cache a few values that don't change while an effect is drawing
@@ -813,8 +823,13 @@ typedef struct Segment {
     inline void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGB c, bool soft = false, uint8_t depth = UINT8_MAX) { drawLine(x0, y0, x1, y1, uint32_t(c) & 0x00FFFFFF, soft, depth); } // automatic inline
     void drawArc(unsigned x0, unsigned y0, int radius, uint32_t color, uint32_t fillColor = 0);
     inline void drawArc(unsigned x0, unsigned y0, int radius, CRGB color, CRGB fillColor = BLACK) { drawArc(x0, y0, radius, uint32_t(color) & 0x00FFFFFF, uint32_t(fillColor) & 0x00FFFFFF); } // automatic inline
+
     void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2 = 0, bool drawShadow = false);
     inline void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGB c, CRGB c2) { drawCharacter(chr, x, y, w, h, uint32_t(c) & 0x00FFFFFF, uint32_t(c2) & 0x00FFFFFF); } // automatic inline
+    // unicode-aware wrapper for drawCharacter(), to be called from  mode_2Dscrollingtext()
+    void drawText(const unsigned char* text, size_t maxLen, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2 = 0, bool drawShadow = false);
+    // #if !WLED_ENABLE_FULL_FONTS => drawText() will fall back to just forwarding each char to drawCharacter()
+
     void wu_pixel(uint32_t x, uint32_t y, CRGB c);
     //void blur1d(fract8 blur_amount); // blur all rows in 1 dimension
     void blur2d(fract8 blur_amount) { blur(blur_amount); }

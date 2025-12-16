@@ -3,9 +3,9 @@
 /* 
    @title     MoonModules WLED - auto-playlist usermod
    @file      usermod_v2_auto_playlist.h
-   @repo      https://github.com/MoonModules/WLED, submit changes to this file as PRs to MoonModules/WLED
-   @Authors   https://github.com/MoonModules/WLED/commits/mdev/
-   @Copyright © 2024 Github MoonModules Commit Authors (contact moonmodules@icloud.com for details)
+   @repo      https://github.com/MoonModules/WLED-MM, submit changes to this file as PRs to MoonModules/WLED-MM
+   @Authors   https://github.com/MoonModules/WLED-MM/commits/mdev/
+   @Copyright © 2024,2025 Github MoonModules Commit Authors (contact moonmodules@icloud.com for details)
    @license   Licensed under the EUPL-1.2 or later
 
 */
@@ -257,7 +257,7 @@ class AutoPlaylistUsermod : public Usermod {
             // after change_lockout. Better for smaller change_lockout values.
 
             suspendPlaylist();       // suspend the playlist engine before changing to another preset
-            applyPreset(newpreset);
+            applyPreset(newpreset, CALL_MODE_NOTIFICATION);
             
             #ifdef USERMOD_AUTO_PLAYLIST_DEBUG
             USER_PRINTF("*** CHANGE distance = %4lu - change_interval was %5ldms - next change_threshold is %4u (%4u diff aprox)\n",(unsigned long)distance,change_interval,change_threshold,change_threshold_change);

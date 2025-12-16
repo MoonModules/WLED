@@ -12,7 +12,7 @@ static volatile byte presetToApply = 0;
 static volatile byte callModeToApply = 0;
 static volatile byte presetToSave = 0;
 static volatile int8_t saveLedmap = -1;
-static char quickLoad[9];
+static char quickLoad[12]; // WLEDMM 9->12 to prevent crashing with unicode
 static char saveName[33];
 static bool includeBri = true, segBounds = true, selectedOnly = false, playlistSave = false;
 
@@ -88,8 +88,8 @@ static void doSaveState() {
   // clean up
   saveLedmap   = -1;
   presetToSave = 0;
-  saveName[0]  = '\0';
-  quickLoad[0] = '\0';
+  memset(saveName, '\0', sizeof(saveName));
+  memset(quickLoad,'\0', sizeof(quickLoad));
   playlistSave = false;
 }
 
@@ -306,7 +306,7 @@ void savePreset(byte index, const char* pname, JsonObject sObj)
 
   presetToSave = index;
   playlistSave = false;
-  if (sObj[F("ql")].is<const char*>()) strlcpy(quickLoad, sObj[F("ql")].as<const char*>(), 9); // client limits QL to 2 chars, buffer for 8 bytes to allow unicode
+  if (sObj[F("ql")].is<const char*>()) strlcpy(quickLoad, sObj[F("ql")].as<const char*>(), sizeof(quickLoad)); // client limits QL to 2 chars, buffer for 12 bytes to allow encoded unicode
 
   if (sObj.size()==0 || sObj["o"].isNull()) { // no "o" means not a playlist or custom API call, saving of state is async (not immediately)
     includeBri   = sObj["ib"].as<bool>() || sObj.size()==0 || index==255; // temporary preset needs brightness

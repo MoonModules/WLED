@@ -110,7 +110,7 @@ float tan_approx(float x) {
   return res;
 }
 
-#if 0  // WLEDMM we prefer libm functions that are accurate and fast.
+#if defined(WLED_USE_UNREAL_MATH)  // WLEDMM we prefer libm functions that are accurate and fast.
 #define ATAN2_CONST_A 0.1963f
 #define ATAN2_CONST_B 0.9817f
 

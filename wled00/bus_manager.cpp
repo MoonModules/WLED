@@ -610,6 +610,20 @@ uint8_t BusHub75Matrix::activeType = 0;
 uint8_t BusHub75Matrix::instanceCount = 0;
 uint8_t BusHub75Matrix::last_bri = 0;
 
+#ifndef NO_CIE1931
+
+// WLEDMM speedup: create a version of "unGamma8" that can be inlined by the compiler
+extern uint8_t gammaTinv[256]; // defined in colors.cpp
+static uint8_t const* myGammaTable = gammaTinv; // local alias for gammaTinv
+
+static inline uint8_t unGamma8_bus(uint8_t value) {
+  return myGammaTable[value];
+}
+static inline uint32_t unGamma24_bus(uint32_t c) {
+  return RGBW32(myGammaTable[R(c)], myGammaTable[G(c)], myGammaTable[B(c)], W(c));
+}
+
+#endif
 
 // --------------------------
 // Bitdepth reduction based on panel size
@@ -909,6 +923,8 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
 #endif
 
   USER_PRINTF("MatrixPanel_I2S_DMA config - %ux%u (type %u) length: %u, %u bits/pixel.\n", mxconfig.mx_width, mxconfig.mx_height, bc.type, mxconfig.chain_length, mxconfig.getPixelColorDepthBits() * 3);
+  USER_PRINTF("MatrixPanel_I2S_DMA config - clock phase = %s, latch_blanking = %d, min refresh = %d fps.\n", 
+              mxconfig.clkphase ? "positive edge":"negative edge", int(mxconfig.latch_blanking), int(mxconfig.min_refresh_rate));
   DEBUG_PRINT(F("Free heap: ")); DEBUG_PRINTLN(ESP.getFreeHeap()); lastHeap = ESP.getFreeHeap();
 
   // check if we can re-use the existing display driver
@@ -1080,31 +1096,43 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
     activeFourScanPanel = fourScanPanel;
     if (newDisplay) memcpy(&activeMXconfig, &mxconfig, sizeof(mxconfig));
   }
+
+#ifndef NO_CIE1931
+  // force initial calculation of gamma correction tables
+  if ((gammaCorrectVal < 0.999f) || (gammaCorrectVal > 3.0f)) calcGammaTable(1.0f);
+  else calcGammaTable(gammaCorrectVal);
+#endif
+
   instanceCount++;
   USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - ESP.getFreeHeap()));
 }
 
 void __attribute__((hot)) IRAM_ATTR BusHub75Matrix::setPixelColor(uint16_t pix, uint32_t c) {
-  if ( pix >= _len) return;
+// if ( pix >= _len) return;  // not necessary - this was already checked at busses.setPixelColor()
   #if 0
   if ((correctWB) && (_cct >= 1900)) c = colorBalanceFromKelvin(_cct, c); //color correction from CCT - reduces framerate by up to 10%. If you still want it, change the line above to "#if 1"
   #endif
-  if (_ledBuffer) {
+// if (_ledBuffer) { // not necessary - isOk() would return false if buffer is not availeable
     CRGB fastled_col = CRGB(c);
     if (_ledBuffer[pix] != fastled_col) {
       _ledBuffer[pix] = fastled_col;
       setBitInArray(_ledsDirty, pix, true);  // flag pixel as "dirty"
     }
-  }
+// }
 }
 
+// needed to mimic NeoPixelBus, which returns scaled-down colours
 uint32_t IRAM_ATTR BusHub75Matrix::getPixelColor(uint16_t pix) const {
-  if (pix >= _len || !_ledBuffer) return BLACK;
-  return uint32_t(_ledBuffer[pix].scale8(_bri)) & 0x00FFFFFF;  // scale8() is needed to mimic NeoPixelBus, which returns scaled-down colours
+// if (pix >= _len || !_ledBuffer) return BLACK; // not necessary - this was already checked at busses.getPixelColor()
+#if defined(WLEDMM_FASTPATH) && !defined(WLEDMM_SAVE_FLASH) 
+  return color_fade(uint32_t(_ledBuffer[pix]) & 0x00FFFFFF, _bri);   // this is slightly faster if we have inline color_fade()
+#else
+  return uint32_t(_ledBuffer[pix].scale8(_bri)) & 0x00FFFFFF;        // do it the FastLED way
+#endif
 }
 
 uint32_t __attribute__((hot)) IRAM_ATTR BusHub75Matrix::getPixelColorRestored(uint16_t pix) const {
-  if (pix >= _len || !_ledBuffer) return BLACK;
+//  if (pix >= _len || !_ledBuffer) return BLACK;  // not necessary - this was already checked at busses.getPixelColorRestored()
   return uint32_t(_ledBuffer[pix]) & 0x00FFFFFF;
 }
 
@@ -1142,13 +1170,12 @@ void __attribute__((hot)) IRAM_ATTR BusHub75Matrix::show(void) {
     for (int y=0; y<height; y++) for (int x=0; x<width; x++) {
       if (getBitFromArray(ledsDirty, pix) == true) {        // only repaint the "dirty"  pixels
         #ifndef NO_CIE1931
-        uint32_t c = uint32_t(ledBuffer[pix]) & 0x00FFFFFF; // get RGB color, removing FastLED "alpha" component 
-        c = unGamma24(c); // to use the driver linear brightness feature, we first need to undo WLED gamma correction
-        uint8_t r = R(c);
-        uint8_t g = G(c);
-        uint8_t b = B(c);
+        const CRGB& c = ledBuffer[pix]; // c is an alias for ledBuffer[pix] - avoid creation of a temporary CRGB object instance
+        uint8_t r = unGamma8_bus(c.r);
+        uint8_t g = unGamma8_bus(c.g);
+        uint8_t b = unGamma8_bus(c.b);
         #else
-        const CRGB c = ledBuffer[pix];  // we stay on CRGB, instead of packing/unpacking the color value to uint32_t
+        const CRGB& c = ledBuffer[pix];  // we stay on CRGB, instead of packing/unpacking the color value to uint32_t
         uint8_t r = c.r;
         uint8_t g = c.g;
         uint8_t b = c.b;
@@ -1176,6 +1203,7 @@ void BusHub75Matrix::cleanup() {
 #endif
 
   _valid = false;
+  delay(30); // give some time to finish DMA
   deallocatePins();
   _len = 0;
   //if (fourScanPanel != nullptr) delete fourScanPanel;  // warning: deleting object of polymorphic class type 'VirtualMatrixPanel' which has non-virtual destructor might cause undefined behavior

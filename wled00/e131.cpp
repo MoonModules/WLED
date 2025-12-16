@@ -31,10 +31,18 @@ void handleDDPPacket(e131_packet_t* p) {
 
   uint32_t start =  htonl(p->channelOffset) / ddpChannelsPerLed;
   start += DMXAddress / ddpChannelsPerLed;
-  uint16_t stop = start + htons(p->dataLen) / ddpChannelsPerLed;
+  uint16_t dataLen = htons(p->dataLen);
+  unsigned stop = start + dataLen / ddpChannelsPerLed;
   uint8_t* data = p->data;
   uint16_t c = 0;
   if (p->flags & DDP_TIMECODE_FLAG) c = 4; //packet has timecode flag, we do not support it, but data starts 4 bytes later
+
+  unsigned numLeds = stop - start; // stop >= start is guaranteed
+  unsigned maxDataIndex = c + numLeds * ddpChannelsPerLed; // validate bounds before accessing data array
+  if (maxDataIndex > dataLen) {
+    DEBUG_PRINTLN(F("DDP packet data bounds exceeded, rejecting."));
+    return;
+  }
 
   if (realtimeMode != REALTIME_MODE_DDP) ddpSeenPush = false; // just starting, no push yet
   realtimeLock(realtimeTimeoutMs, REALTIME_MODE_DDP);

@@ -49,7 +49,7 @@ def wledmm_print_build_info(env):
 
     found = False
     for item in all_flags:
-        if  'WLED_RELEASE_NAME' in item[0] or 'WLED_VERSION' in item[0] or 'ARDUINO_USB_CDC_ON_BOOT' in item[0]:
+        if  'WLED_RELEASE_NAME' in item[0] or 'WLED_VERSION' in item[0] or 'ARDUINO_USB_CDC_ON_BOOT' in item[0] or 'ARDUINO_USB_MODE' in item[0]:
             if first: print("\nUsermods and Features:")
             print_my_item(item)
             first = False

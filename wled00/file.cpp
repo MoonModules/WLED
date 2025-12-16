@@ -8,6 +8,7 @@
 #if WLED_FS != LITTLEFS && ESP_IDF_VERSION_MAJOR < 4
   #include "esp_spiffs.h"
 #endif
+//#define yield() {delay(0);}  // WLEDMM yield() is completely unnecessary on esp32, but delay(0) can reduce task contention
 #endif
 
 //WLEDMM seems that 256 is indeed the optimal buffer length
@@ -37,17 +38,37 @@ static File f; // don't export to other cpp files
 void closeFile() {
   #ifdef ARDUINO_ARCH_ESP32
   // WLEDMM: file.close() triggers flash writing. While flash is writing, the NPB RMT driver cannot fill its buffer which may create glitches.
+  // WLEDMM more precisely (thanks to a web research done by AI):
+  //        the RMT peripheral itself doesn’t stall, but the refill path often does. In Arduino-ESP32/WLED 
+  //        typical builds, close() that commits flash writes frequently causes enough blocking that the LED pipeline under-runs, resulting in visible glitches. 
+  //        So the assumption is practically correct for this project context.
+  //    --> with neopixelBus 2.7.5, the practical ISR stall budget is about 0.08–0.12 ms — far less than LittleFS flash commit times.
+  //        typical flash write "commit" times are between 0.5ms and 10ms, but they can be a few 100ms in worst case
+  //    --> file reads rarely cause refill stalls compared to writes, but large/fragmented reads can still exceed the ~0.08–0.12 ms budget.
+  //        esp32 recommendations: use f.setBufferSize() (512–1024 for reads is reasonable); use delay(0) after file reads, to reduce task contention
+
+  if (!f) {doCloseFile = false; return;} // WLEDMM only do all this hick-hack when f is an open file
+
   unsigned long t_wait = millis();
+  bool oldLock = suspendStripService;
+  if (strip.isUpdating()) suspendStripService = true;             // WLEDMM schedule short pause to prevent LEDs glitching during flash write
   while(strip.isUpdating() && (millis() - t_wait < 72)) delay(1); // WLEDMM try to catch a moment when strip is idle
   while(strip.isUpdating() && (millis() - t_wait < 96)) delay(0); //        try harder
   //if (strip.isUpdating()) USER_PRINTLN("closeFile: strip still updating.");
   delay(2); // might help
+  #else
+    bool oldLock = suspendStripService; // fix build f***u* on 8266
   #endif
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINT(F("Close -> "));
     uint32_t s = millis();
   #endif
+  if ((suspendStripService == false) && (oldLock == true)) oldLock = false; // update in case of parallel lock release by another task
   f.close();
+  #ifdef ARDUINO_ARCH_ESP32
+  delay(1); // might help
+  #endif
+  suspendStripService = oldLock; // restore previous lock
   DEBUGFS_PRINTF("took %d ms\n", millis() - s);
   doCloseFile = false;
 }
@@ -61,7 +82,7 @@ static bool bufferedFind(const char *target, bool fromStart = true) {
     uint32_t s = millis();
   #endif
 
-  if (!f || !f.size()) return false;
+  if (!f || !f.size()) return false; // fast return when current file closed, or file size is zero
   size_t targetLen = strlen(target);
 
   size_t index = 0;
@@ -193,7 +214,7 @@ bool appendObjectToFile(const char* key, JsonDocument* content, uint32_t s, uint
   if (!f) return false;
 
   if (f.size() < 3) {
-    char init[10];
+    char init[12];
     strcpy_P(init, PSTR("{\"0\":{}}"));
     f.print(init);
   }
@@ -264,7 +285,7 @@ bool appendObjectToFile(const char* key, JsonDocument* content, uint32_t s, uint
 
 bool writeObjectToFileUsingId(const char* file, uint16_t id, JsonDocument* content)
 {
-  char objKey[10];
+  char objKey[12];
   sprintf(objKey, "\"%d\":", id);
   return writeObjectToFile(file, objKey, content);
 }
@@ -339,7 +360,7 @@ bool writeObjectToFile(const char* file, const char* key, JsonDocument* content)
 
 bool readObjectFromFileUsingId(const char* file, uint16_t id, JsonDocument* dest)
 {
-  char objKey[10];
+  char objKey[12];
   sprintf(objKey, "\"%d\":", id);
   return readObjectFromFile(file, objKey, dest);
 }
@@ -466,11 +487,11 @@ static const uint8_t *getPresetCache(size_t &size) {
 #endif
 
 // WLEDMM
-static bool haveLedmapFile = true;
-static bool haveIndexFile = true;
-static bool haveSkinFile = true;
-static bool haveICOFile = true;
-static bool haveCpalFile = true;
+static volatile bool haveLedmapFile = true;
+static volatile bool haveIndexFile = true;
+static volatile bool haveSkinFile = true;
+static volatile bool haveICOFile = true;
+static volatile bool haveCpalFile = true;
 void invalidateFileNameCache() { // reset "file not found" cache
   haveLedmapFile = true;
   haveIndexFile = true;

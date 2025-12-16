@@ -9,7 +9,7 @@
 	var loc = false, locip;
 	var maxPanels=64;
 	var ctx = null; // WLEDMM
-	function H(){window.open("https://mm.kno.wled.ge/features/2D");}
+	function H(){window.open("https://mm.kno.wled.ge/WLEDSR/LED-Preferences/");}
 	var ledIndex = 0; // WLEDMM
 	var wasAdvanced = -1; //WLEDMM
 	function B(){window.open("/settings","_self");}
@@ -209,6 +209,7 @@ Y:<input id="P${i}Y" name="P${i}Y" type="number" min="0" max="1023" value="0" on
 				Sf[`P${p}S`].checked = d.Sf.PSL.checked;
 			}
 		}
+		UI(); // Update the preview after generating panels
 	}
 
 	function expand(o,i)
