@@ -759,12 +759,20 @@ typedef struct Segment {
     void deletejMap(); //WLEDMM jMap
 
     // WLEDMM upstream compatibility functions
+    #ifdef WLEDMM_FASTPATH
       inline unsigned vLength()       const           { return calc_virtualLength(); }
       inline unsigned vWidth()        const           { return _2dWidth; }
       inline unsigned vHeight()       const           { return _2dHeight; }
       inline void setDrawDimensions()                 { startFrame(); }
       inline void beginDraw(uint16_t prog = 0xFFFFU)  { startFrame(); }
       //void      setGeometry(uint16_t i1, uint16_t i2, uint8_t grp=1, uint8_t spc=0, uint16_t ofs=UINT16_MAX, uint16_t i1Y=0, uint16_t i2Y=1, uint8_t m12=0); // not availeable in MM
+    #else
+      inline unsigned vLength()       const           { return virtualLength(); }
+      inline unsigned vWidth()        const           { return virtualWidth(); }
+      inline unsigned vHeight()       const           { return virtualHeight(); }
+      inline void setDrawDimensions()                 { return; }
+      inline void beginDraw(uint16_t prog = 0xFFFFU)  { return; }
+    #endif
 
     [[gnu::hot]] inline uint16_t XY(uint_fast16_t x, uint_fast16_t y)  const  { // support function to get relative index within segment (for leds[]) // WLEDMM inline for speed
       uint_fast16_t width  = max(uint16_t(1), virtualWidth());   // segment width in logical pixels  -- softhack007 avoid div/0
