@@ -105,6 +105,8 @@ extern BusManager busses; // same as wled.h
 #define SEGCOLOR(x)      strip.segColor(x) /* saves us a few kbytes of code */
 #define SEGPALETTE       Segment::getCurrentPalette()
 #define SEGLEN           strip._virtualSegmentLength /* saves us a few kbytes of code */
+#define SEG_W            (SEGMENT.virtualWidth())
+#define SEG_H            (SEGMENT.virtualHeight())
 #define SPEED_FORMULA_L  (4U + (50U*(255U - SEGMENT.speed))/min(SEGLEN, uint16_t(512)))  // WLEDMM limiting the formula to 512 virtual pixels
 
 // some common colors
@@ -722,16 +724,16 @@ typedef struct Segment {
 #ifndef WLEDMM_FASTPATH
     inline uint16_t virtualWidth() const {  // WLEDMM use fast types, and make function inline
       uint_fast16_t groupLen = groupLength();
-      uint_fast16_t vWidth = ((transpose ? height() : width()) + groupLen - 1) / groupLen;
-      if (mirror) vWidth = (vWidth + 1) /2;  // divide by 2 if mirror, leave at least a single LED
-      return vWidth;
+      uint_fast16_t virtWidth = ((transpose ? height() : width()) + groupLen - 1) / groupLen;
+      if (mirror) virtWidth = (virtWidth + 1) /2;  // divide by 2 if mirror, leave at least a single LED
+      return virtWidth;
     }
     inline uint16_t calc_virtualWidth() const { return virtualWidth();}
     inline uint16_t virtualHeight() const {  // WLEDMM use fast types, and make function inline
       uint_fast16_t groupLen = groupLength();
-      uint_fast16_t vHeight = ((transpose ? width() : height()) + groupLen - 1) / groupLen;
-      if (mirror_y) vHeight = (vHeight + 1) /2;  // divide by 2 if mirror, leave at least a single LED
-      return vHeight;
+      uint_fast16_t virtHeight = ((transpose ? width() : height()) + groupLen - 1) / groupLen;
+      if (mirror_y) virtHeight = (virtHeight + 1) /2;  // divide by 2 if mirror, leave at least a single LED
+      return virtHeight;
     }
     inline uint16_t calc_virtualHeight() const { return virtualHeight();}
 #else
@@ -740,22 +742,38 @@ typedef struct Segment {
 
     uint16_t calc_virtualWidth() const {
       uint_fast16_t groupLen = groupLength();
-      uint_fast16_t vWidth = ((transpose ? height() : width()) + groupLen - 1) / groupLen;
-      if (mirror) vWidth = (vWidth + 1) /2;  // divide by 2 if mirror, leave at least a single LED
-      return vWidth;
+      uint_fast16_t virtWidth = ((transpose ? height() : width()) + groupLen - 1) / groupLen;
+      if (mirror) virtWidth = (virtWidth + 1) /2;  // divide by 2 if mirror, leave at least a single LED
+      return virtWidth;
     }
     uint16_t calc_virtualHeight() const {
       uint_fast16_t groupLen = groupLength();
-      uint_fast16_t vHeight = ((transpose ? width() : height()) + groupLen - 1) / groupLen;
-      if (mirror_y) vHeight = (vHeight + 1) /2;  // divide by 2 if mirror, leave at least a single LED
-      return vHeight;
+      uint_fast16_t virtHeight = ((transpose ? width() : height()) + groupLen - 1) / groupLen;
+      if (mirror_y) virtHeight = (virtHeight + 1) /2;  // divide by 2 if mirror, leave at least a single LED
+      return virtHeight;
     }
 #endif
 
     uint16_t nrOfVStrips(void) const;
     void createjMap(); //WLEDMM jMap
     void deletejMap(); //WLEDMM jMap
-  
+
+    // WLEDMM upstream compatibility functions
+    #ifdef WLEDMM_FASTPATH
+      inline unsigned vLength()       const           { return calc_virtualLength(); }
+      inline unsigned vWidth()        const           { return _2dWidth; }
+      inline unsigned vHeight()       const           { return _2dHeight; }
+      inline void setDrawDimensions()                 { startFrame(); }
+      inline void beginDraw(uint16_t prog = 0xFFFFU)  { startFrame(); }
+      //void      setGeometry(uint16_t i1, uint16_t i2, uint8_t grp=1, uint8_t spc=0, uint16_t ofs=UINT16_MAX, uint16_t i1Y=0, uint16_t i2Y=1, uint8_t m12=0); // not availeable in MM
+    #else
+      inline unsigned vLength()       const           { return virtualLength(); }
+      inline unsigned vWidth()        const           { return virtualWidth(); }
+      inline unsigned vHeight()       const           { return virtualHeight(); }
+      inline void setDrawDimensions()                 { return; }
+      inline void beginDraw(uint16_t prog = 0xFFFFU)  { return; }
+    #endif
+
   #ifndef WLED_DISABLE_2D
     [[gnu::hot]] inline uint16_t XY(uint_fast16_t x, uint_fast16_t y)  const  { // support function to get relative index within segment (for leds[]) // WLEDMM inline for speed
       uint_fast16_t width  = max(uint16_t(1), virtualWidth());   // segment width in logical pixels  -- softhack007 avoid div/0

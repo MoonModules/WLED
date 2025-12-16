@@ -931,9 +931,9 @@ uint16_t Segment::calc_virtualLength() const {
   }
 #endif
   uint16_t groupLen = groupLength();
-  uint16_t vLength = (length() + groupLen - 1) / groupLen;
-  if (mirror && width() > 1) vLength = (vLength + 1) /2;  // divide by 2 if mirror, leave at least a single LED // WLEDMM bugfix for pseudo 2d strips
-  return vLength;
+  uint16_t virtLength = (length() + groupLen - 1) / groupLen;
+  if (mirror && width() > 1) virtLength = (virtLength + 1) /2;  // divide by 2 if mirror, leave at least a single LED // WLEDMM bugfix for pseudo 2d strips
+  return virtLength;
 }
 
 //WLEDMM used for M12_sBlock
@@ -1570,12 +1570,12 @@ void __attribute__((hot)) Segment::blur(uint8_t blur_amount, bool smear) {
 #endif
   uint8_t keep = smear ? 255 : 255 - blur_amount;
   uint8_t seep = blur_amount >> 1;
-  unsigned vlength = virtualLength();
+  unsigned virtlength = virtualLength();
   uint32_t carryover = BLACK;
   uint32_t lastnew;
   uint32_t last;
   uint32_t curnew = 0;
-  for (unsigned i = 0; i < vlength; i++) {
+  for (unsigned i = 0; i < virtlength; i++) {
     uint32_t cur = getPixelColor(i);
     uint32_t part = color_fade(cur, seep);
     curnew = color_fade(cur, keep);
@@ -1592,7 +1592,7 @@ void __attribute__((hot)) Segment::blur(uint8_t blur_amount, bool smear) {
     last = cur; // save original value for comparison on next iteration
     carryover = part;
   }
-  setPixelColor(int(vlength - 1), curnew);
+  setPixelColor(int(virtlength - 1), curnew);
 }
 
 /*

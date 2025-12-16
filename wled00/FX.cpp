@@ -19,6 +19,11 @@
 #undef SEGENV
 #define SEGMENT (*strip._currentSeg) // saves us many calls to strip._segments[strip.getCurrSegmentId()]
 #define SEGENV SEGMENT
+// need to re-define SEG_W and SEG_H to get the fast SEGMENT macro
+#undef SEG_W
+#undef SEG_H
+#define SEG_W  (SEGMENT.virtualWidth())
+#define SEG_H  (SEGMENT.virtualHeight())
 #endif
 
 #if !(defined(WLED_DISABLE_PARTICLESYSTEM2D) && defined(WLED_DISABLE_PARTICLESYSTEM1D))
@@ -8438,10 +8443,10 @@ uint16_t mode_2DGEQ(void) { // By Will Tatam. Code reduction by Ewoud Wijma. Fla
   bool flatMode = !SEGMENT.is2D() || (SEGMENT.width() < 3) || (SEGMENT.height() < 3); // also use flat mode when less than 3 colums or rows
 
   const int NUM_BANDS = map2(SEGMENT.custom1, 0, 255, 1, 16);
-  const int vLength = SEGLEN;                                                               // for flat mode
-  const uint16_t cols = flatMode ? min(max(2, NUM_BANDS), (vLength+1)/2) : SEGMENT.virtualWidth();
-  const uint16_t rows = flatMode ? vLength / cols : SEGMENT.virtualHeight();
-  const unsigned offset = flatMode ? max(0, (vLength - rows*cols +1) / 2) : 0;              // flatmode: always center effect
+  const int virtLength = SEGLEN;                                                               // for flat mode
+  const uint16_t cols = flatMode ? min(max(2, NUM_BANDS), (virtLength+1)/2) : SEGMENT.virtualWidth();
+  const uint16_t rows = flatMode ? virtLength / cols : SEGMENT.virtualHeight();
+  const unsigned offset = flatMode ? max(0, (virtLength - rows*cols +1) / 2) : 0;              // flatmode: always center effect
 
   if ((cols <=1) || (rows <=1)) return mode_oops(); // too small
 
