@@ -92,7 +92,7 @@ void wsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
             handleE131Packet((e131_packet_t*)&data[offset], client->remoteIP(), P_ARTNET);
             break;
           case BINARY_PROTOCOL_DDP:
-            if (len < 10 + offset) return; // DDP header is 10 bytes (+1 protocol byte)
+            if (len < unsigned(10 + offset)) return; // DDP header is 10 bytes (+1 protocol byte)
             size_t ddpDataLen = (data[8+offset] << 8) | data[9+offset]; // data length in bytes from DDP header
             uint8_t flags = data[0+offset];
             if ((flags & DDP_TIMECODE_FLAG) ) ddpDataLen += 4; // timecode flag adds 4 bytes to data length
@@ -102,7 +102,7 @@ void wsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
         }
       }
     } else {
-      DEBUG_PRINTF("WS multipart message: final %u index %u len %u total %u\n", info->final, info->index, len, (uint32_t)info->len);
+      DEBUG_PRINTF("WS multipart message: final %u index %u len %u total %u\n", info->final, uint32_t(info->index), len, (uint32_t)info->len);
       //message is comprised of multiple frames or the frame is split into multiple packets
       //if(info->index == 0){
         //if (!wsFrameBuffer && len < 4096) wsFrameBuffer = new uint8_t[4096];

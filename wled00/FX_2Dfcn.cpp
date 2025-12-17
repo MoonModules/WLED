@@ -335,7 +335,7 @@ void IRAM_ATTR_YN Segment::setPixelColorXY(int x, int y, uint32_t col) //WLEDMM:
 
   x *= glen_; // expand to physical pixels
   y *= glen_; // expand to physical pixels
-  if (x >= wid_ || y >= hei_) return;  // if pixel would fall out of segment just exit
+  if (unsigned(x) >= wid_ || unsigned(y) >= hei_) return;  // if pixel would fall out of segment just exit
 
   const int grp_ = grouping; // WLEDMM optimization
   for (int j = 0; j < grp_; j++) {   // groupping vertically
