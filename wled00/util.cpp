@@ -843,7 +843,7 @@ static inline int32_t lerpPerlin(int32_t a, int32_t b, int32_t t) {
 }
 
 // 1D Perlin noise function that returns a value in range of -24691 to 24689
-int32_t perlin1D_raw(uint32_t x, bool is16bit) {
+int32_t IRAM_ATTR_YN perlin1D_raw(uint32_t x, bool is16bit) {
   // integer and fractional part coordinates
   int32_t x0 = x >> 16;
   int32_t x1 = x0 + 1;
@@ -861,7 +861,7 @@ int32_t perlin1D_raw(uint32_t x, bool is16bit) {
 }
 
 // 2D Perlin noise function that returns a value in range of -20633 to 20629
-int32_t perlin2D_raw(uint32_t x, uint32_t y, bool is16bit) {
+int32_t IRAM_ATTR_YN perlin2D_raw(uint32_t x, uint32_t y, bool is16bit) {
   int32_t x0 = x >> 16;
   int32_t y0 = y >> 16;
   int32_t x1 = x0 + 1;
@@ -893,7 +893,7 @@ int32_t perlin2D_raw(uint32_t x, uint32_t y, bool is16bit) {
 }
 
 // 3D Perlin noise function that returns a value in range of -16788 to 16381
-int32_t perlin3D_raw(uint32_t x, uint32_t y, uint32_t z, bool is16bit) {
+int32_t IRAM_ATTR_YN perlin3D_raw(uint32_t x, uint32_t y, uint32_t z, bool is16bit) {
   int32_t x0 = x >> 16;
   int32_t y0 = y >> 16;
   int32_t z0 = z >> 16;

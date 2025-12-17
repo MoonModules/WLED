@@ -5883,8 +5883,8 @@ static const char _data_FX_MODE_2DSNOWFALL[] PROGMEM = "Snow Fall ☾@!,Spawn Ra
 uint16_t mode_2DHiphotic() {                        //  By: ldirko  https://editor.soulmatelights.com/gallery/810 , Modified by: Andrew Tuline
   if (!strip.isMatrix) return mode_oops(); // not a 2D set-up
 
-  const uint16_t cols = SEGMENT.virtualWidth();
-  const uint16_t rows = SEGMENT.virtualHeight();
+  const uint_fast16_t cols = SEGMENT.virtualWidth();
+  const uint_fast16_t rows = SEGMENT.virtualHeight();
   const uint32_t a = strip.now / ((SEGMENT.custom3>>1)+1);
 
   for (int x = 0; x < cols; x++) {
@@ -8712,10 +8712,10 @@ static const char _data_FX_MODE_2DAKEMI[] PROGMEM = "Akemi@Color speed,Dance;Hea
 uint16_t mode_2Ddistortionwaves() {
   if (!strip.isMatrix) return mode_oops(); // not a 2D set-up
 
-  const uint16_t cols = SEGMENT.virtualWidth();
-  const uint16_t rows = SEGMENT.virtualHeight();
+  const uint_fast16_t cols = SEGMENT.virtualWidth();
+  const uint_fast16_t rows = SEGMENT.virtualHeight();
   if (SEGENV.call == 0) {
-    SEGMENT.setUpLeds();
+    //SEGMENT.setUpLeds();
     SEGMENT.fill(BLACK);
   }
 
@@ -8796,15 +8796,17 @@ static const char _data_FX_MODE_2DDISTORTIONWAVES[] PROGMEM = "Distortion Waves@
 //Idea from https://www.youtube.com/watch?v=DiHBgITrZck&ab_channel=StefanPetrick
 // adapted for WLED by @blazoncek, optimization by @dedehai
 static void soapPixels(bool isRow, uint8_t *noise3d, CRGB *pixels) {
-  const uint16_t cols = SEGMENT.virtualWidth();
-  const uint16_t rows = SEGMENT.virtualHeight();
+  const uint_fast16_t cols = SEGMENT.virtualWidth();
+  const uint_fast16_t rows = SEGMENT.virtualHeight();
   const auto myXY   = [&](int x, int y) { return x + y * cols; };
+  //const auto abs  = [](int x) { return x<0 ? -x : x; }; // WLEDMM not any faster than abs()
   const int  tRC  = isRow ? rows : cols; // transpose if isRow
   const int  tCR  = isRow ? cols : rows; // transpose if isRow
   const int  amplitude = max(1, (tCR - 8) >> 3) * (1 + (SEGMENT.custom1 >> 5));
   const int  shift = 0; //(128 - SEGMENT.custom2)*2;
 
-  CRGB ledsbuff[tCR];
+  const size_t maxtCR = max(cols, rows);  // WLEDMM always allocate max(cols,rows) buffer, to reduce heap fragmentation
+  CRGB ledsbuff[/*tCR*/ maxtCR];          // ledsbuff is a VLA in heap (not stack), allocated / removed for each function run - size = max(cols,rows) * sizeof(CRGB)
 
   for (int i = 0; i < tRC; i++) {
     int amount   = ((int)noise3d[isRow ? i*cols : i] - 128) * amplitude + shift; // use first row/column: XY(0,i)/XY(i,0)
@@ -8837,20 +8839,27 @@ static void soapPixels(bool isRow, uint8_t *noise3d, CRGB *pixels) {
       else                         PixelB = ColorFromPalette(SEGPALETTE, ~noise3d[indxB]*3);
       ledsbuff[j] = (PixelA.nscale8(ease8InOutApprox(255 - fraction))) + (PixelB.nscale8(ease8InOutApprox(fraction)));
     }
-    for (int j = 0; j < tCR; j++) {
-      CRGB c = ledsbuff[j];
-      if (isRow) std::swap(j,i);
-      SEGMENT.setPixelColorXY(i, j, pixels[myXY(i,j)] = c);
-      if (isRow) std::swap(j,i);
-    }
+    // upstream code
+    //for (int j = 0; j < tCR; j++) {
+    //  CRGB c = ledsbuff[j];
+    //  if (isRow) std::swap(j,i);
+    //  SEGMENT.setPixelColorXY(i, j, pixels[myXY(i,j)] = c);
+    //  if (isRow) std::swap(j,i);
+    //}
+
+    // WLEDMM optimization: only copy back pixels, dump to LEDs later -> up to 30% faster
+    if (isRow)
+      for (int j = 0; j < tCR; j++) pixels[myXY(j,i)] = ledsbuff[j]; //swap x and y
+    else
+      for (int j = 0; j < tCR; j++) pixels[myXY(i,j)] = ledsbuff[j];
   }
 }
 
 uint16_t mode_2Dsoap() {
   if (!strip.isMatrix) return mode_oops(); // not a 2D set-up
 
-  const uint16_t cols = SEGMENT.virtualWidth();
-  const uint16_t rows = SEGMENT.virtualHeight();
+  const uint_fast16_t cols = SEGMENT.virtualWidth();
+  const uint_fast16_t rows = SEGMENT.virtualHeight();
   const auto myXY = [&](int x, int y) { return x + y * cols; };
 
   const size_t segSize = SEGMENT.width() * SEGMENT.height(); // prevent reallocation if mirrored or grouped
@@ -8868,7 +8877,7 @@ uint16_t mode_2Dsoap() {
   // init
   if (SEGENV.call == 0) {
     random16_set_seed(535); //WLEDMM SuperSync
-    SEGENV.setUpLeds();
+    //SEGENV.setUpLeds();   // leds buffer not needed, effect has its own pixel buffer
     SEGMENT.fill(BLACK);
   }
 
@@ -8896,6 +8905,12 @@ uint16_t mode_2Dsoap() {
 
   soapPixels(true,  noise3d, pixels); // rows
   soapPixels(false, noise3d, pixels); // cols
+
+  // WLEDMM optimization: dumping out all pixels at once is ~20% faster
+  for (int i = 0; i < cols; i++) {
+    for (int j = 0; j < rows; j++) {
+      SEGMENT.setPixelColorXY(i, j, uint32_t(pixels[myXY(i,j)]) & 0x00FFFFFF);
+  } }
 
   return FRAMETIME;
 }

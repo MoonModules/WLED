@@ -19,6 +19,7 @@
 
 #if !defined(FASTLED_VERSION) // pull in FastLED if we don't have it yet (we need the CRGB type)
   #define FASTLED_INTERNAL
+  #define USE_GET_MILLISECOND_TIMER
   #include <FastLED.h>
 #endif
 
@@ -162,7 +163,8 @@ inline __attribute__((hot)) CRGB ColorFromPaletteWLED(const CRGBPalette16& pal, 
     green1 = (green1 * scale) >> 8;
     blue1  = (blue1 * scale) >> 8;
   }
-  return RGBW32(red1,green1,blue1,0);
+  //return RGBW32(red1,green1,blue1,0);
+  return CRGB(red1,green1,blue1);
 }
 #define ColorFromPalette ColorFromPaletteWLED // override fastled function
 
