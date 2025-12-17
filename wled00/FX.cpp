@@ -857,7 +857,7 @@ static const char _data_FX_MODE_MULTI_STROBE[] PROGMEM = "Strobe Mega@!,!;!,!;!;
 uint16_t mode_android(void) {
   if (SEGLEN <= 1) return mode_oops(); // WLEDMM to prevent division by zero
 
-  if (!SEGENV.allocateData(sizeof(uint32_t))) return mode_static();
+  if (!SEGENV.allocateData(sizeof(uint32_t))) return mode_oops();
   uint32_t* counter = reinterpret_cast<uint32_t*>(SEGENV.data);
   unsigned size = SEGENV.aux1 >> 1; // upper 15 bit
   unsigned shrinking = SEGENV.aux1 & 0x01; // lowest bit
@@ -5094,7 +5094,7 @@ static const char _data_FX_MODE_FLOWSTRIPE[] PROGMEM = "Flow Stripe@Hue speed,Ef
   by DedeHai (Damian Schneider), based on idea from @Charming-Lime (#4905)
 */
 uint16_t mode_shimmer() {
-  if(!SEGENV.allocateData(sizeof(uint32_t))) { return mode_static(); }
+  if(!SEGENV.allocateData(sizeof(uint32_t))) { return mode_oops(); }
   uint32_t* lastTime = reinterpret_cast<uint32_t*>(SEGENV.data);
 
   uint32_t radius = (SEGMENT.custom1 * SEGLEN >> 7) + 1;        // [1, 2*SEGLEN+1] pixels
@@ -8743,7 +8743,7 @@ uint16_t mode_2Dsoap() {
 
   const size_t segSize = SEGMENT.width() * SEGMENT.height(); // prevent reallocation if mirrored or grouped
   const size_t dataSize = segSize * (sizeof(uint8_t) + sizeof(CRGB)); // pixels and noise
-  if (!SEGENV.allocateData(dataSize + sizeof(uint32_t)*3)) return mode_static(); //allocation failed
+  if (!SEGENV.allocateData(dataSize + sizeof(uint32_t)*3)) return mode_oops(); //allocation failed
 
   uint8_t  *noise3d    = reinterpret_cast<uint8_t*>(SEGENV.data);
   CRGB     *pixels     = reinterpret_cast<CRGB*>(SEGENV.data + segSize * sizeof(uint8_t));

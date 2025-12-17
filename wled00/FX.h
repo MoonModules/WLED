@@ -86,7 +86,11 @@ extern BusManager busses; // same as wled.h
   #if defined(ARDUINO_ARCH_ESP32S2)
     #define MAX_SEGMENT_DATA  24576
   #else
-    #define MAX_SEGMENT_DATA  32767
+    #if defined(BOARD_HAS_PSRAM)
+      #define MAX_SEGMENT_DATA  65534 // 64KB on PSRAM boards
+    #else
+      #define MAX_SEGMENT_DATA  32767 // 32KB on non-PSRAM boards
+    #endif
   #endif
   #endif
 #endif
