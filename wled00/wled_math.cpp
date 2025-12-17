@@ -59,10 +59,18 @@ float tan_t(float x) {
 }
 */
 
+// WLEDMM: sin16_t() moved to fcn_declare.h (inlining for speed)
+
+// WLEDMM: cos16_t() moved to fcn_declare.h (inlining for speed)
+
+// WLEDMM: sin8_t() moved to fcn_declare.h (inlining for speed)
+
+// WLEDMM: cos8_t() moved to fcn_declare.h (inlining for speed)
+
 // 16-bit, integer based Bhaskara I's sine approximation: 16*x*(pi - x) / (5*pi^2 - 4*x*(pi - x))
 // input is 16bit unsigned (0-65535), output is 16bit signed (-32767 to +32767)
 // optimized integer implementation by @dedehai
-int16_t sin16_t(uint16_t theta) {
+static int16_t sin16_calc(uint16_t theta) {
   int scale = 1;
   if (theta > 0x7FFF) {
     theta = 0xFFFF - theta;
@@ -75,30 +83,34 @@ int16_t sin16_t(uint16_t theta) {
   return result * scale;
 }
 
-int16_t cos16_t(uint16_t theta) {
-  return sin16_t(theta + 0x4000); //cos(x) = sin(x+pi/2)
-}
-
-uint8_t sin8_t(uint8_t theta) {
-  int32_t sin16 = sin16_t((uint16_t)theta * 257); // 255 * 257 = 0xFFFF
+#if defined(ARDUINO_ARCH_ESP32)
+static uint8_t sin8_calc(uint8_t theta) {
+  int32_t sin16 = sin16_calc((uint16_t)theta * 257); // 255 * 257 = 0xFFFF
   sin16 += 0x7FFF + 128; //shift result to range 0-0xFFFF, +128 for rounding
   return min(sin16, int32_t(0xFFFF)) >> 8; // min performs saturation, and prevents overflow
 }
 
-uint8_t cos8_t(uint8_t theta) {
-  return sin8_t(theta + 64); //cos(x) = sin(x+pi/2)
+// WLEDMM: pre-calculate lookup-table for sin8_t
+uint8_t DRAM_ATTR sinT[256];
+void init_math(void) {
+   for (unsigned i = 0; i < 256; i++)
+    sinT[i] = sin8_calc(i);
 }
+
+#else
+void init_math(void) { return;}  // dummy for 8266
+#endif
 
 float sin_approx(float theta) {
   uint16_t scaled_theta = (int)(theta * (float)(0xFFFF / M_TWOPI)); // note: do not cast negative float to uint! cast to int first (undefined on C3)
-  int32_t result = sin16_t(scaled_theta);
+  int32_t result = sin16_calc(scaled_theta);
   float sin = float(result) / 0x7FFF;
   return sin;
 }
 
 float cos_approx(float theta) {
   uint16_t scaled_theta = (int)(theta * (float)(0xFFFF / M_TWOPI)); // note: do not cast negative float to uint! cast to int first (undefined on C3)
-  int32_t result = sin16_t(scaled_theta + 0x4000);
+  int32_t result = sin16_calc(scaled_theta + 0x4000);
   float cos = float(result) / 0x7FFF;
   return cos;
 }

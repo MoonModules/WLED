@@ -486,6 +486,9 @@ IRAM_ATTR_YN __attribute__((hot)) uint8_t gamma8_slow(uint8_t b)   // WLEDMM add
   return gammaT[b];
 }
 
+#if defined(ARDUINO_ARCH_ESP32)
+// WLEDMM: gamma32() moved to fcn_declare.h (inlining for speed)
+#else
 // used for color gamma correction
 IRAM_ATTR_YN uint32_t __attribute__((hot)) gamma32(uint32_t color)
 {
@@ -500,3 +503,4 @@ IRAM_ATTR_YN uint32_t __attribute__((hot)) gamma32(uint32_t color)
   b = gammaT[b];
   return RGBW32(r, g, b, w);
 }
+#endif
