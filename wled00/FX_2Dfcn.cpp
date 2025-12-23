@@ -883,13 +883,14 @@ bool Segment::jsonToPixels(char * name, uint8_t fileNr) {
 #endif
 
 // unicode-aware wrapper for drawCharacter(), to be called from  mode_2Dscrollingtext()
-void Segment::drawText(const unsigned char* text, size_t maxLen, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2, bool drawShadow) {
+void Segment::drawText(const unsigned char* text, size_t maxLen, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2, bool drawShadow, int rotate) {
   if (!isActive()) return; // not active
   //size_t maxLetters = WLED_MAX_SEGNAME_LEN;
   const size_t numberOfChars = strnlen((const char *) text, maxLen); // size in bytes // toDo check if this is needed - duplicate of maxLen?
 
 #if defined(WLED_ENABLE_FULL_FONTS)
   FontInfo_t font = getFontInfo(w, h);                    // use central font selection legic
+  if (font.raw == nullptr) return;                        // font invalid or not found
   uint16_t decoded_text[WLED_MAX_SEGNAME_LEN+1] = { 0 };  // UTF-16 converted text. Cannot be longer than WLED_MAX_SEGNAME_LEN
   size_t utf16_index = 0;
   for(const unsigned char* now = text; now != nullptr && now[0] != '\0'; now = nextUnicode(now, maxLen)) {
@@ -908,18 +909,25 @@ void Segment::drawText(const unsigned char* text, size_t maxLen, int16_t x, int1
 #endif
   // pass characters to drawCharacter()
   for (int i = 0; i < textLength; i++) {
-    SEGMENT.drawCharacter((unsigned char) decoded_text[i], x + w*i, y, w, h, color, col2, drawShadow);
+    SEGMENT.drawCharacter((unsigned char) decoded_text[i], x + w*i, y, w, h, color, col2, drawShadow, rotate);
   }
 }
 
 // draws a raster font character on canvas
 // only supports: 4x6=24, 5x8=40, 5x12=60, 6x8=48 and 7x9=63 fonts ATM
-void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2, bool drawShadow) {
+void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2, bool drawShadow, int rotate) {
   if (!isActive()) return; // not active
-  const uint16_t cols = virtualWidth();
-  const uint16_t rows = virtualHeight();
+  // rotated letters support - WLEDMM style without complicates switch cases
+  bool trans = (rotate == 1) || (rotate == -1);                   // -90 or 90 degrees => swap x and y
+  //bool revX = (rotate == -1) || (rotate == -2) || (rotate == 2);// -90, -180 = 180 degrees => invert X (correct)
+  bool revX = (rotate == -1) || (rotate == 2);                    // -90, 180 degrees => invert X (inverts scolling with -180 degrees => nice)
+  bool revY = (rotate == 1) || (rotate == -2) || (rotate == 2);   //  90, -180 = 180 degrees => invert Y
+  const uint16_t cols = trans ? virtualHeight() : virtualWidth();
+  const uint16_t rows = trans ? virtualWidth()  : virtualHeight();
+
   FontInfo_t font = getFontInfo(w, h);                      // use central font selection logic
-  if (!font.isProgMem || font.width_bytes > 1) return;      // do nothing for not (yet) supported font features: width_bytes > 1, !isProgMem
+  if (font.raw == nullptr) return;                          // font invalid or not found
+  if (!font.isProgMem) return;                              // do nothing for not (yet) supported font features: !isProgMem
   if (chr < font.firstChar || chr > font.lastChar) return;  // do nothing when out of limits
   chr = chr - font.firstChar;                               // adjust chr to point to the first allowed character byte
 
@@ -927,8 +935,66 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
   CRGBPalette16 grad = CRGBPalette16(col, (col2 != BLACK) ? CRGB(col2) : col);
   uint32_t bgCol = SEGCOLOR(1);
 
-  //if (w<5 || w>6 || h!=8) return;
   if (drawShadow) w++; // one more column for shadow on right side
+
+#if 1 // optimized rewrite - experimental
+  for (unsigned i = 0; i < h; i++) { // paint character - top down, row by row (height)
+    int y0 = y + i;       // screen Y position = row
+    if (y0 < 0) continue;  // off-screen (top)
+    if (y0 >= rows) break; // off-screen (bottom)
+
+    if (col2 != BLACK) col = ColorFromPalette(grad, (i+1)*255/h, 255, NOBLEND);
+    uint32_t fgCol = uint32_t(col) & 0x00FFFFFF; // WLEDMM cache pixel color value
+
+    uint8_t bits = 0;      // current byte of font line
+    uint8_t bits_up = 0;   // previous font line
+    uint8_t bits_next = 0; // next byte (look-ahead)
+    bool lastBit = false;  // pixel to the left (look-back)
+    bool readNext = true;  // time to read a fresh byte?
+    for (unsigned j = 0; j<w; j++) { // paint character - single row of pixels (width)
+      int x0 = x + j; // screen X position = column
+      if (x0 < 0) continue;  // off-screen (left)
+      if (x0 >= cols) break; // off-screen (right)
+
+      if (readNext) {
+        // fetch new byte from raw font data
+        unsigned xoffset = j >>3; // byte index = j / 8
+        if (xoffset < font.width_bytes) {
+          // get 8 pixels (byte) from raw font data
+          bits = pgm_read_byte_near(&font.raw[(chr * h*font.width_bytes) + i*font.width_bytes + xoffset]); // current row
+          if (drawShadow && (i > 0))
+              bits_up = pgm_read_byte_near(&font.raw[(chr * h*font.width_bytes) + (i-1)*font.width_bytes + xoffset]); // previosu row
+          else bits_up = 0; // first font row, we have no upper row
+        } else {
+          bits = bits_up = 0; // off on right side - read 0
+        }
+        if (drawShadow && ((xoffset+1) < font.width_bytes)) 
+          bits_next = pgm_read_byte_near(&font.raw[(chr * h*font.width_bytes) + i*font.width_bytes + xoffset+1]); // look-ahead next byte
+        else bits_next = 0;
+      }
+
+      // WLEDMM rotation = invert and transpose
+      int screenX = revX ? (cols-1-x0): x0;
+      int screenY = revY ? (rows-1-y0): y0;
+      if (trans) std::swap(screenX, screenY);
+
+      //now lets paint it !
+      uint8_t bitPos = 7 - (j & 0x07); // pixel index = j % 8, reverse for left-to-right
+      bool bitSet = (bits >> bitPos) & 0x01;
+      if (bitSet) setPixelColorXY(screenX, screenY, fgCol);
+      // WLEDMM if pixel is black, add a shadow for better reading
+      if (!bitSet && drawShadow) {
+        bool bitUp = (bits_up >> bitPos) & 0x01;
+        bool bitNext = (bitPos > 0) ? (bits >> (bitPos-1)) & 0x01 : (bits_next >> 7) & 0x01;
+        if (lastBit || bitUp || bitNext)
+          setPixelColorXY(screenX, screenY, bgCol);// blank when pixel to the left or right is set, or same pixel in previous row is set
+      }
+      lastBit = bitSet; // remember pixel to left
+      readNext = bitPos == 0x00; // last bit used?
+    }
+  }
+#else // old code
+  // hi @coderabbitai, this code path is just for back-to-back testing, and will be deleted soon
   for (int i = 0; i<h; i++) { //  // paint character - top down by row (height)
     int y0 = y + i;
     if (y0 < 0) continue; // drawing off-screen
@@ -936,31 +1002,35 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
     uint8_t bits = 0;
     uint8_t bits_up = 0; // WLEDMM this is the previous line: font[(chr * h) + i -1]
 
-    // for wide fonts, we can add a loop here :for(offset=0, offset < font.width_bytes; offset++) {}
+    for(int xoffset=0; xoffset < font.width_bytes; xoffset++) { // handle wide fonts
+    int pixels_offset = xoffset * 8; // pixel offset inside row -> 8 bits per byte
 
     // get 8 pixels (byte) from raw font data
-    bits = pgm_read_byte_near(&font.raw[(chr * h) + i]);
-    if ((i>0) && drawShadow) bits_up = pgm_read_byte_near(&font.raw[(chr * h) + i -1]);
+    bits = pgm_read_byte_near(&font.raw[(chr * h*font.width_bytes) + i*font.width_bytes + xoffset]);
+    if ((i>0) && drawShadow) bits_up = pgm_read_byte_near(&font.raw[(chr * h*font.width_bytes) + i*font.width_bytes + xoffset -font.width_bytes]);
 
     if (col2 != BLACK) col = ColorFromPalette(grad, (i+1)*255/h, 255, NOBLEND);
     uint32_t fgCol = uint32_t(col) & 0x00FFFFFF; // WLEDMM cache color value
 
-    for (int j = 0; j<w; j++) { // paint character - single row of pixels (width)
-      int x0 = x + (w-1) - j;
+    int numBits = (xoffset+1 < font.width_bytes) ? 8: (w - 8*(font.width_bytes-1) ); // 8 for full bytes, remaining bits for last partial byte
+    for (int j = 0; j<numBits; j++) { // paint character - single row of pixels (width)
+      int x0 = x + (numBits-1) - j + pixels_offset;
       if (unsigned(x0) < cols) { // WLEDMM same as "x0 > 0 && x0 < cols"
-        if ((bits>>(j+(8-w))) & 0x01) { // bit set & drawing on-screen
+        if ((bits>>(j+(8-numBits))) & 0x01) { // bit set & drawing on-screen
         setPixelColorXY(x0, y0, fgCol);
         } else {
           if (drawShadow) {
 			      // WLEDMM
-            if ((j < (w-1)) && (bits>>(j+(8-w) +1)) & 0x01) setPixelColorXY(x0, y0, bgCol); // blank when pixel to the right is set
-            else if ((j > 0) && (bits>>(j+(8-w) -1)) & 0x01) setPixelColorXY(x0, y0, bgCol);// blank when pixel to the left is set
-            else if ((bits_up>>(j+(8-w))) & 0x01) setPixelColorXY(x0, y0, bgCol);           // blank when pixel above is set
+            if ((j < (numBits-1)) && (bits>>(j+(8-numBits) +1)) & 0x01) setPixelColorXY(x0, y0, bgCol); // blank when pixel to the right is set
+            else if ((j > 0) && (bits>>(j+(8-numBits) -1)) & 0x01) setPixelColorXY(x0, y0, bgCol);// blank when pixel to the left is set
+            else if ((bits_up>>(j+(8-numBits))) & 0x01) setPixelColorXY(x0, y0, bgCol);           // blank when pixel above is set
           }
         }
       }
     }
   }
+  }
+#endif
 }
 
 #define WU_WEIGHT(a,b) ((uint8_t) (((a)*(b)+(a)+(b))>>8))

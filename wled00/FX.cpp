@@ -6868,6 +6868,13 @@ uint16_t mode_2Dfloatingblobs(void) {
 static const char _data_FX_MODE_2DBLOBS[] PROGMEM = "Blobs@!,# blobs,Blur;!;!;2;c1=8";
 
 
+// preliminary - for testing
+#define WLED_ENABLE_TINY_FONT
+#define WLED_ENABLE_LARGE_FONTS
+#if defined(ARDUINO_ARCH_ESP32) && !defined(WLEDMM_SAVE_FLASH)
+  #define WLED_ENABLE_XXXL_FONT
+#endif
+
 ////////////////////////////
 //     2D Scrolling text  //
 ////////////////////////////
@@ -6883,6 +6890,7 @@ uint16_t mode_2Dscrollingtext(void) {
 
   int letterWidth;
   int letterHeight;
+  #if 0 // legacy
   switch (map(SEGMENT.custom2, 0, 255, 1, 5)) {
     default:
     case 1: letterWidth = 4; letterHeight =  6; break;
@@ -6891,7 +6899,52 @@ uint16_t mode_2Dscrollingtext(void) {
     case 4: letterWidth = 7; letterHeight =  9; break;
     case 5: letterWidth = 5; letterHeight = 12; break;
   }
-  const int yoffset = map(SEGMENT.intensity, 0, 255, -rows/2, rows/2) + (rows-letterHeight)/2;
+  #else
+
+  unsigned max_font = 5; // legacy: 0..5
+  #ifdef WLED_ENABLE_LARGE_FONTS
+    max_font += 3; // 3 more
+  #endif
+  #ifdef WLED_ENABLE_XXXL_FONT
+    max_font += 1;  // 1 more
+  #endif
+
+  switch (map2(SEGMENT.custom2, 0, 255, 0, max_font)) {
+    case 0:
+    #ifdef WLED_ENABLE_TINY_FONT
+      letterWidth = 3; letterHeight =  5; break; // tiny 3x5 font (reduced)
+    #endif
+    case 1: letterWidth = 4; letterHeight =  6; break;
+    case 2: letterWidth = 5; letterHeight =  8; break;
+    case 3: letterWidth = 6; letterHeight =  8; break;
+    case 4: letterWidth = 7; letterHeight =  9; break;
+    default:
+    case 5: letterWidth = 5; letterHeight = 12; break;
+    #ifdef WLED_ENABLE_LARGE_FONTS
+    case 6: letterWidth =12; letterHeight = 16; break; // 12x16 font
+    case 7: letterWidth =12; letterHeight = 24; break; // 12x24 font
+    case 8: letterWidth =16; letterHeight = 32; break; // 16x32 font
+    #endif
+    #if defined(WLED_ENABLE_XXXL_FONT) && defined(WLED_ENABLE_LARGE_FONTS)
+    case 9: letterWidth =25; letterHeight = 57; break; // 25x57 font
+    #endif
+    #if defined(WLED_ENABLE_XXXL_FONT) && !defined(WLED_ENABLE_LARGE_FONTS)
+    case 6: letterWidth =25; letterHeight = 57; break; // 25x57 font
+    #endif
+  }
+  #endif
+
+  // rotated letters support - WLEDMM style without complicates switch cases
+  const int8_t rotate = map2(SEGMENT.custom3, 0, 31, -2, 2);
+  bool trans = (rotate == 1 || rotate == -1); // transposed = swap x and y
+  unsigned rotLW = trans ? letterHeight : letterWidth;
+  unsigned rotLH = trans ? letterWidth : letterHeight;
+  int maxWidth = trans ? rows : cols;
+  int maxHeight = trans ? cols : rows;
+  int yoffset = 0;
+  if (!trans) yoffset = map2(SEGMENT.intensity, 0, 255, -maxHeight/2, maxHeight/2) + (maxHeight-rotLH)/2;
+  else yoffset = map2(SEGMENT.intensity, 0, 255, -maxHeight/2, maxHeight/2) + (maxHeight-rotLH)/2 - rotLH/2; // special handling to center text horizontally
+
   char text[WLED_MAX_SEGNAME_LEN+1] = {'\0'};
   unsigned maxLen = (SEGMENT.name) ? min(WLED_MAX_SEGNAME_LEN, (int)strlen(SEGMENT.name)) : 0;  // WLEDMM make it robust against too long segment names
 
@@ -6950,11 +7003,12 @@ uint16_t mode_2Dscrollingtext(void) {
 #else
   const int numberOfLetters = strlenUC((unsigned char *)text); // get the mumber of unicode letters
 #endif
+  int width = numberOfLetters * letterWidth; // total text width in pixels // WLEDMM don't use rotLW here, because text width stays the same when rotated
 
   long delayTime = long(strip.now) - long(SEGENV.step);
   if ((delayTime >= 0) || (abs(delayTime) > 1500)) {   // WLEDMM keep on scrolling if timebase jumps (supersync, or brightness off, or wifi delay)
-    if ((numberOfLetters * letterWidth) > cols) ++SEGENV.aux0 %= (numberOfLetters * letterWidth) + cols;      // offset
-    else                                          SEGENV.aux0  = (cols + (numberOfLetters * letterWidth))/2;
+    if (width > maxWidth) ++SEGENV.aux0 %= width + maxWidth;      // offset
+    else                                          SEGENV.aux0  = (maxWidth + width)/2;
     SEGENV.aux1 = (SEGENV.aux1 + 1) & 0xFF; // color shift // WLEDMM changed to prevent overflow
     long minDelay = max((FRAMETIME_FIXED/2 + FRAMETIME_FIXED/4), int(FRAMETIME));
     SEGENV.step = strip.now + map2(SEGMENT.speed, 0, 255, 10*FRAMETIME_FIXED, minDelay); // WLEDMM scroll faster
@@ -6969,7 +7023,8 @@ uint16_t mode_2Dscrollingtext(void) {
     }
   }
 
-  if (SEGENV.check2 && ((numberOfLetters * letterWidth) > cols)) drawShadow = true; // scrolling overlay is easier to read with shadow
+  if (SEGENV.check2 && (width > maxWidth)) drawShadow = true; // scrolling overlay is easier to read with shadow
+
 #if !defined(WLED_ENABLE_FULL_FONTS)
   for (int i = 0; i < numberOfLetters; i++) {
     if (int(cols) - int(SEGENV.aux0) + letterWidth*(i+1) < 0) continue; // don't draw characters off-screen
@@ -6979,7 +7034,8 @@ uint16_t mode_2Dscrollingtext(void) {
       col1 = SEGCOLOR(0);
       col2 = SEGCOLOR(2);
     }
-    SEGMENT.drawCharacter(text[i], int(cols) - int(SEGENV.aux0) + letterWidth*i, yoffset, letterWidth, letterHeight, col1, col2, drawShadow);
+    int xoffset = int(cols) - int(SEGENV.aux0) + rotLW*i;
+    SEGMENT.drawCharacter(text[i], xoffset, yoffset, letterWidth, letterHeight, col1, col2, drawShadow, rotate);
   }
 #else
   uint32_t col1 = SEGMENT.color_from_palette(SEGENV.aux1, false, PALETTE_SOLID_WRAP, 0);
@@ -6989,7 +7045,9 @@ uint16_t mode_2Dscrollingtext(void) {
     col2 = SEGCOLOR(2);
   }
   maxLen = numberOfChars; // Ensure maxLen reflects the actual rendered text, not the original SEGMENT.name length
-  SEGMENT.drawText((unsigned char*)text, maxLen, int(cols) - int(SEGENV.aux0), yoffset, letterWidth, letterHeight, col1, col2, drawShadow);
+  //int xoffset = int(cols) - int(SEGENV.aux0);
+  int xoffset = int(maxWidth) - int(SEGENV.aux0);
+  SEGMENT.drawText((unsigned char*)text, maxLen, xoffset, yoffset, letterWidth, letterHeight, col1, col2, drawShadow, rotate);
 #endif
 
   // WLEDMM add some blur
@@ -7000,7 +7058,7 @@ uint16_t mode_2Dscrollingtext(void) {
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DSCROLLTEXT[] PROGMEM = "Scrolling Text@!,Y Offset,Trail,Font size,,Gradient,Overlay,Soft;!,!,Gradient;!;2;ix=128,c1=0,rev=0,mi=0,rY=0,mY=0";
+static const char _data_FX_MODE_2DSCROLLTEXT[] PROGMEM = "Scrolling Text@!,Y Offset,Trail,Font size,Rotate,Gradient,Overlay,Soft;!,!,Gradient;!;2;ix=128,c1=0,rev=0,mi=0,rY=0,mY=0";
 
 
 ////////////////////////////
