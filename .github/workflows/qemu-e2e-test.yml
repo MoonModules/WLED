@@ -1,0 +1,165 @@
+name: QEMU E2E Testing
+
+on:
+  pull_request:
+    branches: [ mdev, main ]
+  push:
+    branches: [ mdev, main ]
+  workflow_dispatch:
+
+jobs:
+  # Job 1: Build firmware for QEMU testing
+  build-firmware:
+    name: Build ESP32 Firmware for QEMU
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-pio-esp32dev-${{ hashFiles('**/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-esp32dev-
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install PlatformIO
+        run: pip install -r requirements.txt
+      
+      - name: Install Node.js dependencies
+        run: npm ci
+      
+      - name: Build Web UI
+        run: npm run build
+      
+      - name: Build ESP32 firmware
+        run: pio run -e esp32dev
+      
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-firmware
+          path: .pio/build/esp32dev/
+          retention-days: 1
+
+  # Job 2: Test with QEMU
+  test-qemu:
+    name: QEMU E2E Tests
+    runs-on: ubuntu-22.04
+    needs: build-firmware
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Download firmware artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: esp32-firmware
+          path: .pio/build/esp32dev/
+      
+      - name: Install Node.js dependencies
+        run: npm ci
+      
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+      
+      - name: Setup QEMU ESP32
+        run: |
+          bash .github/scripts/setup-qemu.sh
+      
+      - name: Start QEMU with WLED firmware in background
+        run: |
+          chmod +x .github/scripts/run-qemu.sh
+          bash .github/scripts/run-qemu.sh .pio/build/esp32dev qemu-esp32 80 > qemu-output.log 2>&1 &
+          echo "Waiting for QEMU to start and WLED to boot..."
+          sleep 45
+          
+      - name: Check QEMU status
+        run: |
+          if [ -f qemu.pid ]; then
+            QEMU_PID=$(cat qemu.pid)
+            if kill -0 $QEMU_PID 2>/dev/null; then
+              echo "QEMU is running (PID: $QEMU_PID)"
+            else
+              echo "QEMU process not running"
+              cat qemu-output.log || true
+              exit 1
+            fi
+          else
+            echo "qemu.pid not found"
+            cat qemu-output.log || true
+            exit 1
+          fi
+      
+      - name: Test HTTP endpoint
+        run: |
+          echo "Testing if HTTP server is responding..."
+          for i in {1..30}; do
+            if curl -f -m 5 http://localhost/ > /dev/null 2>&1; then
+              echo "HTTP server is responding!"
+              exit 0
+            fi
+            echo "Attempt $i failed, waiting..."
+            sleep 2
+          done
+          echo "HTTP server not responding after 60 seconds"
+          cat qemu-output.log || true
+          exit 1
+      
+      - name: Run Playwright tests against QEMU
+        env:
+          WLED_BASE_URL: http://localhost
+        run: npm run test:e2e
+        continue-on-error: true
+      
+      - name: Upload QEMU logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qemu-logs
+          path: qemu-output.log
+          retention-days: 7
+      
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-qemu
+          path: playwright-report/
+          retention-days: 7
+      
+      - name: Stop QEMU
+        if: always()
+        run: |
+          if [ -f qemu.pid ]; then
+            QEMU_PID=$(cat qemu.pid)
+            echo "Stopping QEMU (PID: $QEMU_PID)"
+            kill $QEMU_PID || true
+            sleep 2
+            kill -9 $QEMU_PID 2>/dev/null || true
+          fi
