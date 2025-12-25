@@ -10,7 +10,7 @@ These tests verify that:
 3. Pages can be navigated without issues
 4. The web interface works correctly when served from the ESP32 firmware running in QEMU
 
-**Important**: The WLED web UI is tightly coupled to the backend, so tests must run against the actual ESP32 firmware (via QEMU or real hardware), not static files.
+**Important**: The WLED web UI is tightly coupled to the backend, so tests must run against the actual ESP32 firmware running in QEMU emulation.
 
 ## Running Tests Locally
 
@@ -27,7 +27,7 @@ npx playwright install --with-deps chromium
 pip install -r requirements.txt
 ```
 
-### Test with QEMU (Recommended for CI/Local Testing)
+### Test with QEMU ESP32 Emulator
 
 Test the actual firmware running in QEMU ESP32 emulator:
 
@@ -115,11 +115,11 @@ npx playwright show-report
 
 **QEMU fails to start:**
 - Ensure QEMU is installed: `bash .github/scripts/setup-qemu.sh`
-- Check QEMU logs for errors
+- Check QEMU logs: `cat qemu-output.log`
 - Verify firmware was built successfully
 
 **Tests fail with connection errors:**
-- Wait longer for ESP32 to boot (30-45 seconds)
+- Wait longer for ESP32 to boot (30-45 seconds minimum)
 - Check if port 80 is accessible: `curl http://localhost/`
 - Verify QEMU is still running: `ps aux | grep qemu`
 
@@ -128,10 +128,10 @@ npx playwright show-report
 - Real hardware is faster - adjust timeouts if needed
 - Check QEMU output for boot errors
 
-**API calls fail:**
-- This indicates ESP32 backend is not responding
-- Verify WLED firmware booted successfully in QEMU
-- Check serial output for errors
+**Settings pages show "PIN required":**
+- This is expected when WLED security PIN is enabled
+- Tests verify the page loads even when authentication is required
+- The PIN feature is working correctly
 
 ## QEMU Limitations
 
@@ -181,3 +181,4 @@ test('my new test', async ({ page }) => {
 - [ ] Test on multiple browsers (Firefox, Safari)
 - [ ] Add performance/load testing
 - [ ] Test with real ESP32 hardware in CI (if available)
+- [ ] Improve QEMU boot time
