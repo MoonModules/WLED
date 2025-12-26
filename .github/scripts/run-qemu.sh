@@ -13,10 +13,17 @@ if [ ! -d "$FIRMWARE_DIR" ]; then
     exit 1
 fi
 
-if [ ! -f "${QEMU_DIR}/qemu-system-xtensa" ]; then
-    echo "Error: QEMU not found at ${QEMU_DIR}/qemu-system-xtensa"
+if [ ! -f "${QEMU_DIR}/qemu-system-xtensa" ] && [ ! -f "${QEMU_DIR}/bin/qemu-system-xtensa" ]; then
+    echo "Error: QEMU not found at ${QEMU_DIR}/qemu-system-xtensa or ${QEMU_DIR}/bin/qemu-system-xtensa"
     echo "Please run setup-qemu.sh first"
     exit 1
+fi
+
+# Determine QEMU binary location
+if [ -f "${QEMU_DIR}/qemu-system-xtensa" ]; then
+    QEMU_BIN="${QEMU_DIR}/qemu-system-xtensa"
+else
+    QEMU_BIN="${QEMU_DIR}/bin/qemu-system-xtensa"
 fi
 
 # Check for required firmware files
@@ -64,7 +71,7 @@ echo "Flash image created successfully"
 # Note: ESP32 in QEMU has limited peripheral support
 # Network configuration uses user-mode networking with port forwarding
 echo "Starting QEMU..."
-${QEMU_DIR}/qemu-system-xtensa \
+${QEMU_BIN} \
     -nographic \
     -machine esp32 \
     -drive file=${FLASH_IMAGE},if=mtd,format=raw \

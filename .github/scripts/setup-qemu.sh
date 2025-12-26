@@ -4,8 +4,6 @@
 
 set -e
 
-QEMU_VERSION="esp-develop-20220919"
-QEMU_URL="https://github.com/espressif/qemu/releases/download/${QEMU_VERSION}/qemu-${QEMU_VERSION}-x86_64-linux-gnu.tar.xz"
 QEMU_DIR="qemu-esp32"
 
 echo "Setting up QEMU ESP32..."
@@ -13,24 +11,75 @@ echo "Setting up QEMU ESP32..."
 # Create directory for QEMU
 mkdir -p ${QEMU_DIR}
 
-# Download QEMU ESP32 if not already present
-if [ ! -f "${QEMU_DIR}/qemu-system-xtensa" ]; then
-    echo "Downloading QEMU ESP32 from ${QEMU_URL}..."
-    wget -q ${QEMU_URL} -O qemu.tar.xz
-    
-    echo "Extracting QEMU..."
-    tar -xf qemu.tar.xz -C ${QEMU_DIR} --strip-components=1
-    
-    # Cleanup
-    rm qemu.tar.xz
-    
-    echo "QEMU ESP32 installed successfully"
-else
+# Check if QEMU is already installed
+if [ -f "${QEMU_DIR}/qemu-system-xtensa" ]; then
     echo "QEMU ESP32 already installed"
+    echo "QEMU binary: ${QEMU_DIR}/qemu-system-xtensa"
+    exit 0
 fi
 
-# Make QEMU executable
-chmod +x ${QEMU_DIR}/qemu-system-xtensa
+# Try multiple QEMU sources in order of preference
+echo "Attempting to download QEMU ESP32..."
 
-echo "QEMU ESP32 setup complete"
-echo "QEMU binary: ${QEMU_DIR}/qemu-system-xtensa"
+# List of potential QEMU download URLs to try
+# Using the latest stable releases from Espressif
+QEMU_URLS=(
+    "esp-develop-9.2.2-20250817|https://github.com/espressif/qemu/releases/download/esp-develop-9.2.2-20250817/qemu-xtensa-softmmu-esp_develop_9.2.2_20250817-x86_64-linux-gnu.tar.xz"
+    "esp-develop-9.1.0-20240606|https://github.com/espressif/qemu/releases/download/esp-develop-9.1.0-20240606/qemu-xtensa-softmmu-esp_develop_9.1.0_20240606-x86_64-linux-gnu.tar.xz"
+    "esp-develop-9.0.0-20231220|https://github.com/espressif/qemu/releases/download/esp-develop-9.0.0-20231220/qemu-xtensa-softmmu-esp_develop_9.0.0_20231220-x86_64-linux-gnu.tar.xz"
+)
+
+DOWNLOAD_SUCCESS=false
+
+for ENTRY in "${QEMU_URLS[@]}"; do
+    VERSION="${ENTRY%%|*}"
+    URL="${ENTRY##*|}"
+    
+    echo "Trying version ${VERSION}..."
+    echo "URL: ${URL}"
+    
+    if wget --spider -q "${URL}" 2>/dev/null; then
+        echo "Found available version: ${VERSION}"
+        echo "Downloading from ${URL}..."
+        
+        if wget -q "${URL}" -O qemu.tar.xz; then
+            echo "Download successful, extracting..."
+            if tar -xf qemu.tar.xz -C ${QEMU_DIR} --strip-components=1; then
+                rm qemu.tar.xz
+                DOWNLOAD_SUCCESS=true
+                echo "QEMU ESP32 version ${VERSION} installed successfully"
+                break
+            else
+                echo "Extraction failed, trying next source..."
+                rm -f qemu.tar.xz
+            fi
+        else
+            echo "Download failed, trying next source..."
+            rm -f qemu.tar.xz
+        fi
+    else
+        echo "Version ${VERSION} not available, trying next..."
+    fi
+done
+
+if [ "$DOWNLOAD_SUCCESS" = false ]; then
+    echo "ERROR: Could not download QEMU ESP32 from any source"
+    echo "Please check https://github.com/espressif/qemu/releases for available versions"
+    exit 1
+fi
+
+# Make QEMU executable (try both possible locations)
+if [ -f "${QEMU_DIR}/qemu-system-xtensa" ]; then
+    chmod +x ${QEMU_DIR}/qemu-system-xtensa
+    echo "QEMU ESP32 setup complete"
+    echo "QEMU binary: ${QEMU_DIR}/qemu-system-xtensa"
+elif [ -f "${QEMU_DIR}/bin/qemu-system-xtensa" ]; then
+    chmod +x ${QEMU_DIR}/bin/qemu-system-xtensa
+    # Create symlink for easier access
+    ln -sf bin/qemu-system-xtensa ${QEMU_DIR}/qemu-system-xtensa
+    echo "QEMU ESP32 setup complete"
+    echo "QEMU binary: ${QEMU_DIR}/bin/qemu-system-xtensa"
+else
+    echo "ERROR: Could not find qemu-system-xtensa binary"
+    exit 1
+fi
