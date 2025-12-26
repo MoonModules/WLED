@@ -1,17 +1,30 @@
 # QEMU ESP32 Testing - Known Issues and Limitations
 
+## Build Configuration
+
+**Important**: QEMU testing uses the **ethernet build** (`esp32_4MB_M_eth`) instead of the default WiFi build.
+
+### Why Ethernet Build?
+- WiFi hardware is not emulated in QEMU
+- WiFi initialization causes crashes in QEMU
+- Ethernet build uses `WLED_USE_ETHERNET` flag
+- Disables ESP-NOW with `WLED_DISABLE_ESPNOW` (requires WiFi)
+- Allows network functionality without WiFi hardware
+- HTTP server works via emulated ethernet (open_eth model)
+
 ## QEMU Limitations
 
 ESP32 QEMU emulation is not perfect and has several known limitations:
 
 ### Hardware Emulation
-- **WiFi**: Not fully emulated - WiFi operations may fail or behave differently
+- **WiFi**: Not emulated - **causes crashes if enabled**
 - **Bluetooth**: Not emulated
 - **I2C/SPI**: Limited emulation - some peripherals may not work
 - **GPIO**: Partial emulation - LED outputs and some inputs work, but not all
 - **ADC**: Not emulated
 - **Touch sensors**: Not emulated
 - **RTC**: Limited emulation
+- **Ethernet**: Emulated via open_eth model (used for testing)
 
 ### Common Crash Patterns
 
@@ -19,7 +32,7 @@ ESP32 QEMU emulation is not perfect and has several known limitations:
 **Symptom**: Crashes when trying to initialize WiFi or connect to networks  
 **Cause**: WiFi hardware is not fully emulated in QEMU  
 **Analysis**: Check if crash occurs during WiFi initialization  
-**Solution**: These are expected in QEMU and don't indicate real firmware bugs
+**Solution**: Use ethernet build (`esp32_4MB_M_eth`) which disables WiFi
 
 #### 2. Peripheral Access Crashes
 **Symptom**: Crashes when accessing I2C, SPI, or other peripherals  
