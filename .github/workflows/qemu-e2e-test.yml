@@ -70,6 +70,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -88,14 +93,25 @@ jobs:
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps chromium
       
+      - name: Install ESP32 exception decoder
+        run: |
+          pip install esptool
+          # Install the exception decoder from platformio
+          pip install platformio
+          # The xtensa toolchain should be available from the firmware build artifacts
+      
       - name: Install QEMU dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libsdl2-2.0-0 libpixman-1-0 libglib2.0-0
+          sudo apt-get install -y libsdl2-2.0-0 libpixman-1-0 libglib2.0-0 binutils
       
       - name: Setup QEMU ESP32
         run: |
           bash .github/scripts/setup-qemu.sh
+      
+      - name: Make decoder script executable
+        run: |
+          chmod +x .github/scripts/monitor-qemu.py
       
       - name: Start QEMU with WLED firmware in background
         run: |
@@ -108,14 +124,16 @@ jobs:
         run: |
           if [ ! -f qemu.pid ]; then
             echo "ERROR: qemu.pid not found"
-            cat qemu-output.log || true
+            echo "=== QEMU Output (last 200 lines) ==="
+            tail -200 qemu-output.log || true
             exit 1
           fi
           
           QEMU_PID=$(cat qemu.pid)
           if ! kill -0 $QEMU_PID 2>/dev/null; then
             echo "ERROR: QEMU process not running"
-            cat qemu-output.log || true
+            echo "=== QEMU Output (last 200 lines) ==="
+            tail -200 qemu-output.log || true
             exit 1
           fi
           
@@ -133,13 +151,44 @@ jobs:
           done
           
           echo "ERROR: HTTP server not responding after 2 minutes"
-          cat qemu-output.log || true
+          echo "=== QEMU Output (last 200 lines) ==="
+          tail -200 qemu-output.log || true
+          echo ""
+          echo "=== Checking for ESP32 exceptions/crashes ==="
+          if grep -i "exception\|abort\|backtrace\|panic" qemu-output.log; then
+            echo "FOUND: Firmware crash detected in QEMU output"
+          else
+            echo "No obvious crash patterns found"
+          fi
           exit 1
       
       - name: Run Playwright tests against QEMU
         env:
           WLED_BASE_URL: http://localhost:8080
         run: npm run test:e2e
+      
+      - name: Analyze QEMU output for crashes
+        if: always()
+        run: |
+          echo "=== Analyzing QEMU output for ESP32 crashes ==="
+          if [ -f qemu-output.log ]; then
+            if grep -i "exception\|abort\|backtrace\|panic\|guru meditation" qemu-output.log > /dev/null; then
+              echo "ESP32 Exception/Crash detected in QEMU output!"
+              echo ""
+              echo "=== Exception Context ==="
+              grep -A 20 -B 5 -i "exception\|abort\|backtrace\|panic\|guru meditation" qemu-output.log | head -100
+              echo ""
+              echo "Note: This could be a QEMU-specific issue or a real firmware bug."
+              echo "QEMU ESP32 emulation has limitations:"
+              echo "  - Many peripherals are not fully emulated"
+              echo "  - Some hardware features may cause crashes in QEMU but work on real hardware"
+              echo "  - Network/WiFi emulation is limited"
+            else
+              echo "No ESP32 exceptions detected in QEMU output"
+            fi
+          else
+            echo "No QEMU output log found"
+          fi
       
       - name: Upload QEMU logs
         uses: actions/upload-artifact@v4

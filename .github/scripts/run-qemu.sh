@@ -1,6 +1,11 @@
 #!/bin/bash
 # Run WLED firmware in QEMU ESP32
 # This script starts QEMU with the compiled firmware and enables network access
+#
+# Note: QEMU ESP32 emulation has limitations:
+# - Not all peripherals are fully emulated (WiFi, I2C, some GPIOs)
+# - Some firmware features may crash in QEMU but work on real hardware
+# - This is expected behavior for testing web UI functionality
 
 set -e
 
