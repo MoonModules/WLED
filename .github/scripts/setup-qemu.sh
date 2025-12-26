@@ -71,15 +71,31 @@ fi
 # Make QEMU executable (try both possible locations)
 if [ -f "${QEMU_DIR}/qemu-system-xtensa" ]; then
     chmod +x ${QEMU_DIR}/qemu-system-xtensa
-    echo "QEMU ESP32 setup complete"
-    echo "QEMU binary: ${QEMU_DIR}/qemu-system-xtensa"
+    QEMU_BIN="${QEMU_DIR}/qemu-system-xtensa"
 elif [ -f "${QEMU_DIR}/bin/qemu-system-xtensa" ]; then
     chmod +x ${QEMU_DIR}/bin/qemu-system-xtensa
     # Create symlink for easier access
     ln -sf bin/qemu-system-xtensa ${QEMU_DIR}/qemu-system-xtensa
-    echo "QEMU ESP32 setup complete"
-    echo "QEMU binary: ${QEMU_DIR}/bin/qemu-system-xtensa"
+    QEMU_BIN="${QEMU_DIR}/bin/qemu-system-xtensa"
 else
     echo "ERROR: Could not find qemu-system-xtensa binary"
+    exit 1
+fi
+
+echo "QEMU ESP32 setup complete"
+echo "QEMU binary: ${QEMU_BIN}"
+
+# Verify QEMU can run by checking for required libraries
+echo "Verifying QEMU dependencies..."
+if ! ldd "${QEMU_BIN}" | grep -q "not found"; then
+    echo "All required libraries found"
+    ${QEMU_BIN} --version
+else
+    echo "WARNING: Missing required libraries:"
+    ldd "${QEMU_BIN}" | grep "not found"
+    echo ""
+    echo "Install missing dependencies with:"
+    echo "  sudo apt-get update"
+    echo "  sudo apt-get install -y libsdl2-2.0-0 libpixman-1-0 libglib2.0-0"
     exit 1
 fi

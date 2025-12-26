@@ -88,6 +88,11 @@ jobs:
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps chromium
       
+      - name: Install QEMU dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-2.0-0 libpixman-1-0 libglib2.0-0
+      
       - name: Setup QEMU ESP32
         run: |
           bash .github/scripts/setup-qemu.sh
