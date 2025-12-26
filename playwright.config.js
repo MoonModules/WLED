@@ -20,7 +20,7 @@ module.exports = defineConfig({
   reporter: 'html',
   timeout: 45000, // 45 seconds per test (QEMU can be slow)
   use: {
-    baseURL: process.env.WLED_BASE_URL || 'http://localhost',
+    baseURL: process.env.WLED_BASE_URL || 'http://localhost:8080',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     navigationTimeout: 20000, // 20 seconds for navigation (QEMU startup)

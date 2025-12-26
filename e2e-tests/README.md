@@ -44,14 +44,14 @@ Test the actual firmware running in QEMU ESP32 emulator:
 
 3. **Run firmware in QEMU** (in a separate terminal):
    ```bash
-   bash .github/scripts/run-qemu.sh .pio/build/esp32dev qemu-esp32 80
+   bash .github/scripts/run-qemu.sh .pio/build/esp32dev qemu-esp32 8080
    ```
    
    Wait ~30-45 seconds for ESP32 to boot and start the web server.
 
 4. **Run tests**:
    ```bash
-   WLED_BASE_URL=http://localhost npm run test:e2e
+   WLED_BASE_URL=http://localhost:8080 npm run test:e2e
    ```
 
 ### Test with Real Hardware
@@ -69,13 +69,13 @@ To test against a real ESP32 device:
 
 ```bash
 # Run tests in UI mode (interactive)
-WLED_BASE_URL=http://localhost npm run test:e2e:ui
+WLED_BASE_URL=http://localhost:8080 npm run test:e2e:ui
 
 # Run tests in debug mode
-WLED_BASE_URL=http://localhost npm run test:e2e:debug
+WLED_BASE_URL=http://localhost:8080 npm run test:e2e:debug
 
 # Run a specific test file
-WLED_BASE_URL=http://localhost npx playwright test e2e-tests/index.spec.js
+WLED_BASE_URL=http://localhost:8080 npx playwright test e2e-tests/index.spec.js
 ```
 
 ## Test Structure

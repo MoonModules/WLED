@@ -6,7 +6,7 @@ set -e
 
 FIRMWARE_DIR="${1:-.pio/build/esp32dev}"
 QEMU_DIR="${2:-qemu-esp32}"
-HTTP_PORT="${3:-80}"
+HTTP_PORT="${3:-8080}"  # Default to 8080 (non-privileged port)
 
 if [ ! -d "$FIRMWARE_DIR" ]; then
     echo "Error: Firmware directory not found: $FIRMWARE_DIR"

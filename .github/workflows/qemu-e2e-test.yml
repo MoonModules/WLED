@@ -100,7 +100,7 @@ jobs:
       - name: Start QEMU with WLED firmware in background
         run: |
           chmod +x .github/scripts/run-qemu.sh
-          bash .github/scripts/run-qemu.sh .pio/build/esp32dev qemu-esp32 80 > qemu-output.log 2>&1 &
+          bash .github/scripts/run-qemu.sh .pio/build/esp32dev qemu-esp32 8080 > qemu-output.log 2>&1 &
           echo "Waiting for QEMU to start and WLED to boot..."
           sleep 45
       
@@ -124,7 +124,7 @@ jobs:
           
           # Wait up to 2 minutes for HTTP server to respond
           for i in {1..60}; do
-            if curl -f -m 5 http://localhost/ > /dev/null 2>&1; then
+            if curl -f -m 5 http://localhost:8080/ > /dev/null 2>&1; then
               echo "SUCCESS: WLED HTTP server is responding!"
               exit 0
             fi
@@ -138,7 +138,7 @@ jobs:
       
       - name: Run Playwright tests against QEMU
         env:
-          WLED_BASE_URL: http://localhost
+          WLED_BASE_URL: http://localhost:8080
         run: npm run test:e2e
       
       - name: Upload QEMU logs
