@@ -138,19 +138,64 @@ jobs:
           fi
           
           echo "QEMU is running (PID: $QEMU_PID)"
-          echo "Testing if WLED HTTP server is responding..."
+          
+          # Check for network/DHCP initialization in logs
+          echo ""
+          echo "=== Verifying Network Initialization ==="
+          sleep 5  # Give a bit more time for network logs
+          
+          if grep -i "ETH Started\|ETH Connected\|eth: link up" qemu-output.log > /dev/null 2>&1; then
+            echo "✓ Ethernet initialization detected in logs"
+            grep -i "ETH Started\|ETH Connected\|eth: link up" qemu-output.log | tail -5
+          else
+            echo "⚠ Ethernet initialization messages not found (might still be starting)"
+          fi
+          
+          if grep -i "IP\|DHCP\|10\.0\.2\." qemu-output.log > /dev/null 2>&1; then
+            echo "✓ IP/DHCP activity detected in logs"
+            grep -i "IP\|DHCP\|10\.0\.2\." qemu-output.log | tail -5
+          else
+            echo "⚠ No IP/DHCP messages found yet"
+          fi
+          
+          echo ""
+          echo "=== Testing HTTP Server Connectivity ==="
           
           # Wait up to 2 minutes for HTTP server to respond
           for i in {1..60}; do
             if curl -f -m 5 http://localhost:8080/ > /dev/null 2>&1; then
-              echo "SUCCESS: WLED HTTP server is responding!"
+              echo "✓ SUCCESS: WLED HTTP server is responding!"
+              
+              # Additional connectivity verification
+              echo ""
+              echo "=== HTTP Server Verification ==="
+              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/)
+              echo "HTTP Status Code: $HTTP_STATUS"
+              
+              if [ "$HTTP_STATUS" = "200" ]; then
+                echo "✓ HTTP 200 OK - Server is fully operational"
+              else
+                echo "⚠ Unexpected status code: $HTTP_STATUS"
+              fi
+              
+              # Test basic page access
+              echo ""
+              echo "=== Testing Basic Page Access ==="
+              if curl -f -m 5 http://localhost:8080/index.htm > /dev/null 2>&1; then
+                echo "✓ index.htm accessible"
+              else
+                echo "⚠ index.htm not accessible"
+              fi
+              
               exit 0
             fi
             echo "Attempt $i/60: Waiting for HTTP server..."
             sleep 2
           done
           
-          echo "ERROR: HTTP server not responding after 2 minutes"
+          echo ""
+          echo "✗ ERROR: HTTP server not responding after 2 minutes"
+          echo ""
           echo "=== QEMU Output (last 200 lines) ==="
           tail -200 qemu-output.log || true
           echo ""
