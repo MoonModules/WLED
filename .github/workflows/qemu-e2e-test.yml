@@ -161,8 +161,8 @@ jobs:
           echo ""
           echo "=== Testing HTTP Server Connectivity ==="
           
-          # Wait up to 2 minutes for HTTP server to respond
-          for i in {1..60}; do
+          # Wait up to 1 minute for HTTP server to respond
+          for i in {1..30}; do
             if curl -f -m 5 http://localhost:8080/ > /dev/null 2>&1; then
               echo "✓ SUCCESS: WLED HTTP server is responding!"
               
@@ -196,8 +196,8 @@ jobs:
           echo ""
           echo "✗ ERROR: HTTP server not responding after 2 minutes"
           echo ""
-          echo "=== QEMU Output (last 200 lines) ==="
-          tail -200 qemu-output.log || true
+          echo "=== QEMU Output (last 80 lines) ==="
+          tail -80 qemu-output.log || true
           echo ""
           echo "=== Checking for ESP32 exceptions/crashes ==="
           if grep -i "exception\|abort\|backtrace\|panic" qemu-output.log > /dev/null 2>&1; then
