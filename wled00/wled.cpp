@@ -372,6 +372,7 @@ void WLED::loop()
       //DEBUG_PRINTLN(F("No PSRAM"));
 	}
     #endif
+#ifndef WLED_QEMU
     DEBUG_PRINT(F("Wifi state: "));      DEBUG_PRINTLN(WiFi.status());
 
     if (WiFi.status() != lastWifiState) {
@@ -379,6 +380,7 @@ void WLED::loop()
     }
     lastWifiState = WiFi.status();
     DEBUG_PRINT(F("State time: "));      DEBUG_PRINTLN(wifiStateChangedTime);
+#endif
     DEBUG_PRINT(F("NTP last sync: "));   DEBUG_PRINTLN(ntpLastSyncTime);
     DEBUG_PRINT(F("Client IP: "));       DEBUG_PRINTLN(Network.localIP());
     if (loops > 0) { // avoid division by zero
@@ -1466,7 +1468,9 @@ void WLED::handleConnection()
     // shut down AP
     if (apBehavior != AP_BEHAVIOR_ALWAYS && apActive) {
       dnsServer.stop();
+      #ifndef WLED_QEMU
       WiFi.softAPdisconnect(true);
+      #endif
       apActive = false;
       USER_PRINTLN(F("Access point disabled (handle)."));
     }
