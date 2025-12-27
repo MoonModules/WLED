@@ -5,6 +5,7 @@
 **Important**: QEMU testing uses the **V4 Mainline ethernet debug build** (`esp32_16MB_V4_M_eth_debug`).
 
 ### Why esp32_16MB_V4_M_eth_debug Build?
+- **16MB Flash**: Provides sufficient space for all features and debugging symbols
 - WiFi hardware is not emulated in QEMU
 - WiFi initialization causes crashes in QEMU
 - Ethernet build uses `WLED_USE_ETHERNET` flag
@@ -13,6 +14,8 @@
 - Allows network functionality without WiFi hardware
 - HTTP server works via emulated ethernet (open_eth model)
 - Debug build provides better crash analysis capabilities
+
+**Flash Size Configuration**: The QEMU setup creates a 16MB flash image to match the build requirements. This is configured in `run-qemu.sh`.
 
 ### Ethernet Configuration for QEMU
 The build uses ESP32-POE board configuration (index 2):

@@ -54,8 +54,8 @@ echo "HTTP will be accessible at: http://localhost:${HTTP_PORT}"
 FLASH_IMAGE="/tmp/wled_flash.bin"
 echo "Creating flash image at $FLASH_IMAGE"
 
-# Create a 4MB flash image (0x400000 bytes)
-dd if=/dev/zero of="$FLASH_IMAGE" bs=1M count=4 2>/dev/null
+# Create a 16MB flash image (0x1000000 bytes) for esp32_16MB_V4_M_eth_debug
+dd if=/dev/zero of="$FLASH_IMAGE" bs=1M count=16 2>/dev/null
 
 # Write bootloader at 0x1000
 if [ -f "$BOOTLOADER" ]; then
