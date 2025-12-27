@@ -89,5 +89,5 @@ def monitor_output(firmware_dir):
                 exception_lines = []
 
 if __name__ == '__main__':
-    firmware_dir = sys.argv[1] if len(sys.argv) > 1 else '.pio/build/esp32_4MB_V4_S_eth'
+    firmware_dir = sys.argv[1] if len(sys.argv) > 1 else '.pio/build/esp32_16MB_V4_M_eth_debug'
     monitor_output(firmware_dir)

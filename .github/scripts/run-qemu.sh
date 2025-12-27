@@ -9,7 +9,7 @@
 
 set -e
 
-FIRMWARE_DIR="${1:-.pio/build/esp32_4MB_V4_S_eth}"
+FIRMWARE_DIR="${1:-.pio/build/esp32_16MB_V4_M_eth_debug}"
 QEMU_DIR="${2:-qemu-esp32}"
 HTTP_PORT="${3:-8080}"  # Default to 8080 (non-privileged port)
 

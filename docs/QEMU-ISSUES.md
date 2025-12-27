@@ -2,9 +2,9 @@
 
 ## Build Configuration
 
-**Important**: QEMU testing uses the **V4 Sound Reactive ethernet build** (`esp32_4MB_V4_S_eth`).
+**Important**: QEMU testing uses the **V4 Mainline ethernet debug build** (`esp32_16MB_V4_M_eth_debug`).
 
-### Why esp32_4MB_V4_S_eth Build?
+### Why esp32_16MB_V4_M_eth_debug Build?
 - WiFi hardware is not emulated in QEMU
 - WiFi initialization causes crashes in QEMU
 - Ethernet build uses `WLED_USE_ETHERNET` flag
@@ -12,6 +12,7 @@
 - Uses ESP32-POE board configuration (`WLED_ETH_DEFAULT=2`)
 - Allows network functionality without WiFi hardware
 - HTTP server works via emulated ethernet (open_eth model)
+- Debug build provides better crash analysis capabilities
 
 ### Ethernet Configuration for QEMU
 The build uses ESP32-POE board configuration (index 2):
@@ -76,7 +77,7 @@ ESP32 QEMU emulation is not perfect and has several known limitations:
 **Symptom**: Crashes when accessing I2C, SPI, or other peripherals  
 **Cause**: Peripheral emulation is incomplete  
 **Analysis**: Check which peripheral is being accessed in the backtrace  
-**Solution**: These may be QEMU-specific issues
+**Solution**: These may be QEMU-specific issues, use ethernet debug build for better diagnostics
 
 #### 3. Real Firmware Bugs
 **Symptom**: Crashes in application code (not hardware access)  
