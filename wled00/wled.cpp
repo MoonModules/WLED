@@ -1076,7 +1076,7 @@ bool WLED::initEthernet()
   #ifdef WLED_QEMU
   // QEMU: Skip hardware initialization - QEMU's open_eth doesn't fully emulate MAC registers
   // The ethernet hardware init crashes with LoadStorePIFAddrError in emac_ll_clock_enable_rmii_output
-  // espresif ecample on how to init open_eth:
+  // espressif example on how to init open_eth:
   // https://github.com/espressif/esp-afr-sdk/blob/release/v4.4/examples/common_components/protocol_examples_common/connect.c - look for esp_eth_mac_new_openeth()
 
   // Don't call ETH.begin() - avoids MAC register crash
