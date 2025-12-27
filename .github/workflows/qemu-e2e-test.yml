@@ -200,11 +200,15 @@ jobs:
           tail -200 qemu-output.log || true
           echo ""
           echo "=== Checking for ESP32 exceptions/crashes ==="
-          if grep -i "exception\|abort\|backtrace\|panic" qemu-output.log; then
+          if grep -i "exception\|abort\|backtrace\|panic" qemu-output.log > /dev/null 2>&1; then
             echo "FOUND: Firmware crash detected in QEMU output"
+            echo ""
+            grep -i "exception\|abort\|backtrace\|panic" qemu-output.log | head -20
           else
             echo "No obvious crash patterns found"
           fi
+          echo ""
+          echo "ERROR: HTTP server failed to start - check QEMU logs above"
           exit 1
       
       - name: Run Playwright tests against QEMU
