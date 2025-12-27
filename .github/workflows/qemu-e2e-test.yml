@@ -176,13 +176,63 @@ jobs:
               echo "ESP32 Exception/Crash detected in QEMU output!"
               echo ""
               echo "=== Exception Context ==="
-              grep -A 20 -B 5 -i "exception\|abort\|backtrace\|panic\|guru meditation" qemu-output.log | head -100
+              grep -A 25 -B 5 -i "exception\|abort\|backtrace\|panic\|guru meditation" qemu-output.log | head -150
+              echo ""
+              echo "=== Stack Trace Analysis ==="
+              # Extract backtrace if present
+              if grep -i "Backtrace:" qemu-output.log > /dev/null; then
+                BACKTRACE=$(grep -i "Backtrace:" qemu-output.log | tail -1)
+                echo "Raw Backtrace: $BACKTRACE"
+                echo ""
+                echo "Analyzing crash location:"
+                # Extract first address (PC/crash location)
+                CRASH_ADDR=$(echo "$BACKTRACE" | grep -oP '0x[0-9a-fA-F]+' | head -1)
+                if [ -n "$CRASH_ADDR" ]; then
+                  echo "  - Crash at address: $CRASH_ADDR"
+                  echo "  - This is likely in firmware code or ROM"
+                fi
+              fi
+              echo ""
+              echo "=== Manual Exception Decoder Instructions ==="
+              echo "To decode this crash manually:"
+              echo ""
+              echo "1. Download the 'esp32-firmware' artifact from this GitHub Actions run"
+              echo "2. Extract the firmware.elf file"
+              echo "3. Install ESP-IDF or use PlatformIO's exception decoder:"
+              echo ""
+              echo "   Method A - Using PlatformIO:"
+              echo "     pio device monitor --filter esp32_exception_decoder"
+              echo "     (Then paste the backtrace and exception info)"
+              echo ""
+              echo "   Method B - Using ESP-IDF addr2line:"
+              echo "     ~/.platformio/packages/toolchain-xtensa-esp32/bin/xtensa-esp32-elf-addr2line \\"
+              echo "       -pfiaC -e .pio/build/esp32_16MB_V4_M_eth_debug/firmware.elf \\"
+              echo "       0x401771aa 0x4015b4c5 0x40134813 ..."
+              echo ""
+              echo "   Method C - Using online decoder:"
+              echo "     https://github.com/me-no-dev/EspExceptionDecoder"
+              echo ""
+              echo "4. The decoded output will show:"
+              echo "   - Function names where the crash occurred"
+              echo "   - Source file locations (file:line)"
+              echo "   - Call stack leading to the crash"
+              echo ""
+              echo "=== Crash Analysis Guidance ==="
+              echo "Common crash causes in QEMU:"
+              echo "  - LoadStorePIFAddrError (0x0000000f): Invalid memory access"
+              echo "    * Often caused by accessing uninitialized pointers"
+              echo "    * Or accessing hardware registers not emulated by QEMU"
+              echo "    * Check if crash is in hardware/peripheral initialization code"
+              echo ""
+              echo "  - If crash is in ethernet/network code: May be QEMU limitation"
+              echo "  - If crash is in WiFi code: Expected - WiFi not emulated"
+              echo "  - If crash is in application code: Likely real firmware bug"
               echo ""
               echo "Note: This could be a QEMU-specific issue or a real firmware bug."
               echo "QEMU ESP32 emulation has limitations:"
               echo "  - Many peripherals are not fully emulated"
               echo "  - Some hardware features may cause crashes in QEMU but work on real hardware"
-              echo "  - Network/WiFi emulation is limited"
+              echo "  - Network/ethernet emulation may have issues"
             else
               echo "No ESP32 exceptions detected in QEMU output"
             fi
