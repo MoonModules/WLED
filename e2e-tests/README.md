@@ -120,10 +120,17 @@ npx playwright show-report
 - Check QEMU logs: `cat qemu-output.log`
 - Verify firmware was built successfully
 
+**Ethernet/network connection issues:**
+- QEMU provides DHCP server (10.0.2.0/24 network, guest IP 10.0.2.15)
+- If DHCP fails, enable static IP in `platformio.ini` (see comments in file)
+- Check QEMU output for "ETH Connected" message
+- Port forwarding: ESP32 port 80 → localhost:8080
+
 **Tests fail with connection errors:**
 - Wait longer for ESP32 to boot (30-45 seconds minimum)
-- Check if port 80 is accessible: `curl http://localhost/`
+- Check if HTTP server started: `curl http://localhost:8080/`
 - Verify QEMU is still running: `ps aux | grep qemu`
+- Check for ethernet connection errors in QEMU logs
 
 **Tests timeout:**
 - QEMU emulation is slow - tests have 45 second timeouts
@@ -138,8 +145,10 @@ npx playwright show-report
 ## QEMU Limitations
 
 ESP32 QEMU emulation has limitations:
-- **Network**: User-mode networking only (no raw ethernet)
-- **WiFi**: Not emulated (returns mock data)
+- **Network**: User-mode networking with built-in DHCP (10.0.2.0/24)
+  - Guest IP: 10.0.2.15 (via DHCP or static configuration)
+  - Port forwarding: ESP32 port 80 → localhost:8080
+- **WiFi**: Not emulated (crashes if enabled - use ethernet build)
 - **Peripherals**: Many are stubbed (LEDs, I2C, etc.)
 - **Performance**: Slower than real hardware
 
@@ -148,6 +157,7 @@ Despite these limitations, QEMU is sufficient for testing:
 - JavaScript executes without errors  
 - API endpoints respond
 - Page navigation works
+- Ethernet networking works (via open_eth emulation)
 
 ## Adding New Tests
 

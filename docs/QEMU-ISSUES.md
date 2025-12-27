@@ -24,9 +24,35 @@ The build uses ESP32-POE board configuration (index 2):
 
 This configuration is compatible with QEMU's `open_eth` model, which emulates standard ESP32 RMII ethernet interface.
 
+### Network Configuration in QEMU
+QEMU's user-mode networking (slirp) provides:
+- **DHCP Server**: Built-in DHCP server (default network 10.0.2.0/24)
+  - Guest IP: 10.0.2.15 (assigned via DHCP)
+  - Gateway: 10.0.2.2
+  - DNS: 10.0.2.3
+- **Port Forwarding**: TCP port 80 on guest → port 8080 on host (localhost:8080)
+
+**DHCP vs Static IP:**
+- WLED normally uses DHCP on ethernet
+- QEMU provides a DHCP server by default
+- If DHCP doesn't work (connection issues), enable static IP in platformio.ini:
+  ```
+  -D WLED_STATIC_IP_DEFAULT_1=10
+  -D WLED_STATIC_IP_DEFAULT_2=0
+  -D WLED_STATIC_IP_DEFAULT_3=2
+  -D WLED_STATIC_IP_DEFAULT_4=15
+  ```
+- Static IP 10.0.2.15 matches QEMU's default guest IP assignment
+
 ## QEMU Limitations
 
 ESP32 QEMU emulation is not perfect and has several known limitations:
+
+### Network Configuration
+- **DHCP**: QEMU provides a built-in DHCP server (10.0.2.0/24 network)
+- **Expected behavior**: ESP32 should receive IP 10.0.2.15 via DHCP
+- **If DHCP fails**: Enable static IP in platformio.ini (see Build Configuration above)
+- **Port forwarding**: HTTP port 80 on ESP32 → localhost:8080 on host
 
 ### Hardware Emulation
 - **WiFi**: Not emulated - **causes crashes if enabled**
