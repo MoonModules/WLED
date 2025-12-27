@@ -12,7 +12,7 @@
 #include "soc/rtc_cntl_reg.h"
 #endif
 
-#if defined(WLED_DEBUG) && defined(ARDUINO_ARCH_ESP32)
+#if defined(WLED_DEBUG) && defined(ARDUINO_ARCH_ESP32) && !defined(WLED_QEMU)
 #include "../tools/ESP32-Chip_info.hpp"
 #endif
 
@@ -133,7 +133,9 @@ void WLED::loop()
   handleRemote();
   #endif
   handleSerial();
+#ifndef WLEED_QEMU
   handleImprovWifiScan();
+#endif
 
   #if defined(ARDUINO_ARCH_ESP32) && defined(WLEDMM_PROTECT_SERVICE)  // WLEDMM experimental: handleNotifications() calls strip.show(); handleTransitions modifies segments
   if (!suspendStripService) {
@@ -583,7 +585,7 @@ void WLED::setup()
   #endif
   USER_PRINT(F(", speed ")); USER_PRINT(ESP.getFlashChipSpeed()/1000000);USER_PRINTLN(F("MHz."));
   
-  #if defined(WLED_DEBUG) && defined(ARDUINO_ARCH_ESP32)
+  #if defined(WLED_DEBUG) && defined(ARDUINO_ARCH_ESP32) && !defined(WLED_QEMU)
   showRealSpeed();
   #endif
 
