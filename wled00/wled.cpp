@@ -133,7 +133,7 @@ void WLED::loop()
   handleRemote();
   #endif
   handleSerial();
-#ifndef WLEED_QEMU
+#ifndef WLED_QEMU
   handleImprovWifiScan();
 #endif
 
