@@ -350,7 +350,11 @@ WLED_GLOBAL char cmDNS[33] _INIT(MDNS_NAME);                       // mDNS addre
 WLED_GLOBAL char apSSID[33] _INIT("");                             // AP off by default (unless setup)
 WLED_GLOBAL byte apChannel _INIT(6);                               // 2.4GHz WiFi AP channel (1-13)
 WLED_GLOBAL byte apHide    _INIT(0);                               // hidden AP SSID
+#ifndef WLED_DISABLE_WIFI
 WLED_GLOBAL byte apBehavior _INIT(AP_BEHAVIOR_BOOT_NO_CONN);       // access point opens when no connection after boot by default
+#else
+WLED_GLOBAL byte apBehavior _INIT(AP_BEHAVIOR_BUTTON_ONLY);        // access point opens when button0 pressed for at least 6 seconds
+#endif
 WLED_GLOBAL IPAddress staticIP      _INIT_N(((  0,   0,  0,  0))); // static IP of ESP
 WLED_GLOBAL IPAddress staticGateway _INIT_N(((  0,   0,  0,  0))); // gateway (router) IP
 WLED_GLOBAL IPAddress staticSubnet  _INIT_N(((255, 255, 255, 0))); // most common subnet in home networks
