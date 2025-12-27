@@ -1,0 +1,9 @@
+[wokwi]
+version = 1
+firmware = "firmware.bin"
+elf = "firmware.elf"
+
+[[net.forward]]
+# Forward the web server port
+from = "localhost:8080"
+to = "target:80"

@@ -28,3 +28,14 @@ compile_commands.json
 /wled00/wled00.ino.cpp
 /wled00/html_*.h
 _codeql_detected_source_root
+
+# Playwright and test artifacts
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# Wokwi runtime files
+/test/wokwi/firmware.bin
+/test/wokwi/firmware.elf
+/test/wokwi/.wokwi/
+

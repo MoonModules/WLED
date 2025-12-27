@@ -9,7 +9,10 @@
   },
   "scripts": {
     "build": "node tools/cdata.js",
-    "dev": "nodemon -e js,html,htm,css,png,jpg,gif,ico,js -w tools/ -w wled00/data/ -x node tools/cdata.js"
+    "dev": "nodemon -e js,html,htm,css,png,jpg,gif,ico,js -w tools/ -w wled00/data/ -x node tools/cdata.js",
+    "test": "npm run test:cdata",
+    "test:cdata": "node tools/cdata-test.js",
+    "test:wokwi": "playwright test test/playwright/wokwi-basic.spec.js"
   },
   "repository": {
     "type": "git",
@@ -27,5 +30,8 @@
     "inliner": "^1.13.1",
     "nodemon": "^2.0.20",
     "zlib": "^1.0.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
   }
 }
