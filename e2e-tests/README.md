@@ -122,8 +122,10 @@ npx playwright show-report
 
 **Ethernet/network connection issues:**
 - QEMU provides DHCP server (10.0.2.0/24 network, guest IP 10.0.2.15)
+- The build uses `WLED_QEMU` flag to skip ethernet hardware initialization (prevents LoadStorePIFAddrError crash)
+- Network still works via QEMU's user-mode networking (slirp)
 - If DHCP fails, enable static IP in `platformio.ini` (see comments in file)
-- Check QEMU output for "ETH Connected" message
+- Check QEMU output for "ETH Connected" or "Ethernet configured for QEMU" message
 - Port forwarding: ESP32 port 80 → localhost:8080
 
 **Tests fail with connection errors:**

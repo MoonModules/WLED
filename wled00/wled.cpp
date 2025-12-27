@@ -1071,6 +1071,15 @@ bool WLED::initEthernet()
   }
   #endif
 
+  #ifdef WLED_QEMU
+  // QEMU: Skip hardware initialization - QEMU's open_eth doesn't fully emulate MAC registers
+  // The ethernet hardware init crashes with LoadStorePIFAddrError in emac_ll_clock_enable_rmii_output
+  // Network stack will still work via QEMU's user-mode networking (slirp)
+  DEBUG_PRINTLN(F("initC: QEMU mode - skipping ETH.begin() hardware initialization"));
+  successfullyConfiguredEthernet = true;
+  USER_PRINTLN(F("initC: *** Ethernet configured for QEMU (hardware init skipped) ***"));
+  return true;
+  #else
   if (!ETH.begin(
                 (uint8_t) es.eth_address,
                 (int)     es.eth_power,
@@ -1088,6 +1097,7 @@ bool WLED::initEthernet()
   }
 
   successfullyConfiguredEthernet = true;
+  #endif
   USER_PRINTLN(F("initC: *** Ethernet successfully configured! ***"));  // WLEDMM
   return true;
 #else
