@@ -75,12 +75,15 @@ echo "Flash image created successfully"
 # Run QEMU ESP32
 # Note: ESP32 in QEMU has limited peripheral support
 # Network configuration uses user-mode networking with port forwarding
+#    -nic user,model=open_eth,id=lo0,hostfwd=tcp:127.0.0.1:PORT_HOST-:PORT_GUEST # for port forwarding
+#    -global driver=timer.esp32.timg,property=wdt_disable,value=true # disables TG watchdog timers
 echo "Starting QEMU..."
 ${QEMU_BIN} \
     -nographic \
     -machine esp32 \
     -drive file=${FLASH_IMAGE},if=mtd,format=raw \
-    -nic user,model=open_eth,hostfwd=tcp::${HTTP_PORT}-:80 \
+    -nic user,model=open_eth,id=lo0,hostfwd=tcp::${HTTP_PORT}-:80 \
+    -global driver=timer.esp32.timg,property=wdt_disable,value=true \
     -serial mon:stdio &
 
 QEMU_PID=$!
