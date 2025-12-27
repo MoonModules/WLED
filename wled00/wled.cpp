@@ -959,6 +959,7 @@ void WLED::initAP(bool resetAP)
   if (apBehavior == AP_BEHAVIOR_BUTTON_ONLY && !resetAP)
     return;
 
+#if !defined(WLED_QEMU) // QEMU does not support wifi AP mode
   if (resetAP) {
     WLED_SET_AP_SSID();
     strcpy_P(apPass, PSTR(WLED_AP_PASS));
@@ -991,6 +992,7 @@ void WLED::initAP(bool resetAP)
     dnsServer.start(53, "*", WiFi.softAPIP());
   }
   apActive = true;
+#endif // WLED_QEMU
 }
 
 bool WLED::initEthernet()
@@ -1359,8 +1361,8 @@ void WLED::handleConnection()
   }
   #endif
   
-#ifndef WLED_QEMU
   byte stac = 0;
+#ifndef WLED_QEMU
   if (apActive) {
 #ifdef ESP8266
     stac = wifi_softap_get_station_num();
