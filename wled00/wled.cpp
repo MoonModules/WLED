@@ -1148,12 +1148,13 @@ void WLED::initConnection()
 #endif
 
 #endif
-
+#ifndef WLED_QEMU
   if (staticIP[0] != 0 && staticGateway[0] != 0) {
     WiFi.config(staticIP, staticGateway, staticSubnet, IPAddress(1, 1, 1, 1));
   } else {
     WiFi.config(IPAddress((uint32_t)0), IPAddress((uint32_t)0), IPAddress((uint32_t)0));
   }
+#endif
 
   lastReconnectAttempt = millis();
 
