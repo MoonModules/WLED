@@ -142,7 +142,7 @@ jobs:
           # Check for network/DHCP initialization in logs
           echo ""
           echo "=== Verifying Network Initialization ==="
-          sleep 10  # Give a bit more time for network logs
+          sleep 25  # Give a bit more time for network logs
           
           if grep -i "ETH Started\|ETH Connected\|eth: link up" qemu-output.log > /dev/null 2>&1; then
             echo "✓ Ethernet initialization detected in logs"
@@ -189,12 +189,12 @@ jobs:
               
               exit 0
             fi
-            echo "Attempt $i/60: Waiting for HTTP server..."
+            echo "Attempt $i/30: Waiting for HTTP server..."
             sleep 2
           done
           
           echo ""
-          echo "✗ ERROR: HTTP server not responding after 2 minutes"
+          echo "✗ ERROR: HTTP server not responding after 1 minute"
           echo ""
           echo "=== QEMU Output (last 80 lines) ==="
           tail -80 qemu-output.log || true
