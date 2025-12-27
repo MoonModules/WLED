@@ -2,15 +2,27 @@
 
 ## Build Configuration
 
-**Important**: QEMU testing uses the **ethernet build** (`esp32_4MB_M_eth`) instead of the default WiFi build.
+**Important**: QEMU testing uses the **V4 Sound Reactive ethernet build** (`esp32_4MB_V4_S_eth`).
 
-### Why Ethernet Build?
+### Why esp32_4MB_V4_S_eth Build?
 - WiFi hardware is not emulated in QEMU
 - WiFi initialization causes crashes in QEMU
 - Ethernet build uses `WLED_USE_ETHERNET` flag
 - Disables ESP-NOW with `WLED_DISABLE_ESPNOW` (requires WiFi)
+- Uses ESP32-POE board configuration (`WLED_ETH_DEFAULT=2`)
 - Allows network functionality without WiFi hardware
 - HTTP server works via emulated ethernet (open_eth model)
+
+### Ethernet Configuration for QEMU
+The build uses ESP32-POE board configuration (index 2):
+- **PHY Address**: 0
+- **Power Pin**: 12
+- **MDC Pin**: 23
+- **MDIO Pin**: 18
+- **PHY Type**: LAN8720
+- **Clock Mode**: GPIO17_OUT
+
+This configuration is compatible with QEMU's `open_eth` model, which emulates standard ESP32 RMII ethernet interface.
 
 ## QEMU Limitations
 

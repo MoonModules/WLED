@@ -27,9 +27,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: ${{ runner.os }}-pio-esp32_4MB_M_eth-${{ hashFiles('**/platformio.ini') }}
+          key: ${{ runner.os }}-pio-esp32_4MB_V4_S_eth-${{ hashFiles('**/platformio.ini') }}
           restore-keys: |
-            ${{ runner.os }}-pio-esp32_4MB_M_eth-
+            ${{ runner.os }}-pio-esp32_4MB_V4_S_eth-
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -52,13 +52,13 @@ jobs:
         run: npm run build
       
       - name: Build ESP32 firmware
-        run: pio run -e esp32_4MB_M_eth
+        run: pio run -e esp32_4MB_V4_S_eth
       
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
           name: esp32-firmware
-          path: .pio/build/esp32_4MB_M_eth/
+          path: .pio/build/esp32_4MB_V4_S_eth/
           retention-days: 1
 
   # Job 2: Test with QEMU ESP32
@@ -85,7 +85,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: esp32-firmware
-          path: .pio/build/esp32_4MB_M_eth/
+          path: .pio/build/esp32_4MB_V4_S_eth/
       
       - name: Install Node.js dependencies
         run: npm ci
@@ -116,7 +116,7 @@ jobs:
       - name: Start QEMU with WLED firmware in background
         run: |
           chmod +x .github/scripts/run-qemu.sh
-          bash .github/scripts/run-qemu.sh .pio/build/esp32_4MB_M_eth qemu-esp32 8080 > qemu-output.log 2>&1 &
+          bash .github/scripts/run-qemu.sh .pio/build/esp32_4MB_V4_S_eth qemu-esp32 8080 > qemu-output.log 2>&1 &
           echo "Waiting for QEMU to start and WLED to boot..."
           sleep 45
       
