@@ -1076,19 +1076,22 @@ bool WLED::initEthernet()
   #ifdef WLED_QEMU
   // QEMU: Skip hardware initialization - QEMU's open_eth doesn't fully emulate MAC registers
   // The ethernet hardware init crashes with LoadStorePIFAddrError in emac_ll_clock_enable_rmii_output
-  // espresiv ecample on how to init open_eth:
+  // espresif ecample on how to init open_eth:
   // https://github.com/espressif/esp-afr-sdk/blob/release/v4.4/examples/common_components/protocol_examples_common/connect.c - look for esp_eth_mac_new_openeth()
 
   // Don't call ETH.begin() - avoids MAC register crash
   // But manually initialize lwIP and DHCP for QEMU
   tcpip_adapter_init();
+  #if !defined(WLED_STATIC_IP_DEFAULT_1)
   tcpip_adapter_dhcpc_start(TCPIP_ADAPTER_IF_ETH);
+  #else
   // Or set static IP:
-  // tcpip_adapter_ip_info_t ip_info;
-  // IP4_ADDR(&ip_info.ip, 10, 0, 2, 15);
-  // IP4_ADDR(&ip_info.gw, 10, 0, 2, 2);
-  // IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
-  // tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_ETH, &ip_info);
+  tcpip_adapter_ip_info_t ip_info;
+  IP4_ADDR(&ip_info.ip, 10, 0, 2, 15);
+  IP4_ADDR(&ip_info.gw, 10, 0, 2, 2);
+  IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
+  tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_ETH, &ip_info);
+  #endif // hack
 
   // Network stack will still work via QEMU's user-mode networking (slirp)
   DEBUG_PRINTLN(F("initC: QEMU mode - skipping ETH.begin() hardware initialization"));
