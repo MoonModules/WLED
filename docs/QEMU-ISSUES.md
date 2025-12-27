@@ -28,14 +28,27 @@ The build uses ESP32-POE board configuration (index 2):
 
 This configuration is compatible with QEMU's `open_eth` model, which emulates standard ESP32 RMII ethernet interface.
 
-### QEMU Ethernet Hardware Workaround
-**Critical**: The build includes `WLED_QEMU` flag which skips actual ethernet hardware initialization (`ETH.begin()`). This is necessary because:
-- QEMU's `open_eth` model doesn't fully emulate all ethernet MAC hardware registers
-- Calling `ETH.begin()` crashes with `LoadStorePIFAddrError` in `emac_ll_clock_enable_rmii_output`
-- The crash occurs when trying to enable RMII clock output (hardware register access at 0x3ff6980c)
-- With `WLED_QEMU` defined, the code skips hardware init but marks ethernet as configured
-- Network stack still functions via QEMU's user-mode networking (slirp)
-- HTTP server and web UI work without actual hardware initialization
+### QEMU Hardware Workarounds
+
+The build includes `WLED_QEMU` flag which provides workarounds for hardware that QEMU doesn't emulate:
+
+#### Ethernet MAC Hardware
+- **Problem**: QEMU's `open_eth` model doesn't fully emulate ESP32 ethernet MAC hardware registers
+- **Symptom**: Firmware crashes with `LoadStorePIFAddrError` in `emac_ll_clock_enable_rmii_output` when `ETH.begin()` tries to access register at 0x3ff6980c
+- **Solution**: `WLED_QEMU` flag skips `ETH.begin()` hardware initialization
+- **Result**: Ethernet is marked as configured without hardware init; network stack still functions via QEMU's user-mode networking (slirp)
+
+#### WiFi Hardware
+- **Problem**: QEMU doesn't emulate WiFi hardware at all
+- **Symptom**: Firmware crashes with `LoadStorePIFAddrError` when WiFi functions (`WiFi.disconnect()`, `WiFi.mode()`, `WiFi.begin()`, etc.) try to access WiFi hardware registers (address range 0x60033xxx)
+- **Example crash**:
+  ```
+  Arduino Event: 0 - WIFI_READY
+  Guru Meditation Error: Core 0 panic'ed (LoadStorePIFAddrError)
+  EXCVADDR: 0x60033c00
+  ```
+- **Solution**: `WLED_QEMU` flag also skips all WiFi initialization in `initConnection()` and elsewhere
+- **Result**: WiFi functions are disabled; network connectivity works via ethernet only through QEMU's user-mode networking
 
 **For real hardware**: Remove the `WLED_QEMU` flag - it should only be used for QEMU testing.
 

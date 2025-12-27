@@ -1118,6 +1118,9 @@ void WLED::initConnection()
   ws.onEvent(wsEvent);
   #endif
 
+#ifndef WLED_QEMU
+  // QEMU: Skip WiFi initialization - WiFi hardware not emulated
+  // The firmware crashes with LoadStorePIFAddrError when WiFi functions try to access hardware registers
   WiFi.disconnect(true);        // close old connections
 #ifdef ESP8266
   WiFi.setPhyMode(force802_3g ? WIFI_PHY_MODE_11G : WIFI_PHY_MODE_11N);
@@ -1172,6 +1175,12 @@ void WLED::initConnection()
   WiFi.setHostname(hostname);
 #else
   wifi_set_sleep_type((noWifiSleep) ? NONE_SLEEP_T : MODEM_SLEEP_T);
+#endif
+#else
+  // QEMU mode: Skip all WiFi initialization
+  DEBUG_PRINTLN(F("initConnection: QEMU mode - skipping WiFi initialization"));
+  USER_PRINTLN(F("initConnection: *** QEMU mode - WiFi disabled, using ethernet only ***"));
+  lastReconnectAttempt = millis();
 #endif
 }
 
@@ -1350,6 +1359,7 @@ void WLED::handleConnection()
   }
   #endif
   
+#ifndef WLED_QEMU
   byte stac = 0;
   if (apActive) {
 #ifdef ESP8266
@@ -1371,6 +1381,7 @@ void WLED::handleConnection()
       }
     }
   }
+#endif // WLED_QEMU
   if (forceReconnect) {
     USER_PRINTLN(F("Forcing reconnect."));
     initConnection();
@@ -1406,7 +1417,9 @@ void WLED::handleConnection()
     if (Network.isEthernet()) {
      #if ESP32
      USER_PRINTLN(" via Ethernet (disabling WiFi)");
+     #ifndef WLED_QEMU
      WiFi.disconnect(true);
+     #endif
      #endif
     } else {
      USER_PRINTLN(" via WiFi");
