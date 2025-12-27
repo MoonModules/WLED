@@ -1145,6 +1145,8 @@ void WLED::initConnection()
   WiFi.setPhyMode(force802_3g ? WIFI_PHY_MODE_11G : WIFI_PHY_MODE_11N);
 #endif
 
+#endif
+
   if (staticIP[0] != 0 && staticGateway[0] != 0) {
     WiFi.config(staticIP, staticGateway, staticSubnet, IPAddress(1, 1, 1, 1));
   } else {
@@ -1152,6 +1154,8 @@ void WLED::initConnection()
   }
 
   lastReconnectAttempt = millis();
+
+#ifndef WLED_QEMU
 
   if (!WLED_WIFI_CONFIGURED) {
     USER_PRINTLN(F("No WiFi connection configured."));  // WLEDMM
@@ -1168,6 +1172,7 @@ void WLED::initConnection()
     }
   }
   showWelcomePage = false;
+#endif
 
   USER_PRINT(F("Connecting to "));
   USER_PRINT(clientSSID);
@@ -1185,6 +1190,7 @@ void WLED::initConnection()
   WiFi.hostname(hostname);
 #endif
 
+#ifndef WLED_QEMU
   WiFi.begin(clientSSID, clientPass);
 #ifdef ARDUINO_ARCH_ESP32
   #if defined(LOLIN_WIFI_FIX) && (defined(ARDUINO_ARCH_ESP32C3) || defined(ARDUINO_ARCH_ESP32S2) || defined(ARDUINO_ARCH_ESP32S3))
