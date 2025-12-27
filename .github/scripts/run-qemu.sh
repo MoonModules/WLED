@@ -9,7 +9,7 @@
 
 set -e
 
-FIRMWARE_DIR="${1:-.pio/build/esp32_16MB_V4_M_eth_debug}"
+FIRMWARE_DIR="${1:-.pio/build/esp32_16MB_QEMU_debug}"
 QEMU_DIR="${2:-qemu-esp32}"
 HTTP_PORT="${3:-8080}"  # Default to 8080 (non-privileged port)
 
@@ -54,7 +54,7 @@ echo "HTTP will be accessible at: http://localhost:${HTTP_PORT}"
 FLASH_IMAGE="/tmp/wled_flash.bin"
 echo "Creating flash image at $FLASH_IMAGE"
 
-# Create a 16MB flash image (0x1000000 bytes) for esp32_16MB_V4_M_eth_debug
+# Create a 16MB flash image (0x1000000 bytes) for esp32_16MB_QEMU_debug
 dd if=/dev/zero of="$FLASH_IMAGE" bs=1M count=16 2>/dev/null
 
 # Write bootloader at 0x1000

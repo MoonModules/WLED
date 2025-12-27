@@ -27,9 +27,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: ${{ runner.os }}-pio-esp32_16MB_V4_M_eth_debug-${{ hashFiles('**/platformio.ini') }}
+          key: ${{ runner.os }}-pio-esp32_16MB_QEMU_debug-${{ hashFiles('**/platformio.ini') }}
           restore-keys: |
-            ${{ runner.os }}-pio-esp32_16MB_V4_M_eth_debug-
+            ${{ runner.os }}-pio-esp32_16MB_QEMU_debug-
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -52,13 +52,13 @@ jobs:
         run: npm run build
       
       - name: Build ESP32 firmware
-        run: pio run -e esp32_16MB_V4_M_eth_debug
+        run: pio run -e esp32_16MB_QEMU_debug
       
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
           name: esp32-firmware
-          path: .pio/build/esp32_16MB_V4_M_eth_debug/
+          path: .pio/build/esp32_16MB_QEMU_debug/
           retention-days: 1
 
   # Job 2: Test with QEMU ESP32
@@ -85,7 +85,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: esp32-firmware
-          path: .pio/build/esp32_16MB_V4_M_eth_debug/
+          path: .pio/build/esp32_16MB_QEMU_debug/
       
       - name: Install Node.js dependencies
         run: npm ci
@@ -116,7 +116,7 @@ jobs:
       - name: Start QEMU with WLED firmware in background
         run: |
           chmod +x .github/scripts/run-qemu.sh
-          bash .github/scripts/run-qemu.sh .pio/build/esp32_16MB_V4_M_eth_debug qemu-esp32 8080 > qemu-output.log 2>&1 &
+          bash .github/scripts/run-qemu.sh .pio/build/esp32_16MB_QEMU_debug qemu-esp32 8080 > qemu-output.log 2>&1 &
           echo "Waiting for QEMU to start and WLED to boot..."
           sleep 45
       
@@ -206,11 +206,8 @@ jobs:
               echo ""
               echo "   Method B - Using ESP-IDF addr2line:"
               echo "     ~/.platformio/packages/toolchain-xtensa-esp32/bin/xtensa-esp32-elf-addr2line \\"
-              echo "       -pfiaC -e .pio/build/esp32_16MB_V4_M_eth_debug/firmware.elf \\"
+              echo "       -pfiaC -e .pio/build/esp32_16MB_QEMU_debug/firmware.elf \\"
               echo "       0x401771aa 0x4015b4c5 0x40134813 ..."
-              echo ""
-              echo "   Method C - Using online decoder:"
-              echo "     https://github.com/me-no-dev/EspExceptionDecoder"
               echo ""
               echo "4. The decoded output will show:"
               echo "   - Function names where the crash occurred"

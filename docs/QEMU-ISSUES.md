@@ -2,9 +2,9 @@
 
 ## Build Configuration
 
-**Important**: QEMU testing uses the **V4 Mainline ethernet debug build** (`esp32_16MB_V4_M_eth_debug`).
+**Important**: QEMU testing uses the **V4 Mainline ethernet debug build** (`esp32_16MB_QEMU_debug`).
 
-### Why esp32_16MB_V4_M_eth_debug Build?
+### Why esp32_16MB_QEMU_debug Build?
 - **16MB Flash**: Provides sufficient space for all features and debugging symbols
 - WiFi hardware is not emulated in QEMU
 - WiFi initialization causes crashes in QEMU
@@ -158,7 +158,7 @@ pio device monitor --filter esp32_exception_decoder
 ```bash
 # Install toolchain (if not already from PlatformIO)
 ~/.platformio/packages/toolchain-xtensa-esp32/bin/xtensa-esp32-elf-addr2line \
-  -pfiaC -e .pio/build/esp32_16MB_V4_M_eth_debug/firmware.elf \
+  -pfiaC -e .pio/build/esp32_16MB_QEMU_debug/firmware.elf \
   0x401771aa 0x4015b4c5 0x40134813 0x40103cd0 0x40135d33 0x401383c6 0x4016107e
 ```
 

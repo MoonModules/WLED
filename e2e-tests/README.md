@@ -36,7 +36,7 @@ Test the actual firmware running in QEMU ESP32 emulator:
 1. **Build the firmware**:
    ```bash
    npm run build  # Build web UI
-   pio run -e esp32_16MB_V4_M_eth_debug  # Build V4 M ethernet debug firmware (WiFi disabled, 15+ min first time)
+   pio run -e esp32_16MB_QEMU_debug  # Build V4 M ethernet debug firmware (WiFi disabled, 15+ min first time)
    ```
 
 2. **Setup QEMU** (first time only):
@@ -46,7 +46,7 @@ Test the actual firmware running in QEMU ESP32 emulator:
 
 3. **Run firmware in QEMU** (in a separate terminal):
    ```bash
-   bash .github/scripts/run-qemu.sh .pio/build/esp32_16MB_V4_M_eth_debug qemu-esp32 8080
+   bash .github/scripts/run-qemu.sh .pio/build/esp32_16MB_QEMU_debug qemu-esp32 8080
    ```
    
    Wait ~30-45 seconds for ESP32 to boot and start the web server.
