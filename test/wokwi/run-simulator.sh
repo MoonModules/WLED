@@ -18,7 +18,9 @@ fi
 
 echo "Starting Wokwi simulator..."
 echo "Timeout: ${WOKWI_TIMEOUT} seconds"
+echo "Web server will be available at http://localhost:8080"
 
-# Run wokwi-cli with timeout
+# Run wokwi-cli with timeout (in milliseconds)
 # The simulator will forward port 80 to localhost:8080
+# Note: wokwi-cli runs in foreground, so this needs to be backgrounded or run in a separate process
 wokwi-cli --timeout ${WOKWI_TIMEOUT}000 diagram.json

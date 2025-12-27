@@ -1,10 +1,10 @@
-import { defineConfig, devices } from '@playwright/test';
+const { defineConfig, devices } = require('@playwright/test');
 
 /**
  * Playwright configuration for WLED-MM Wokwi testing
  * See https://playwright.dev/docs/test-configuration.
  */
-export default defineConfig({
+module.exports = defineConfig({
   testDir: './test/playwright',
   
   /* Run tests in files in parallel */

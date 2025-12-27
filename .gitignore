@@ -38,4 +38,5 @@ _codeql_detected_source_root
 /test/wokwi/firmware.bin
 /test/wokwi/firmware.elf
 /test/wokwi/.wokwi/
+/test/wokwi/logs/
 
