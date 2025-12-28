@@ -64,6 +64,18 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      - name: Debug - Verify token is set
+        run: |
+          if [ -z "$WOKWI_CLI_TOKEN" ]; then
+            echo "❌ ERROR: WOKWI_CLI_TOKEN is not set"
+            echo "Please configure WOKWI_CLI_TOKEN as a repository secret"
+            exit 1
+          else
+            echo "✅ WOKWI_CLI_TOKEN is set (length: ${#WOKWI_CLI_TOKEN} characters)"
+          fi
+        env:
+          WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+
       - name: Start Wokwi simulator in background
         env:
           WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
