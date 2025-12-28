@@ -72,6 +72,9 @@ jobs:
           # Create log directory
           mkdir -p logs
           
+          # Export the token so it's available to child processes
+          export WOKWI_CLI_TOKEN
+          
           # Start simulator in background with a 180 second timeout
           WOKWI_TIMEOUT=180 ./run-simulator.sh > logs/wokwi.log 2>&1 &
           WOKWI_PID=$!
