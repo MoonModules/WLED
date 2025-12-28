@@ -65,6 +65,8 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Start Wokwi simulator in background
+        env:
+          WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
         run: |
           cd test/wokwi
           # Create log directory
