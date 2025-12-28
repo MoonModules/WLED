@@ -159,10 +159,28 @@ jobs:
           fi
           
           echo ""
-          echo "=== Testing HTTP Server Connectivity ==="
+          echo "=== Testing Network Connectivity ==="
           
-          # Wait up to 1 minute for HTTP server to respond
+          # Wait up to 1 minute for network connectivity
           for i in {1..30}; do
+            # Test ping connectivity first
+            echo "Attempt $i/30: Testing connectivity..."
+            if ping -c 1 -W 2 localhost > /dev/null 2>&1; then
+              echo "✓ Localhost ping successful"
+              
+              # Try pinging the QEMU guest IP if we can detect it
+              GUEST_IP=$(grep -o "10\.0\.2\.[0-9]\+" qemu-output.log | tail -1 || echo "")
+              if [ -n "$GUEST_IP" ]; then
+                echo "Detected guest IP: $GUEST_IP"
+                if ping -c 1 -W 2 "$GUEST_IP" > /dev/null 2>&1; then
+                  echo "✓ Guest IP ($GUEST_IP) ping successful"
+                else
+                  echo "⚠ Guest IP ($GUEST_IP) not responding to ping"
+                fi
+              fi
+            fi
+            
+            # Test HTTP connectivity
             if curl -f -m 5 http://localhost:8080/ > /dev/null 2>&1; then
               echo "✓ SUCCESS: WLED HTTP server is responding!"
               
@@ -189,7 +207,6 @@ jobs:
               
               exit 0
             fi
-            echo "Attempt $i/30: Waiting for HTTP server..."
             sleep 2
           done
           

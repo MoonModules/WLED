@@ -1081,21 +1081,47 @@ bool WLED::initEthernet()
   // QEMU: Skip hardware initialization - QEMU's open_eth doesn't fully emulate MAC registers
   // The ethernet hardware init crashes with LoadStorePIFAddrError in emac_ll_clock_enable_rmii_output
   // espressif example on how to init open_eth:
-  // https://github.com/espressif/esp-afr-sdk/blob/release/v4.4/examples/common_components/protocol_examples_common/connect.c - look for esp_eth_mac_new_openeth()
+  // https://github.com/esp-afr-sdk/blob/release/v4.4/examples/common_components/protocol_examples_common/connect.c - look for esp_eth_mac_new_openeth()
 
   // Don't call ETH.begin() - avoids MAC register crash
   // But manually initialize lwIP and DHCP for QEMU
+  USER_PRINTLN(F("initC: QEMU mode - initializing network stack"));
   tcpip_adapter_init();
+  
   #if !defined(WLED_STATIC_IP_DEFAULT_1)
-  tcpip_adapter_dhcpc_start(TCPIP_ADAPTER_IF_ETH);
+  USER_PRINTLN(F("initC: QEMU - Starting DHCP client on ethernet interface"));
+  esp_err_t dhcp_result = tcpip_adapter_dhcpc_start(TCPIP_ADAPTER_IF_ETH);
+  if (dhcp_result == ESP_OK) {
+    USER_PRINTLN(F("initC: QEMU - DHCP client started successfully"));
+  } else {
+    USER_PRINTF("initC: QEMU - DHCP client start failed with error: %d\n", dhcp_result);
+  }
+  
+  // Give DHCP some time and check status
+  delay(2000);
+  tcpip_adapter_ip_info_t ip_info_check;
+  if (tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_ETH, &ip_info_check) == ESP_OK) {
+    if (ip_info_check.ip.addr != 0) {
+      USER_PRINTF("initC: QEMU - Got IP address: %d.%d.%d.%d\n",
+        IP2STR(&ip_info_check.ip));
+      USER_PRINTF("initC: QEMU - Gateway: %d.%d.%d.%d\n",
+        IP2STR(&ip_info_check.gw));
+      USER_PRINTF("initC: QEMU - Netmask: %d.%d.%d.%d\n",
+        IP2STR(&ip_info_check.netmask));
+    } else {
+      USER_PRINTLN(F("initC: QEMU - No IP address assigned yet (DHCP may still be negotiating)"));
+    }
+  }
   #else
   // Or set static IP:
+  USER_PRINTLN(F("initC: QEMU - Configuring static IP address"));
   tcpip_adapter_ip_info_t ip_info;
   IP4_ADDR(&ip_info.ip, 10, 0, 2, 15);
   IP4_ADDR(&ip_info.gw, 10, 0, 2, 2);
   IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
   tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_ETH, &ip_info);
-  #endif // hack
+  USER_PRINTF("initC: QEMU - Static IP: %d.%d.%d.%d\n", IP2STR(&ip_info.ip));
+  #endif
 
   // Network stack will still work via QEMU's user-mode networking (slirp)
   DEBUG_PRINTLN(F("initC: QEMU mode - skipping ETH.begin() hardware initialization"));
