@@ -138,7 +138,7 @@ jobs:
           
           # Start simulator in background with a 180 second timeout
           # Wokwi CLI outputs to stderr, serial output goes to stdout
-          WOKWI_TIMEOUT=300 ./run-simulator.sh > logs/serial.log 2> logs/wokwi.log &
+          WOKWI_TIMEOUT=300 ./run-simulator.sh >logs/serial.log 2>&1 &
           WOKWI_PID=$!
           echo "WOKWI_PID=$WOKWI_PID" >> $GITHUB_ENV
           echo "Started Wokwi simulator with PID $WOKWI_PID"
