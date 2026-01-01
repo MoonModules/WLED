@@ -7,15 +7,15 @@ name: "WLED Quick Boot Check"
 version: 1
 timeout: 15000  # 15 seconds - increased to allow for slower CI environments
 
-# Simple validation: just wait and ensure the simulator doesn't crash
+# Simple validation: just delay and ensure the simulator doesn't crash
 steps:
   - name: "Wait for initial boot"
-    wait: 6000  # 6 seconds
+    delay: 6s  # 6 seconds
     
   - name: "Verify simulator is still running"
-    wait: 6000  # 6 seconds
+    delay: 6s  # 6 seconds
     
   - name: "Final stability check"
-    wait: 3000  # 3 seconds
+    delay: 3s  # 3 seconds
 
 # If we get here without the simulator crashing, boot is successful
