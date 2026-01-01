@@ -3,6 +3,7 @@
 # Total runtime: ~15 seconds
 # Perfect for CI pre-flight checks
 
+name: "WLED Quick Boot Check"
 version: 1
 timeout: 15000  # 15 seconds - increased to allow for slower CI environments
 
