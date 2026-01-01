@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "node tools/cdata.js",
-    "test": "node --test",
+    "test": "node --test tools/cdata-test.js",
     "dev": "nodemon -e js,html,htm,css,png,jpg,gif,ico,js -w tools/ -w wled00/data/ -x node tools/cdata.js",
     "test:cdata": "node tools/cdata-test.js",
     "test:wokwi-cdata": "node tools/wokwi-test.js",
