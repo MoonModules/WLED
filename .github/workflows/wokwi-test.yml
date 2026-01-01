@@ -56,7 +56,12 @@ jobs:
         run: pio run -e esp32_V4_wokwi_debug
 
       - name: Install Wokwi CLI
-        run: curl -L https://wokwi.com/ci/install.sh | sh
+        run: |
+          curl -L https://wokwi.com/ci/install.sh | sh
+          echo "Wokwi CLI installed to: $HOME/.wokwi-ci/bin/"
+          ls -la "$HOME/.wokwi-ci/bin/" || echo "Directory not found"
+          export PATH="$HOME/.wokwi-ci/bin:$PATH"
+          wokwi-cli --version || echo "Warning: wokwi-cli not accessible"
 
       - name: Prepare firmware for Wokwi
         run: ./test/wokwi/prepare-firmware.sh esp32_V4_wokwi_debug
@@ -84,13 +89,17 @@ jobs:
           # Create log directory
           mkdir -p logs
           
-          echo "Running quick boot check scenario (12 seconds)..."
+          # Add Wokwi CLI to PATH for this step
+          export PATH="$HOME/.wokwi-ci/bin:$PATH"
+          
+          echo "Running quick boot check scenario (15 seconds)..."
+          echo "Wokwi CLI location: $(which wokwi-cli || echo 'NOT FOUND')"
           echo "Wokwi CLI version:"
-          ~/.wokwi-ci/bin/wokwi-cli --version || true
+          wokwi-cli --version || echo "Warning: Could not get version"
           
           # Run boot check with increased timeout to account for startup time
-          # Using 30 second timeout for a 12 second scenario to allow for network delays
-          if ~/.wokwi-ci/bin/wokwi-cli --timeout 30000 --scenario scenarios/boot-check.yaml . > logs/boot-check.log 2>&1; then
+          # Using 30 second timeout for a 15 second scenario to allow for network delays
+          if wokwi-cli --timeout 30000 --scenario scenarios/boot-check.yaml . > logs/boot-check.log 2>&1; then
             echo "✅ Boot check passed - firmware boots without crashes"
             echo ""
             echo "=== Boot check log (last 100 lines) ==="
