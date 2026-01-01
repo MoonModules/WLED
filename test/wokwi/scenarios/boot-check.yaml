@@ -10,12 +10,12 @@ timeout: 15000  # 15 seconds - increased to allow for slower CI environments
 # Simple validation: just wait and ensure the simulator doesn't crash
 steps:
   - name: "Wait for initial boot"
-    sleep: 6000  # 6 seconds
+    wait: 6000  # 6 seconds
     
   - name: "Verify simulator is still running"
-    sleep: 6000  # 6 seconds
+    wait: 6000  # 6 seconds
     
   - name: "Final stability check"
-    sleep: 3000  # 3 seconds
+    wait: 3000  # 3 seconds
 
 # If we get here without the simulator crashing, boot is successful
