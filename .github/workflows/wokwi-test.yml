@@ -99,7 +99,7 @@ jobs:
           
           # Run boot check with increased timeout to account for startup time
           # Using 30 second timeout for a 15 second scenario to allow for network delays
-          if wokwi-cli --timeout 30000 --scenario scenarios/boot-check.yaml . 2>&1 | tee logs/boot-check.log; then
+          if wokwi-cli --timeout 30000 --scenario scenarios/boot-check.yaml . > logs/boot-check.log 2>&1; then
             echo "✅ Boot check passed - firmware boots without crashes"
             echo ""
             echo "=== Boot check log (last 100 lines) ==="
