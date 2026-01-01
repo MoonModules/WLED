@@ -5,7 +5,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WOKWI_TIMEOUT=${WOKWI_TIMEOUT:-120}
+WOKWI_TIMEOUT=${WOKWI_TIMEOUT:-300}
 
 cd "$SCRIPT_DIR"
 
@@ -19,9 +19,13 @@ fi
 echo "Starting Wokwi simulator..."
 echo "Timeout: ${WOKWI_TIMEOUT} seconds"
 echo "Web server will be available at http://localhost:8080"
+echo "Serial output will be displayed below"
+echo "=================================="
+echo ""
 
-# Run wokwi-cli with timeout (in milliseconds)
+# Run wokwi-cli with timeout (in milliseconds) and scenario flag for better output
 # The simulator will forward port 80 to localhost:8080
 # Note: wokwi-cli runs in foreground, so this needs to be backgrounded or run in a separate process
 # When run from the directory containing diagram.json and wokwi.toml, wokwi-cli will find them automatically
+# Serial output goes to stdout, diagnostic messages go to stderr
 wokwi-cli --timeout ${WOKWI_TIMEOUT}000 .

@@ -45,12 +45,12 @@ The Wokwi testing workflow:
 
 2. Build the firmware:
    ```bash
-   pio run -e esp32dev_compat
+   pio run -e esp32_V4_wokwi_debug
    ```
 
 3. Prepare firmware for testing:
    ```bash
-   ./test/wokwi/prepare-firmware.sh esp32dev_compat
+   ./test/wokwi/prepare-firmware.sh esp32_V4_wokwi_debug
    ```
 
 4. Start the Wokwi simulator (in a separate terminal):

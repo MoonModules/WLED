@@ -11,7 +11,7 @@ WOKWI_DIR="$PROJECT_ROOT/test/wokwi"
 # Check if environment is specified
 if [ -z "$1" ]; then
     echo "Usage: $0 <environment>"
-    echo "Example: $0 esp32dev_compat"
+    echo "Example: $0 esp32_V4_wokwi_debug"
     exit 1
 fi
 
