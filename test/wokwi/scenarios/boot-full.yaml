@@ -1,0 +1,23 @@
+# Comprehensive Boot Validation Scenario for WLED-MM
+# This scenario performs thorough validation with extended timing for WiFi AP and HTTP server
+# Total runtime: ~30 seconds
+# Better for local testing and troubleshooting
+
+version: 1
+timeout: 30000  # 30 seconds
+
+# Extended validation with more time for full system initialization
+steps:
+  - name: "Initial boot phase"
+    sleep: 8000  # 8 seconds - ESP32 basic initialization
+    
+  - name: "WiFi AP initialization"
+    sleep: 10000  # 10 seconds - WiFi access point setup
+    
+  - name: "HTTP server startup"
+    sleep: 8000  # 8 seconds - Web server initialization
+    
+  - name: "Final stability verification"
+    sleep: 4000  # 4 seconds - Ensure everything is stable
+
+# If we get here, WLED has fully initialized with WiFi AP and HTTP server

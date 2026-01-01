@@ -76,6 +76,28 @@ jobs:
         env:
           WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
 
+      - name: Quick boot validation with scenario
+        working-directory: test/wokwi
+        env:
+          WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+        run: |
+          # Create log directory
+          mkdir -p logs
+          
+          echo "Running quick boot check scenario (12 seconds)..."
+          if ~/.wokwi-ci/bin/wokwi-cli --timeout 20000 --scenario scenarios/boot-check.yaml . > logs/boot-check.log 2>&1; then
+            echo "✅ Boot check passed - firmware boots without crashes"
+            echo ""
+            echo "=== Boot check log ==="
+            cat logs/boot-check.log
+          else
+            echo "❌ Boot check failed - firmware did not boot properly"
+            echo ""
+            echo "=== Boot check log ==="
+            cat logs/boot-check.log
+            exit 1
+          fi
+
       - name: Start Wokwi simulator in background
         env:
           WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}

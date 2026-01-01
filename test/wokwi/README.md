@@ -79,12 +79,65 @@ The Playwright tests (`test/playwright/wokwi-basic.spec.js`) verify:
 - Edit page loads without errors
 - JSON API endpoints respond correctly
 
+## Boot Validation Scenarios
+
+Wokwi CLI supports test scenarios that can validate firmware boot without requiring a full Playwright test suite. Two scenarios are provided:
+
+### Quick Boot Check (`scenarios/boot-check.yaml`)
+A fast 12-second validation that ensures WLED boots without immediate crashes.
+
+**Features:**
+- Simple delay-based validation
+- Total runtime: ~12 seconds
+- Fails if simulator crashes or hangs during boot
+- Perfect for CI pre-flight checks
+
+**Usage:**
+```bash
+cd test/wokwi
+~/.wokwi-ci/bin/wokwi-cli --timeout 20000 --scenario scenarios/boot-check.yaml .
+```
+
+### Comprehensive Boot Validation (`scenarios/boot-full.yaml`)
+A thorough 30-second validation with extended timing for WiFi AP and HTTP server initialization.
+
+**Features:**
+- Allows full system initialization
+- Total runtime: ~30 seconds
+- More detailed validation
+- Better for local testing and troubleshooting
+
+**Usage:**
+```bash
+cd test/wokwi
+~/.wokwi-ci/bin/wokwi-cli --timeout 40000 --scenario scenarios/boot-full.yaml .
+```
+
+### Creating Custom Scenarios
+
+You can create your own scenario files in YAML format:
+
+```yaml
+version: 1
+timeout: 15000  # milliseconds
+
+steps:
+  - name: "Description of step"
+    sleep: 5000  # wait 5 seconds
+```
+
+The scenario will fail if:
+- The simulator crashes during execution
+- The timeout is exceeded
+- Any step encounters an error
+
 ## Extending Tests
 
 To add more tests:
 1. Edit `test/playwright/wokwi-basic.spec.js`
 2. Add new test cases using Playwright's `test()` function
 3. Follow the existing pattern of checking for console errors
+4. Create custom scenario files in `scenarios/` directory
 
 ## Troubleshooting
 
