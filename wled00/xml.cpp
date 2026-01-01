@@ -302,9 +302,7 @@ void getSettingsJS(AsyncWebServerRequest* request, byte subPage, char* dest) //W
 
   if (subPage == 0)
   {
-  #ifndef WLED_DISABLE_2D // include only if 2D is compiled in
     oappend(PSTR("gId('2dbtn').style.display='';"));
-  #endif
   #ifdef WLED_ENABLE_DMX // include only if DMX is enabled
     oappend(PSTR("gId('dmxbtn').style.display='';"));
   #endif
@@ -893,7 +891,6 @@ void getSettingsJS(AsyncWebServerRequest* request, byte subPage, char* dest) //W
   if (subPage == 10) // 2D matrices
   {
     sappend('v',SET_F("SOMP"),strip.isMatrix);
-    #ifndef WLED_DISABLE_2D
     oappend(SET_F("maxPanels=")); oappendi(WLED_MAX_PANELS); oappend(SET_F(";"));
     oappend(SET_F("resetPanels();"));
     if (strip.isMatrix) {
@@ -944,8 +941,5 @@ void getSettingsJS(AsyncWebServerRequest* request, byte subPage, char* dest) //W
         pO[l] = 'H'; sappend('v',pO,strip.panel[i].height);
       }
     }
-    #else
-    oappend(SET_F("gId(\"somp\").remove(1);")); // remove 2D option from dropdown
-    #endif
   }
 }

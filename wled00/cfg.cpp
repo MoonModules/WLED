@@ -113,7 +113,6 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   strip.setTargetFps(hw_led["fps"]); //NOP if 0, default 42 FPS
   CJSON(strip.useLedsArray, hw_led[F("ld")]);
 
-  #ifndef WLED_DISABLE_2D
   // 2D Matrix Settings
   JsonObject matrix = hw_led[F("matrix")];
   if (!matrix.isNull()) {
@@ -162,7 +161,6 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     }
     // cannot call strip.setUpMatrix() here due to already locked JSON buffer
   }
-  #endif
 
   JsonArray ins = hw_led["ins"];
 
@@ -778,7 +776,6 @@ void serializeConfig() {
   hw_led[F("rgbwm")] = Bus::getGlobalAWMode(); // global auto white mode override
   hw_led[F("ld")] = strip.useLedsArray;
 
-  #ifndef WLED_DISABLE_2D
   // 2D Matrix Settings
   if (strip.isMatrix) {
     JsonObject matrix = hw_led.createNestedObject(F("matrix"));
@@ -811,7 +808,6 @@ void serializeConfig() {
       pnl["w"] = strip.panel[i].width;
     }
   }
-  #endif
 
   JsonArray hw_led_ins = hw_led.createNestedArray("ins");
 

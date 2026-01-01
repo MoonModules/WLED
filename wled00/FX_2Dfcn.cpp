@@ -15,7 +15,6 @@
 // but ledmap takes care of that. ledmap is constructed upon initialization
 // so matrix should disable regular ledmap processing
 void WS2812FX::setUpMatrix() {
-#ifndef WLED_DISABLE_2D
   // isMatrix is set in cfg.cpp or set.cpp
   if (isMatrix) {
     // calculate width dynamically because it will have gaps
@@ -195,9 +194,6 @@ void WS2812FX::setUpMatrix() {
 #endif
 #endif
 
-#else
-  isMatrix = false; // no matter what config says
-#endif
 }
 
 
@@ -217,8 +213,6 @@ void WS2812FX::setUpMatrix() {
 ///////////////////////////////////////////////////////////
 // Segment:: routines
 ///////////////////////////////////////////////////////////
-
-#ifndef WLED_DISABLE_2D
 
 // WLEDMM cache some values so we don't need to re-calc then for each pixel
 void Segment::startFrame(void) {
@@ -344,8 +338,8 @@ void IRAM_ATTR_YN Segment::setPixelColorXY(int x, int y, uint32_t col) //WLEDMM:
   if (unsigned(x) >= wid_ || unsigned(y) >= hei_) return;  // if pixel would fall out of segment just exit
 
   const int grp_ = grouping; // WLEDMM optimization
-  for (int j = 0; j < grp_; j++) {   // groupping vertically
-    for (int g = 0; g < grp_; g++) { // groupping horizontally
+  for (int j = 0; j < grp_; j++) {   // grouping vertically
+    for (int g = 0; g < grp_; g++) { // grouping horizontally
       uint_fast16_t xX = (x+g), yY = (y+j);    //WLEDMM: use fast types
       if (xX >= wid_ || yY >= hei_) continue; // we have reached one dimension's end
 
@@ -373,56 +367,10 @@ void Segment::setPixelColorXY(float x, float y, uint32_t col, bool aa, bool fast
   if (Segment::maxHeight==1) return; // not a matrix set-up
   if (x<0.0f || x>1.0f || y<0.0f || y>1.0f) return; // not normalized
 
-#if 0 // deprecated
-  const uint_fast16_t cols = virtualWidth();
-  const uint_fast16_t rows = virtualHeight();
-
-  float fX = x * (cols-1);
-  float fY = y * (rows-1);
-  if (aa) {
-    uint16_t xL = roundf(fX-0.49f);
-    uint16_t xR = roundf(fX+0.49f);
-    uint16_t yT = roundf(fY-0.49f);
-    uint16_t yB = roundf(fY+0.49f);
-    float    dL = (fX - xL)*(fX - xL);
-    float    dR = (xR - fX)*(xR - fX);
-    float    dT = (fY - yT)*(fY - yT);
-    float    dB = (yB - fY)*(yB - fY);
-    uint32_t cXLYT = getPixelColorXY(xL, yT);
-    uint32_t cXRYT = getPixelColorXY(xR, yT);
-    uint32_t cXLYB = getPixelColorXY(xL, yB);
-    uint32_t cXRYB = getPixelColorXY(xR, yB);
-
-    if (xL!=xR && yT!=yB) {
-      if (!fast) {
-        setPixelColorXY(xL, yT, color_blend(col, cXLYT, uint8_t(sqrtf(dL*dT)*255.0f))); // blend TL pixel
-        setPixelColorXY(xR, yT, color_blend(col, cXRYT, uint8_t(sqrtf(dR*dT)*255.0f))); // blend TR pixel
-        setPixelColorXY(xL, yB, color_blend(col, cXLYB, uint8_t(sqrtf(dL*dB)*255.0f))); // blend BL pixel
-        setPixelColorXY(xR, yB, color_blend(col, cXRYB, uint8_t(sqrtf(dR*dB)*255.0f))); // blend BR pixel
-      } else {
-        setPixelColorXY(xL, yT, color_blend(col, cXLYT, uint8_t(sqrt16(dL*dT*65025.0f)))); // blend TL pixel     // WLEDMM: use faster sqrt16 for integer; perform multiplication by 255^2 before sqrt
-        setPixelColorXY(xR, yT, color_blend(col, cXRYT, uint8_t(sqrt16(dR*dT*65025.0f)))); // blend TR pixel     //         this is possible because sqrt(a) * sqrt(b)  =  sqrt(a * b)
-        setPixelColorXY(xL, yB, color_blend(col, cXLYB, uint8_t(sqrt16(dL*dB*65025.0f)))); // blend BL pixel
-        setPixelColorXY(xR, yB, color_blend(col, cXRYB, uint8_t(sqrt16(dR*dB*65025.0f)))); // blend BR pixel
-      }
-    } else if (xR!=xL && yT==yB) {
-      setPixelColorXY(xR, yT, color_blend(col, cXLYT, uint8_t(dL*255.0f))); // blend L pixel
-      setPixelColorXY(xR, yT, color_blend(col, cXRYT, uint8_t(dR*255.0f))); // blend R pixel
-    } else if (xR==xL && yT!=yB) {
-      setPixelColorXY(xR, yT, color_blend(col, cXLYT, uint8_t(dT*255.0f))); // blend T pixel
-      setPixelColorXY(xL, yB, color_blend(col, cXLYB, uint8_t(dB*255.0f))); // blend B pixel
-    } else {
-      setPixelColorXY(xL, yT, col); // exact match (x & y land on a pixel)
-    }
-  } else {
-    setPixelColorXY(uint16_t(roundf(fX)), uint16_t(roundf(fY)), col);
-  }
-
-#else // replacement using wu_pixel
+  // using wu_pixel
   unsigned px = x * ((virtualWidth()-1) <<8);
   unsigned py = y * ((virtualHeight()-1) <<8);
   wu_pixel(px, py, CRGB(col));
-#endif
 }
 
 // WLEDMM this function is only called by getPixelColorXY, in case we don't have the ledsrgb buffer!
@@ -991,4 +939,3 @@ void Segment::wu_pixel(uint32_t x, uint32_t y, CRGB c) {      //awesome wu_pixel
 }
 #undef WU_WEIGHT
 
-#endif // WLED_DISABLE_2D
