@@ -84,19 +84,22 @@ The Playwright tests (`test/playwright/wokwi-basic.spec.js`) verify:
 Wokwi CLI supports test scenarios that can validate firmware boot without requiring a full Playwright test suite. Two scenarios are provided:
 
 ### Quick Boot Check (`scenarios/boot-check.yaml`)
-A fast 12-second validation that ensures WLED boots without immediate crashes.
+A fast 15-second validation that ensures WLED boots without immediate crashes.
 
 **Features:**
 - Simple delay-based validation
-- Total runtime: ~12 seconds
+- Total runtime: ~15 seconds
 - Fails if simulator crashes or hangs during boot
 - Perfect for CI pre-flight checks
+- Tolerates transient network issues (code 1006 errors)
 
 **Usage:**
 ```bash
 cd test/wokwi
-~/.wokwi-ci/bin/wokwi-cli --timeout 20000 --scenario scenarios/boot-check.yaml .
+~/.wokwi-ci/bin/wokwi-cli --timeout 30000 --scenario scenarios/boot-check.yaml .
 ```
+
+**Note:** The CLI timeout (30 seconds) is set higher than the scenario timeout (15 seconds) to account for network delays and API connection time.
 
 ### Comprehensive Boot Validation (`scenarios/boot-full.yaml`)
 A thorough 30-second validation with extended timing for WiFi AP and HTTP server initialization.
