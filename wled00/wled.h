@@ -7,7 +7,7 @@
  */
 
 // version code in format yymmddb (b = daily build)
-#define VERSION 2512171
+#define VERSION 2601011
 
 // WLEDMM  - you can check for this define in usermods, to only enabled WLEDMM specific code in the "right" fork. Its not defined in AC WLED.
 #define _MoonModules_WLED_
@@ -765,6 +765,32 @@ WLED_GLOBAL volatile bool loadLedmap _INIT(false);          // WLEDMM use as boo
 WLED_GLOBAL volatile uint8_t loadedLedmap _INIT(0);         // WLEDMM default 0
 WLED_GLOBAL volatile bool suspendStripService _INIT(false); // WLEDMM temporarily prevent running strip.service, when strip or segments are "under update" and inconsistent
 WLED_GLOBAL volatile bool OTAisRunning _INIT(false);        // WLEDMM temporarily stop led updates during OTA
+
+// WLEDMM prevent concurrent strip.show() and strip.service() -> for DDP over ws, and other background tasks
+#ifdef ARDUINO_ARCH_ESP32
+WLED_GLOBAL SemaphoreHandle_t busDrawMux _INIT(nullptr);
+WLED_GLOBAL SemaphoreHandle_t segmentMux _INIT(nullptr);
+WLED_GLOBAL SemaphoreHandle_t jsonBufferLockMutex _INIT(nullptr);
+WLED_GLOBAL SemaphoreHandle_t presetFileMux _INIT(nullptr); // Protects presets.json file writes
+#define esp32SemTake(mux,timeout) xSemaphoreTakeRecursive(mux, pdMS_TO_TICKS(timeout)) // convenience macro that expands to xSemaphoreTakeRecursive - timeout is in milliseconds
+#define esp32SemGive(mux)  xSemaphoreGiveRecursive(mux)                 // convenience macro that expands to xSemaphoreGiveRecursive
+#define WLED_create_spinlock(theSname) static portMUX_TYPE theSname = portMUX_INITIALIZER_UNLOCKED
+#else
+// dummy semaphores for 8266
+#ifndef pdTRUE
+#define pdTRUE 1
+#endif
+#ifndef portMAX_DELAY
+#define portMAX_DELAY UINT32_MAX
+#endif
+#define esp32SemTake(mux,timeout) (pdTRUE)
+#define esp32SemGive(mux)
+// dummy critical section for 8266
+#define WLED_create_spinlock(sname)
+#define portENTER_CRITICAL(sname)
+#define portEXIT_CRITICAL(sname)
+#endif
+
 #ifndef ESP8266
 WLED_GLOBAL char  *ledmapNames[WLED_MAX_LEDMAPS-1] _INIT_N(({nullptr}));
 #endif

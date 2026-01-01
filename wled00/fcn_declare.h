@@ -439,7 +439,7 @@ void sappend(char stype, const char* key, int val);
 void sappends(char stype, const char* key, char* val);
 void prepareHostname(char* hostname);
 bool isAsterisksOnly(const char* str, byte maxLen)  __attribute__((pure));
-bool requestJSONBufferLock(uint8_t module=255);
+bool requestJSONBufferLock(uint8_t module=255, unsigned timeoutMS = 1800);
 void releaseJSONBufferLock();
 uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLen);
 uint8_t extractModeSlider(uint8_t mode, uint8_t slider, char *dest, uint8_t maxLen, uint8_t *var = nullptr);

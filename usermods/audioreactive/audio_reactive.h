@@ -455,11 +455,11 @@ static bool alocateFFTBuffers(void) {
 
   if (vReal) free(vReal); // should not happen
   if (vImag) free(vImag); // should not happen
-  if ((vReal = (float*) calloc(sizeof(float), samplesFFT)) == nullptr) return false; // calloc or die
-  if ((vImag = (float*) calloc(sizeof(float), samplesFFT)) == nullptr) return false;
+  if ((vReal = (float*) calloc(samplesFFT, sizeof(float))) == nullptr) return false; // calloc or die
+  if ((vImag = (float*) calloc(samplesFFT, sizeof(float))) == nullptr) return false;
 #ifdef FFT_MAJORPEAK_HUMAN_EAR
   if (pinkFactors) free(pinkFactors);
-  if ((pinkFactors = (float*) calloc(sizeof(float), samplesFFT)) == nullptr) return false;
+  if ((pinkFactors = (float*) calloc(samplesFFT, sizeof(float))) == nullptr) return false;
 #endif
 
   #ifdef SR_DEBUG
@@ -510,7 +510,7 @@ void FFTcode(void * parameter)
   static float* oldSamples = nullptr; // previous 50% of samples
   static bool haveOldSamples = false; // for sliding window FFT
   bool usingOldSamples = false;
-  if (!oldSamples) oldSamples = (float*) calloc(sizeof(float), samplesFFT_2); // allocate on first run
+  if (!oldSamples) oldSamples = (float*) calloc(samplesFFT_2, sizeof(float)); // allocate on first run
   if (!oldSamples) { disableSoundProcessing = true; return; }                 // no memory -> die
 #endif
 
@@ -526,7 +526,7 @@ void FFTcode(void * parameter)
   // recommended version optimized by @softhack007 (API version 1.9)
   #if defined(WLED_ENABLE_HUB75MATRIX) && defined(CONFIG_IDF_TARGET_ESP32)
     static float* windowWeighingFactors = nullptr;
-    if (!windowWeighingFactors) windowWeighingFactors = (float*) calloc(sizeof(float), samplesFFT); // cache for FFT windowing factors - use heap
+    if (!windowWeighingFactors) windowWeighingFactors = (float*) calloc(samplesFFT, sizeof(float)); // cache for FFT windowing factors - use heap
   #else
     static float windowWeighingFactors[samplesFFT] = {0.0f};                                        // cache for FFT windowing factors - use global RAM
   #endif

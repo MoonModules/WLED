@@ -308,6 +308,17 @@ void getSettingsJS(AsyncWebServerRequest* request, byte subPage, char* dest) //W
   #ifdef WLED_ENABLE_DMX // include only if DMX is enabled
     oappend(PSTR("gId('dmxbtn').style.display='';"));
   #endif
+
+  #ifdef WLED_ENABLE_PIXART // include only if PixelArt tool is enabled
+    oappend(PSTR("gId('pixbtn').style.display='';"));
+  #endif
+  #if defined(WLED_ENABLE_PXMAGIC) && !defined(WLED_ENABLE_PIXART) // include only if PixelMagic tool is enabled - only when PixelArt is not enabled
+    oappend(PSTR("gId('pxmbtn').style.display='';"));
+  #endif
+  #if defined(WLED_ENABLE_PIXELFORGE) && !defined(WLED_DISABLE_PIXELFORGE) // include only if PixelForge is enabled
+    oappend(PSTR("gId('forgebtn').style.display='';"));
+  #endif
+
   }
 
   if (subPage == 1)

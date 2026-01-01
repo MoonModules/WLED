@@ -49,7 +49,7 @@ void wsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
         }
 
         bool verboseResponse = false;
-        if (!requestJSONBufferLock(11)) {
+        if (!requestJSONBufferLock(11, 300)) {
           client->text(F("{\"error\":3}")); // ERR_NOBUF
           return;
         }
@@ -138,7 +138,7 @@ void sendDataWs(AsyncWebSocketClient * client)
   DEBUG_PRINTF("sendDataWs\n");
   if (!ws.count()) return;
 
-  if (!requestJSONBufferLock(12)) {
+  if (!requestJSONBufferLock(12, 300)) {
     if (client) {
       client->text(F("{\"error\":3}")); // ERR_NOBUF
     } else {

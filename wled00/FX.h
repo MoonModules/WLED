@@ -984,7 +984,7 @@ class WS2812FX {  // 96 bytes
       printSize(),
 #endif
       finalizeInit(),
-      waitUntilIdle(void),   // WLEDMM
+      waitUntilIdle(unsigned timeout = 0),   // WLEDMM
       service(void),
       setMode(uint8_t segid, uint8_t m),
       setColor(uint8_t slot, uint32_t c),
@@ -1037,8 +1037,8 @@ class WS2812FX {  // 96 bytes
       getActiveSegmentsNum(void)  const,
       __attribute__((pure)) getFirstSelectedSegId(void),
       getLastActiveSegmentId(void) const,
-      __attribute__((pure)) getActiveSegsLightCapabilities(bool selectedOnly = false),
-      setPixelSegment(uint8_t n);
+      __attribute__((pure)) getActiveSegsLightCapabilities(bool selectedOnly = false);
+      //setPixelSegment(uint8_t n);
 
     inline uint8_t getBrightness(void)  const { return _brightness; }
     inline uint8_t getSegmentsNum(void)  const { return _segments.size(); }  // returns currently present segments
@@ -1248,11 +1248,13 @@ class WS2812FX {  // 96 bytes
 
     // will require only 1 byte
     struct {
-      bool _isServicing          : 1;
+      bool _isServicing          : 1; // can stay inside the bitfield - not critical any more since we have a mutex 
       bool _isOffRefreshRequired : 1; //periodic refresh is required for the strip to remain off.
       bool _hasWhiteChannel      : 1;
-      bool _triggered            : 1;
+      //bool _triggered            : 1;
+      bool unusedBit             : 1;
     };
+    volatile bool _triggered;   // WLEDMM moved out of struct, so the flag can be updated in one atomic access
 
     uint8_t                  _modeCount;
     std::vector<mode_ptr>    _mode;     // SRAM footprint: 4 bytes per element

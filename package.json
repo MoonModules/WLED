@@ -1,7 +1,7 @@
 {
   "name": "wled",
   "version": "14.7.0-mdev",
-  "description": "Tools for WLED project",
+  "description": "Tools for WLED-MM project",
   "main": "tools/cdata.js",
   "directories": {
     "lib": "lib",
@@ -9,9 +9,10 @@
   },
   "scripts": {
     "build": "node tools/cdata.js",
-    "dev": "nodemon -e js,html,htm,css,png,jpg,gif,ico,js -w tools/ -w wled00/data/ -x node tools/cdata.js",
-    "test": "npm run test:cdata",
-    "test:cdata": "node tools/wokwi-test.js",
+    "test": "node --test",
+    "dev": "nodemon -e js,html,htm,css,png,jpg,gif,ico,js -w tools/ -w wled00/data/ -x node tools/cdata.js"
+    "test:cdata": "node tools/cdata-test.js",
+    "test:wokwi-cdata": "node tools/wokwi-test.js",
     "test:wokwi": "playwright test test/playwright/wokwi-basic.spec.js"
   },
   "repository": {
@@ -25,13 +26,13 @@
   },
   "homepage": "https://github.com/MoonModules/WLED-MM#readme",
   "dependencies": {
-    "clean-css": "^4.2.3",
-    "html-minifier-terser": "^5.1.1",
-    "inliner": "^1.13.1",
-    "nodemon": "^2.0.20",
-    "zlib": "^1.0.5"
-  },
-  "devDependencies": {
+    "clean-css": "^5.3.3",
+    "html-minifier-terser": "^7.2.0",
+    "web-resource-inliner": "^7.0.0",
+    "nodemon": "^3.1.9",
     "@playwright/test": "^1.40.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

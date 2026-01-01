@@ -299,6 +299,11 @@ bool writeObjectToFile(const char* file, const char* key, JsonDocument* content)
     s = millis();
   #endif
 
+  if (doCloseFile) {
+    if (f) { DEBUG_PRINTLN("writeObjectToFile("+String(file)+"): file f is already open, closing to prevent file corruption."); }
+    closeFile();  // WLEDMM: Ensure previous file is closed
+  }
+
   size_t pos = 0;
   f = WLED_FS.open(file, "r+");
   if (!f && !WLED_FS.exists(file)) { f = WLED_FS.open(file, "w+");

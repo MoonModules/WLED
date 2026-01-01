@@ -220,19 +220,34 @@ bool isAsterisksOnly(const char* str, byte maxLen)
 
 
 //threading/network callback details: https://github.com/Aircoookie/WLED/pull/2336#discussion_r762276994
-bool requestJSONBufferLock(uint8_t module)
+bool requestJSONBufferLock(uint8_t module, unsigned timeoutMS)
 {
-  unsigned long now = millis();
+  bool haveLock = false;
+  #ifdef ARDUINO_ARCH_ESP32
+    // We use a recursive mutex to prevent parallel JSON writes from parallel tasks.
+    // This also fixes hanging up for the full timeout interval in cases when the contention is from the same task.
+    // see https://github.com/wled/WLED/pull/4089 for more details.
+    if (esp32SemTake(jsonBufferLockMutex, timeoutMS) == pdTRUE) haveLock = true;  // WLEDMM must wait longer than suspendStripService timeout = 1500ms
+  #else
+    // 8266: only wait in case that can_yield() tells us we can yield and delay
+    if (can_yield()) {
+      unsigned long now = millis();
+      while (jsonBufferLock && millis()-now < timeoutMS) delay(1); // wait for fraction for buffer lock // WLEDMM must wait longer than suspendStripService timeout = 1500ms
+      if (!jsonBufferLock) haveLock = true;
+    }
+  #endif
 
-  while (jsonBufferLock && millis()-now < 1100) delay(1); // wait for fraction for buffer lock
-
-  if (jsonBufferLock) {
+  if (jsonBufferLock || !haveLock) {
+    #ifdef ARDUINO_ARCH_ESP32
+    if (haveLock) esp32SemGive(jsonBufferLockMutex);  // we got the mutex, but jsonBufferLock says the opposite -> give up
+    #endif
     USER_PRINT(F("ERROR: Locking JSON buffer failed! (still locked by "));
     USER_PRINT(jsonBufferLock);
     USER_PRINTLN(")");
     return false; // waiting time-outed
   }
 
+  // success - we keep holding the mutex until releaseJSONBufferLock()
   jsonBufferLock = module ? module : 255;
   DEBUG_PRINT(F("JSON buffer locked. ("));
   DEBUG_PRINT(jsonBufferLock);
@@ -250,11 +265,14 @@ void releaseJSONBufferLock()
   DEBUG_PRINTLN(")");
   fileDoc = nullptr;
   jsonBufferLock = 0;
+  #ifdef ARDUINO_ARCH_ESP32
+  esp32SemGive(jsonBufferLockMutex); // return the mutex
+  #endif
 }
 
 
 // extracts effect mode (or palette) name from names serialized string
-// caller must provide large enough buffer for name (including SR extensions)!
+// caller must provide large enough buffer for name (including SR extensions)! maxLen is (buffersize - 1)
 uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLen)
 {
   if (src == JSON_mode_names || src == nullptr) {
@@ -276,7 +294,7 @@ uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLe
 
   if (src == JSON_palette_names && mode > (GRADIENT_PALETTE_COUNT + 13)) {
     snprintf_P(dest, maxLen, PSTR("~ Custom %d ~"), 255-mode);
-    dest[maxLen-1] = '\0';
+    dest[maxLen] = '\0';
     return strlen(dest);
   }
 
@@ -311,7 +329,7 @@ uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLe
 }
 
 
-// extracts effect slider data (1st group after @)
+// extracts effect slider data (1st group after @) -> maxLen is (buffersize - 1)
 uint8_t extractModeSlider(uint8_t mode, uint8_t slider, char *dest, uint8_t maxLen, uint8_t *var)
 {
   dest[0] = '\0'; // start by clearing buffer

@@ -68,9 +68,8 @@
 		}
 	</script>
 	<style>
+	  @import url("style.css");
 		body {
-			text-align: center;
-			background: #222;
 			height: 100px;
 			margin: 0;
 		}
@@ -78,17 +77,13 @@
 			--h: 9vh;
 		}
 		button {
-			background: #333;
-			color: #fff;
-			font-family: Verdana, Helvetica, sans-serif;
 			display: block;
-			border: 1px solid #333;
 			border-radius: var(--h);
 			font-size: 6vmin;
 			/* height: var(--h); WLEDMM remove to allow more compact display*/
 			width: calc(100% - 40px);
 			margin: 2vh auto 0;
-			cursor: pointer;
+			padding: 0;
 		}
 	</style>
 </head>
@@ -104,6 +99,11 @@
 <button type="submit" onclick="window.location='./settings/sync'">Sync Interfaces</button>
 <button type="submit" onclick="window.location='./settings/time'">Time &amp; Macros</button>
 <button type="submit" onclick="window.location='./settings/sec'">Security &amp; Updates</button>
+<br>
 <button type="submit" onclick="window.location='./edit'">File System ☾</button> <!--WLEDMM-->
-</body>
+<button id="pixbtn" style="display:none;" type="submit" onclick="window.location='./pixart.htm'">Pixel Art Converter ☾</button>
+<button id="pxmbtn" style="display:none;" type="submit" onclick="window.location='./pxmagic.htm'">Pixel Magic Tool</button>
+<button id="forgebtn" style="display:none;" type="submit" onclick="window.location='./pixelforge.htm'">WLED Pixel Forge</button>
+<br>
+ </body>
 </html>

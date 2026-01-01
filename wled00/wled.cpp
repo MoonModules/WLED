@@ -477,6 +477,20 @@ void WLED::setup()
   init_math();  // WLEDMM: pre-calculate some lookup tables
 
   #ifdef ARDUINO_ARCH_ESP32
+  busDrawMux = xSemaphoreCreateRecursiveMutex();       // WLEDMM prevent concurrent running of strip.show and strip.service
+  segmentMux = xSemaphoreCreateRecursiveMutex();       // WLEDMM prevent segment changes while effects are running
+  jsonBufferLockMutex = xSemaphoreCreateRecursiveMutex(); // WLEDMM prevent concurrent JSON buffer writing
+  presetFileMux = xSemaphoreCreateRecursiveMutex();   // WLEDMM prevent concurrent presets.json file writing
+  if ((busDrawMux == nullptr) || (segmentMux == nullptr) || (jsonBufferLockMutex == nullptr) || (presetFileMux == nullptr)) {
+    USER_PRINTLN(F("setup error: xSemaphoreCreateRecursiveMutex failed.")); // should never happen.
+  }
+  xSemaphoreGiveRecursive(busDrawMux);                 // init semaphores to initially allow drawing
+  xSemaphoreGiveRecursive(segmentMux);
+  xSemaphoreGiveRecursive(jsonBufferLockMutex);
+  xSemaphoreGiveRecursive(presetFileMux);
+  #endif
+
+  #ifdef ARDUINO_ARCH_ESP32
   #if defined(WLED_DEBUG) && (defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3) || ARDUINO_USB_CDC_ON_BOOT)
   if (!Serial) delay(2500);  // WLEDMM allow CDC USB serial to initialise (WLED_DEBUG only)
   #endif
@@ -1098,15 +1112,15 @@ bool WLED::initEthernet()
 
 void WLED::initConnection()
 {
+  #ifdef WLED_ENABLE_WEBSOCKETS
+  ws.onEvent(wsEvent);
+  #endif
+
 #ifdef ARDUINO_ARCH_ESP32
   unsigned long t_wait = millis();
   while(strip.isUpdating() && (millis() - t_wait < 86)) delay(1); // WLEDMM try to catch a moment when strip is idle
   //if (strip.isUpdating()) USER_PRINTLN("WLED::initConnection: strip still updating.");
 #endif
-
-  #ifdef WLED_ENABLE_WEBSOCKETS
-  ws.onEvent(wsEvent);
-  #endif
 
   WiFi.disconnect(true);        // close old connections
 #ifdef ESP8266

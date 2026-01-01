@@ -12,8 +12,10 @@ static volatile byte presetToApply = 0;
 static volatile byte callModeToApply = 0;
 static volatile byte presetToSave = 0;
 static volatile int8_t saveLedmap = -1;
-static char quickLoad[12]; // WLEDMM 9->12 to prevent crashing with unicode
-static char saveName[33];
+#define QLOAD_BUFFER 12 // string needed for quickload // WLEDMM 9->12 to prevent crashing with unicode
+#define FNAME_BUFFER 32 // string needed for saveName
+static char quickLoad[QLOAD_BUFFER+1] = {'\0'}; // 1 extra byte for '\0'
+static char saveName[FNAME_BUFFER+1]  = {'\0'}; // 1 extra byte for '\0'
 static bool includeBri = true, segBounds = true, selectedOnly = false, playlistSave = false;
 
 static const char *getFileName(bool persist = true) {
@@ -38,7 +40,14 @@ static void doSaveState() {
   bool persist = (presetToSave < 251);
   const char *filename = getFileName(persist);
 
-  if (!requestJSONBufferLock(10)) return; // will set fileDoc
+  if (!requestJSONBufferLock(10)) return; // will set fileDoc // async write
+
+  // WLEDMM Acquire file mutex before writing presets.json or tmp.json
+  if (esp32SemTake(presetFileMux, 2500) != pdTRUE) {
+    USER_PRINTLN(F("doSaveState(): preset file busy, cannot write"));
+    releaseJSONBufferLock();
+    return;
+  }
 
   initPresetsFile(); // just in case if someone deleted presets.json using /edit
   JsonObject sObj = doc.to<JsonObject>();
@@ -82,6 +91,8 @@ static void doSaveState() {
   writeObjectToFileUsingId(filename, presetToSave, fileDoc);
 
   if (persist) presetsModifiedTime = toki.second(); //unix time
+
+  esp32SemGive(presetFileMux);  // Release file mutex
   releaseJSONBufferLock();
   updateFSInfo();
 
@@ -296,13 +307,17 @@ void handlePresets()
 void savePreset(byte index, const char* pname, JsonObject sObj)
 {
   if (index == 0 || (index > 250 && index < 255)) return;
-  if (pname) strlcpy(saveName, pname, 33);
+  if (pname) strlcpy(saveName, pname, FNAME_BUFFER+1);
   else {
-    if (sObj["n"].is<const char*>()) strlcpy(saveName, sObj["n"].as<const char*>(), 33);
+    if (sObj["n"].is<const char*>()) strlcpy(saveName, sObj["n"].as<const char*>(), FNAME_BUFFER+1);
     else                             sprintf_P(saveName, PSTR("Preset %d"), index);
   }
 
   DEBUG_PRINT(F("Saving preset (")); DEBUG_PRINT(index); DEBUG_PRINT(F(") ")); DEBUG_PRINTLN(saveName);
+  auto oldpresetToSave = presetToSave; // for recovery in case that esp32SemTake(presetFileMux) fails
+  auto oldplaylistSave = playlistSave;
+  char oldQuickLoad[QLOAD_BUFFER+1];
+  strlcpy(oldQuickLoad, quickLoad, sizeof(oldQuickLoad));
 
   presetToSave = index;
   playlistSave = false;
@@ -316,17 +331,36 @@ void savePreset(byte index, const char* pname, JsonObject sObj)
   } else {
     // this is a playlist or API call
     if (sObj[F("playlist")].isNull()) {
-      // we will save API call immediately (often causes presets.json corruption)
+      // we will save API call immediately (often causes presets.json corruption in the past)
+
+      // WLEDMM Acquire file mutex before writing presets.json, to prevent presets.json corruption
+      if (esp32SemTake(presetFileMux, 2500) != pdTRUE) {
+          USER_PRINTLN(F("savePreset(): preset file busy, cannot write"));
+          presetToSave = oldpresetToSave;
+          playlistSave = oldplaylistSave;
+          strlcpy(quickLoad, oldQuickLoad, sizeof(quickLoad));
+          return; // early exit, no change
+      }
+
       presetToSave = 0;
-      if (index > 250 || !fileDoc) return; // cannot save API calls to temporary preset (255)
+      if (index > 250 || !fileDoc) {
+        esp32SemGive(presetFileMux);  // Release file mutex
+        presetToSave = oldpresetToSave; // bugfix: restore previous state on error exit
+        playlistSave = oldplaylistSave;
+        strlcpy(quickLoad, oldQuickLoad, sizeof(quickLoad));
+        return; // cannot save API calls to temporary preset (255)
+      }
       sObj.remove("o");
       sObj.remove("v");
       sObj.remove("time");
       sObj.remove(F("error"));
       sObj.remove(F("psave"));
       if (sObj["n"].isNull()) sObj["n"] = saveName;
+
       initPresetsFile(); // just in case if someone deleted presets.json using /edit
       writeObjectToFileUsingId(getFileName(index<255), index, fileDoc);
+
+      esp32SemGive(presetFileMux);  // Release file mutex
       presetsModifiedTime = toki.second(); //unix time
       updateFSInfo();
     } else {
@@ -339,8 +373,16 @@ void savePreset(byte index, const char* pname, JsonObject sObj)
 }
 
 void deletePreset(byte index) {
+  // WLEDMM Acquire file mutex before writing presets.json, to prevent presets.json corruption
+  if (esp32SemTake(presetFileMux, 2500) != pdTRUE) {
+    USER_PRINTLN(F("deletePreset(): preset file busy, cannot write"));
+    return; // early exit, no change
+  }
+
   StaticJsonDocument<24> empty;
   writeObjectToFileUsingId(getFileName(), index, &empty);
+
+  esp32SemGive(presetFileMux);  // Release file mutex
   presetsModifiedTime = toki.second(); //unix time
   updateFSInfo();
 }

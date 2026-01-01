@@ -94,9 +94,16 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   // if using vectors use this code to append segment
   if (id >= strip.getSegmentsNum()) {
     if (stop <= 0) return false; // ignore empty/inactive segments
-    strip.appendSegment(Segment(0, strip.getLengthTotal()));
-    id = strip.getSegmentsNum()-1; // segments are added at the end of list
-    newSeg = true;
+    if (esp32SemTake(segmentMux, 2100) == pdTRUE) { // wait long, but don't wait forever
+      // WLEDMM make sure we have exclusive access to the segment list
+      strip.appendSegment(Segment(0, strip.getLengthTotal()));
+      id = strip.getSegmentsNum()-1; // segments are added at the end of list
+      newSeg = true;
+      esp32SemGive(segmentMux);
+    } else {
+      USER_PRINTLN(F("deserializeSegment(): segment not added - failed to acquire segmentMux."));
+      return false;      
+    }
   }
 
   // WLEDMM: before changing segments, make sure our strip is _not_ servicing effects in parallel
@@ -353,8 +360,10 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
       USER_PRINTLN(F("deserializeSegment() image: strip is still drawing effects."));
       strip.waitUntilIdle();
     }
+    // WLEDMM protect against parallel drawing
+    bool drawSuccess = false;
+    if (esp32SemTake(busDrawMux, 250) == pdTRUE) {      // WLEDMM first acquire draw mutex, start of critical section
     seg.startFrame();
-    // WLEDMM end
 
     // set brightness immediately and disable transition
     transitionDelayTemp = 0;
@@ -404,8 +413,13 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
         set = 0;
       }
     }
+    drawSuccess = true;
+    esp32SemGive(busDrawMux); // release lock
+    } // end of critical section
+
     seg.map1D2D = oldMap1D2D; // restore mapping
-    strip.trigger(); // force segment update
+    if (drawSuccess) strip.trigger(); // force segment update
+    else USER_PRINTLN(F("deserializeSegment() image drawing failed, could not acquire busDrawMux.")); // log failure messaage
     suspendStripService = oldLock; // restore previous lock status
   }
   // send UDP/WS if segment options changed (except selection; will also deselect current preset)
@@ -479,16 +493,15 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     }
   }
 
-#ifdef ARDUINO_ARCH_ESP32
-  delay(2); // WLEDMM experimental - de-serialize takes time, so allow other tasks to run
-#endif
-
+  // esp32: suspendStripService is deferred until the first segment operation
+#ifndef ARDUINO_ARCH_ESP32
   // WLEDMM: before changing strip, make sure our strip is _not_ servicing effects in parallel
   suspendStripService = true; // temporarily lock out strip updates
   if (strip.isServicing()) {
     USER_PRINTLN(F("deserializeState(): strip is still drawing effects."));
     strip.waitUntilIdle();
   }
+#endif
 
   // temporary transition (applies only once)
   tr = root[F("tt")] | -1;
@@ -524,7 +537,18 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
 
   if (root[F("psave")].isNull()) doReboot = root[F("rb")] | doReboot;
 
+#ifdef ARDUINO_ARCH_ESP32
+  // WLEDMM: Acquire strip lock right before segment operations (deferred for better UX)
+  suspendStripService = true; // temporarily lock out strip updates
+  vTaskDelay(pdMS_TO_TICKS(2)); // WLEDMM trigger a short task context switch
+  if (strip.isServicing()) {
+    DEBUG_PRINTLN(F("deserializeState(): strip is still drawing effects."));
+    strip.waitUntilIdle();
+  }
+#endif
+
   // do not allow changing main segment while in realtime mode (may get odd results else)
+  // esp32: safe to change MainSegment without having segmentMux - strip.service() is already suspended
   if (!realtimeMode) strip.setMainSegmentId(root[F("mainseg")] | strip.getMainSegmentId()); // must be before realtimeLock() if "live"
 
   realtimeOverride = root[F("lor")] | realtimeOverride;
@@ -537,7 +561,13 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     if (root["live"].as<bool>()) {
       transitionDelayTemp = 0;
       jsonTransitionOnce = true;
+#ifdef WLED_ENABLE_JSONLIVE
+      // infinite timeout only when JSON LIVE leds preview is enabled
       realtimeLock(65000);
+#else
+      // more meaningful timeout : use configurable timeout; *3 for some safety margin without staying "live" forever
+      realtimeLock(realtimeTimeoutMs *3);  // Use configurable timeout like other protocols 
+#endif
     } else {
       exitRealtime();
     }
@@ -637,10 +667,12 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
 
   doAdvancePlaylist = root[F("np")] | doAdvancePlaylist; //advances to next preset in playlist when true
   
+  // WLEDMM: Release suspendStripService before stateUpdated() to avoid timeout
+  if (iAmGroot) suspendStripService = false;
+
   stateUpdated(callMode);
   if (presetToRestore) currentPreset = presetToRestore;
 
-  if (iAmGroot) suspendStripService = false; // WLEDMM release lock
   return stateResponse;
 }
 
@@ -719,9 +751,11 @@ void serializeSegment(JsonObject& root, Segment& seg, byte id, bool forPreset, b
 void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segmentBounds, bool selectedSegmentsOnly)
 {
   //WLEDMM add DEBUG_PRINT (not USER_PRINT)
+  #ifdef WLED_DEBUG
   String temp;
   serializeJson(root, temp);
   DEBUG_PRINTF("serializeState %d %s\n", forPreset, temp.c_str());
+  #endif
 
   if (includeBri) {
     root["on"] = (bri > 0);

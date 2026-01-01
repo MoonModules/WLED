@@ -48,8 +48,7 @@ void WS2812FX::setUpMatrix() {
     
     // WLEDMM check if mapping table is necessary (avoiding heap fragmentation)
 //#if defined(WLED_ENABLE_HUB75MATRIX)
-    bool needLedMap = (loadedLedmap >0);              // ledmap loaded
-    needLedMap |= WLED_FS.exists(F("/2d-gaps.json")); // gapFile found
+   bool needLedMap = (loadedLedmap >0);              // ledmap loaded
     needLedMap |= panel.size() > 1;                   // 2D config: more than one panel
     if (panel.size() == 1) {
       Panel &p = panel[0];
@@ -57,6 +56,11 @@ void WS2812FX::setUpMatrix() {
       needLedMap |= p.vertical;                          // panel not horizotal
       needLedMap |= p.bottomStart | p.rightStart;        // panel not top left, or not left->light
       needLedMap |= (p.xOffset > 0) || (p.yOffset > 0);  // panel does not start at (0,0)
+    }
+    needLedMap |= (ledMaps >1) && (loadedLedmap >0);     // ledmap1...10 loaded
+    if (!needLedMap) { // only perform file cheking if we must (may cause flicker)
+      needLedMap |= WLED_FS.exists(F("/2d-gaps.json"));  // gapFile found
+      needLedMap |= WLED_FS.exists(F("/ledmap.json"));   // global ledmap found
     }
 //#else
 //    bool needLedMap = true;                              // un-comment to always use ledMaps on non-HUB75 builds
@@ -172,6 +176,7 @@ void WS2812FX::setUpMatrix() {
     }
   }
 
+#if 0 // WLEDMM this test is too early - ledmap will be loaded later
 #ifdef WLED_ENABLE_HUB75MATRIX
   // softhack007 hack: delete mapping table in case it only contains "identity"
   if (customMappingTable != nullptr && customMappingTableSize > 0) {
@@ -187,6 +192,7 @@ void WS2812FX::setUpMatrix() {
       loadedLedmap = 0; //WLEDMM
     }
   }
+#endif
 #endif
 
 #else
