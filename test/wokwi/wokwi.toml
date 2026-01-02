@@ -2,7 +2,18 @@
 version = 1
 firmware = "firmware.bin"
 elf = "firmware.elf"
+partitions = "partitions.bin"
 gdbServerPort=3333
+
+# Flash additional files at specific offsets
+# These are required for ESP32 to boot properly with filesystem support
+[[wokwi.flashFiles]]
+offset = 0x1000
+file = "bootloader.bin"
+
+[[wokwi.flashFiles]]
+offset = 0x8000
+file = "partitions.bin"
 
 [[net.forward]]
 # Forward the web server port

@@ -13,9 +13,39 @@ The Wokwi testing workflow:
 ## Files
 
 - `diagram.json` - Wokwi hardware configuration (ESP32 DevKit) with serial monitor settings
-- `wokwi.toml` - Wokwi CLI configuration and port forwarding
-- `prepare-firmware.sh` - Script to copy built firmware to test directory
+- `wokwi.toml` - Wokwi CLI configuration, flash files, and port forwarding
+- `prepare-firmware.sh` - Script to copy built firmware, bootloader, and partitions to test directory
 - `run-simulator.sh` - Script to start the Wokwi simulator
+- `firmware.bin` - Main firmware binary (copied from build)
+- `firmware.elf` - Firmware with debug symbols (copied from build)
+- `bootloader.bin` - ESP32 bootloader (copied from build, flashed at 0x1000)
+- `partitions.bin` - Partition table (copied from build, flashed at 0x8000)
+
+## Flash Files Configuration
+
+The simulator requires multiple binary files to properly emulate ESP32 boot and filesystem:
+
+**wokwi.toml flash configuration:**
+```toml
+[wokwi]
+firmware = "firmware.bin"        # Main application code
+elf = "firmware.elf"             # Debug symbols
+partitions = "partitions.bin"    # Partition table
+
+[[wokwi.flashFiles]]
+offset = 0x1000                  # Bootloader location
+file = "bootloader.bin"
+
+[[wokwi.flashFiles]]
+offset = 0x8000                  # Partition table location
+file = "partitions.bin"
+```
+
+**Why these files are needed:**
+- `bootloader.bin` - ESP32 second-stage bootloader, loads the application
+- `partitions.bin` - Partition table defining flash memory layout (app, SPIFFS, etc.)
+- Without these, filesystem operations will fail with "partition not found" errors
+- Standard ESP32 flash layout: bootloader@0x1000, partitions@0x8000, app@0x10000
 
 ## Serial Monitor Configuration
 

@@ -37,6 +37,8 @@ _codeql_detected_source_root
 # Wokwi runtime files
 /test/wokwi/firmware.bin
 /test/wokwi/firmware.elf
+/test/wokwi/bootloader.bin
+/test/wokwi/partitions.bin
 /test/wokwi/.wokwi/
 /test/wokwi/logs/
 

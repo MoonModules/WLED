@@ -16,8 +16,11 @@ if [ -z "$1" ]; then
 fi
 
 ENV_NAME=$1
-FIRMWARE_BIN="$PROJECT_ROOT/.pio/build/$ENV_NAME/firmware.bin"
-FIRMWARE_ELF="$PROJECT_ROOT/.pio/build/$ENV_NAME/firmware.elf"
+BUILD_DIR="$PROJECT_ROOT/.pio/build/$ENV_NAME"
+FIRMWARE_BIN="$BUILD_DIR/firmware.bin"
+FIRMWARE_ELF="$BUILD_DIR/firmware.elf"
+BOOTLOADER_BIN="$BUILD_DIR/bootloader.bin"
+PARTITIONS_BIN="$BUILD_DIR/partitions.bin"
 
 # Check if firmware exists
 if [ ! -f "$FIRMWARE_BIN" ]; then
@@ -29,13 +32,31 @@ fi
 # Copy firmware to test directory
 echo "Copying firmware from $ENV_NAME to test directory..."
 cp "$FIRMWARE_BIN" "$WOKWI_DIR/firmware.bin"
+echo "✓ Copied firmware.bin"
 
 if [ -f "$FIRMWARE_ELF" ]; then
     cp "$FIRMWARE_ELF" "$WOKWI_DIR/firmware.elf"
-    echo "Copied firmware.bin and firmware.elf"
+    echo "✓ Copied firmware.elf"
 else
-    echo "Warning: firmware.elf not found, copying only firmware.bin"
+    echo "⚠ Warning: firmware.elf not found"
 fi
 
+# Copy bootloader and partitions (required for filesystem support)
+if [ -f "$BOOTLOADER_BIN" ]; then
+    cp "$BOOTLOADER_BIN" "$WOKWI_DIR/bootloader.bin"
+    echo "✓ Copied bootloader.bin"
+else
+    echo "⚠ Warning: bootloader.bin not found at $BOOTLOADER_BIN"
+fi
+
+if [ -f "$PARTITIONS_BIN" ]; then
+    cp "$PARTITIONS_BIN" "$WOKWI_DIR/partitions.bin"
+    echo "✓ Copied partitions.bin"
+else
+    echo "⚠ Warning: partitions.bin not found at $PARTITIONS_BIN"
+fi
+
+echo ""
 echo "Firmware prepared successfully!"
-echo "Location: $WOKWI_DIR/firmware.bin"
+echo "Files in $WOKWI_DIR:"
+ls -lh "$WOKWI_DIR"/*.bin "$WOKWI_DIR"/*.elf 2>/dev/null || true
