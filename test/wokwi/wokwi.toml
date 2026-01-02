@@ -2,6 +2,7 @@
 version = 1
 firmware = "firmware.bin"
 elf = "firmware.elf"
+gdbServerPort=3333
 
 [[net.forward]]
 # Forward the web server port
