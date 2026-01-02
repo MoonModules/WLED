@@ -121,12 +121,13 @@ cd test/wokwi
 You can create your own scenario files in YAML format:
 
 ```yaml
+name: "Custom Test"
 version: 1
 timeout: 15000  # milliseconds
 
 steps:
   - name: "Description of step"
-    sleep: 5000  # wait 5 seconds
+    delay: 5s  # wait 5 seconds (note: time units required!)
 ```
 
 The scenario will fail if:
