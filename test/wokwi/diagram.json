@@ -12,5 +12,9 @@
     }
   ],
   "connections": [],
-  "dependencies": {}
+  "dependencies": {},
+  "serialMonitor": {
+    "display": "always",
+    "newline": "lf"
+  }
 }

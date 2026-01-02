@@ -105,6 +105,15 @@ jobs:
             echo "⚠️  firmware.elf not found (optional for simulation)"
           fi
           
+          # Verify firmware can be read and has valid ESP32 header
+          echo ""
+          echo "Firmware file details:"
+          ls -lh firmware.bin firmware.elf 2>/dev/null || true
+          echo ""
+          echo "Firmware.bin first 64 bytes (hex):"
+          hexdump -C firmware.bin | head -4 || echo "Cannot read firmware.bin"
+          echo "Note: ESP32 firmware should start with magic byte 0xe9"
+          
           echo ""
           echo "Running quick boot check scenario (15 seconds)..."
           echo "Wokwi CLI location: $(which wokwi-cli || echo 'NOT FOUND')"

@@ -12,10 +12,38 @@ The Wokwi testing workflow:
 
 ## Files
 
-- `diagram.json` - Wokwi hardware configuration (ESP32 DevKit)
+- `diagram.json` - Wokwi hardware configuration (ESP32 DevKit) with serial monitor settings
 - `wokwi.toml` - Wokwi CLI configuration and port forwarding
 - `prepare-firmware.sh` - Script to copy built firmware to test directory
 - `run-simulator.sh` - Script to start the Wokwi simulator
+
+## Serial Monitor Configuration
+
+The `diagram.json` file includes critical serial monitor configuration required for capturing firmware output in CI environments:
+
+```json
+"serialMonitor": {
+  "display": "always",
+  "newline": "lf"
+}
+```
+
+**Why this is needed:**
+- Without `display: "always"`, serial output is not captured in headless/CI mode
+- The Wokwi simulator only records serial output when explicitly configured
+- This is **required** for debugging boot issues and verifying firmware execution
+
+**Configuration options:**
+- `display: "always"` - Ensures serial output is captured even in headless mode (CI)
+- `display: "auto"` - Only shows serial monitor when running interactively (not suitable for CI)
+- `newline: "lf"` - Line ending format (LF for Unix-style, CRLF for Windows)
+
+**Troubleshooting missing serial output:**
+If you see empty serial logs (`boot-check-serial.log` or `serial.log`):
+1. Verify `serialMonitor` section exists in `diagram.json`
+2. Check firmware.bin has valid ESP32 header (starts with `0xe9` magic byte)
+3. Ensure firmware was built successfully and copied to test directory
+4. Review firmware build logs for compilation errors
 
 ## Running Tests Locally
 
@@ -149,6 +177,16 @@ To add more tests:
 - Check that firmware.bin exists in test/wokwi/
 - Verify Wokwi CLI is installed: `wokwi-cli --version`
 - Check Wokwi CLI logs for errors
+
+### No serial output from firmware
+- Verify `serialMonitor` configuration in diagram.json
+- Check firmware.bin is valid:
+  ```bash
+  hexdump -C firmware.bin | head -4
+  # Should show ESP32 magic byte 0xe9 at start
+  ```
+- Ensure firmware was copied: `ls -lh test/wokwi/firmware.bin`
+- Check firmware build logs for errors
 
 ### Web server not accessible
 - Wait 30-60 seconds for the ESP32 to boot and start WiFi
