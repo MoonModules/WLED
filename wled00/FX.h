@@ -571,8 +571,8 @@ typedef struct Segment {
       startY(0),
       stopY(1),
       name(nullptr),
-      maskId(0),
-      maskInvert(false),
+      maskId(0), // WLEDMM
+      maskInvert(false), // WLEDMM
       next_time(0),
       step(0),
       call(0),
@@ -581,11 +581,11 @@ typedef struct Segment {
       data(nullptr),
       ledsrgb(nullptr),
       ledsrgbSize(0), //WLEDMM
-      _mask(nullptr),
-      _maskW(0),
-      _maskH(0),
-      _maskLen(0),
-      _maskValid(false),
+      _mask(nullptr), // WLEDMM
+      _maskW(0), // WLEDMM
+      _maskH(0), // WLEDMM
+      _maskLen(0), // WLEDMM
+      _maskValid(false), // WLEDMM
       _capabilities(0),
       _dataLen(0),
       _t(nullptr)
@@ -627,7 +627,7 @@ typedef struct Segment {
       if ((Segment::_globalLeds == nullptr) && !strip_uses_global_leds() && (ledsrgb != nullptr)) {free(ledsrgb); ledsrgb = nullptr;}  // WLEDMM we need "!strip_uses_global_leds()" to avoid crashes (#104)
       if (name) { delete[] name; name = nullptr; }
       if (_t)   { transitional = false; delete _t; _t = nullptr; }
-      clearMask();
+      clearMask(); // WLEDMM
       deallocateData();
     }
 
@@ -682,8 +682,8 @@ typedef struct Segment {
     inline void markForReset(void) { reset = true; }  // setOption(SEG_OPTION_RESET, true)
     inline void markForBlank(void) { needsBlank = true; } // WLEDMM serialize "blank" requests, avoid parallel drawing from different task
     void setUpLeds(void);   // set up leds[] array for loseless getPixelColor()
-    bool setMask(uint8_t id);
-    void clearMask();
+    bool setMask(uint8_t id); // WLEDMM
+    void clearMask(); // WLEDMM
 
     // transition functions
     void     startTransition(uint16_t dur); // transition has to start before actual segment values change
@@ -722,15 +722,15 @@ typedef struct Segment {
 #else
     inline uint16_t virtualLength(void) const {return _virtuallength;}
 #endif
-    inline bool hasMask(void) const { return _mask != nullptr; }
-    inline bool maskAllows(uint16_t i) const {
+    inline bool hasMask(void) const { return _mask != nullptr; } // WLEDMM
+    inline bool maskAllows(uint16_t i) const { // WLEDMM
       if (!_mask || !_maskValid) return true;
       if (size_t(i) >= _maskLen) return false;
       // WLEDMM: bit-packed mask (LSB-first): byte = i>>3, bit = i&7
       bool bit = (_mask[i >> 3] >> (i & 7)) & 0x01;
       return maskInvert ? !bit : bit;
     }
-    inline bool maskAllowsXY(int x, int y) const {
+    inline bool maskAllowsXY(int x, int y) const { // WLEDMM
       if (!_mask || !_maskValid) return true;
       if (x < 0 || y < 0) return false;
       size_t idx = size_t(x) + (size_t(y) * _maskW);
@@ -1080,7 +1080,7 @@ class WS2812FX {  // 96 bytes
       show(void),
       setTargetFps(uint8_t fps),
       enumerateLedmaps(), //WLEDMM (from fcn_declare)
-      enumerateSegmasks();
+      enumerateSegmasks(); // WLEDMM
 
     void setColor(uint8_t slot, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0) { setColor(slot, RGBW32(r,g,b,w)); }
     void fill(uint32_t c) { for (int i = 0; i < getLengthTotal(); i++) setPixelColor(i, c); } // fill whole strip with color (inline)

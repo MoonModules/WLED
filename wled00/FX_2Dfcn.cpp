@@ -235,6 +235,7 @@ void Segment::startFrame(void) {
   _virtuallength = calc_virtualLength();
 #endif
 
+  // WLEDMM validate mask dimensions against current virtual size
   if (_mask) {
     uint16_t vW = calc_virtualWidth();
     uint16_t vH = calc_virtualHeight();

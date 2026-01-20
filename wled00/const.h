@@ -91,6 +91,7 @@
   #endif
 #endif
 
+// WLEDMM segment mask slots (filesystem segmaskX.json)
 #if defined(WLED_MAX_SEGMASKS) && (WLED_MAX_SEGMASKS > 32 || WLED_MAX_SEGMASKS < 4)
   #undef WLED_MAX_SEGMASKS
 #endif

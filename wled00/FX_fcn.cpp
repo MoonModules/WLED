@@ -95,11 +95,11 @@ Segment::Segment(const Segment &orig) {
   data = nullptr;
   _dataLen = 0;
   _t = nullptr;
-  _mask = nullptr;
-  _maskLen = 0;
-  _maskW = 0;
-  _maskH = 0;
-  _maskValid = false;
+  _mask = nullptr; // WLEDMM
+  _maskLen = 0; // WLEDMM
+  _maskW = 0; // WLEDMM
+  _maskH = 0; // WLEDMM
+  _maskValid = false; // WLEDMM
   if (ledsrgb && !Segment::_globalLeds) {ledsrgb = nullptr; ledsrgbSize = 0;}  // WLEDMM
   if (orig.name) { name = new(std::nothrow) char[strlen(orig.name)+1]; if (name) strcpy(name, orig.name); }
   if (orig.data) { if (allocateData(orig._dataLen, true)) memcpy(data, orig.data, orig._dataLen); }
@@ -147,7 +147,7 @@ void Segment::allocLeds() {
   }
 }
 
-void Segment::clearMask() {
+void Segment::clearMask() { // WLEDMM
   if (_mask) {
     free(_mask);
     _mask = nullptr;
@@ -158,7 +158,7 @@ void Segment::clearMask() {
   _maskValid = false;
 }
 
-bool Segment::setMask(uint8_t id) {
+bool Segment::setMask(uint8_t id) { // WLEDMM
   clearMask();
   maskId = id;
   if (id >= WLED_MAX_SEGMASKS) {
@@ -282,11 +282,11 @@ Segment::Segment(Segment &&orig) noexcept {
   orig.ledsrgb = nullptr; //WLEDMM
   orig.ledsrgbSize = 0;   // WLEDMM
   orig.jMap = nullptr;    //WLEDMM jMap
-  orig._mask = nullptr;
-  orig._maskLen = 0;
-  orig._maskW = 0;
-  orig._maskH = 0;
-  orig._maskValid = false;
+  orig._mask = nullptr; // WLEDMM
+  orig._maskLen = 0; // WLEDMM
+  orig._maskW = 0; // WLEDMM
+  orig._maskH = 0; // WLEDMM
+  orig._maskValid = false; // WLEDMM
 }
 
 // copy assignment --> overwrite segment with orig - deletes old buffers in "this", but does not change orig!
@@ -297,7 +297,7 @@ Segment& Segment::operator= (const Segment &orig) {
     transitional = false; // copied segment cannot be in transition
     if (name) delete[] name;
     if (_t)   delete _t;
-    clearMask();
+    clearMask(); // WLEDMM
     CRGB* oldLeds = ledsrgb;
     size_t oldLedsSize = ledsrgbSize;
     if (ledsrgb && !Segment::_globalLeds) free(ledsrgb);
@@ -316,11 +316,11 @@ Segment& Segment::operator= (const Segment &orig) {
     data = nullptr;
     _dataLen = 0;
     _t = nullptr;
-    _mask = nullptr;
-    _maskLen = 0;
-    _maskW = 0;
-    _maskH = 0;
-    _maskValid = false;
+    _mask = nullptr; // WLEDMM
+    _maskLen = 0; // WLEDMM
+    _maskW = 0; // WLEDMM
+    _maskH = 0; // WLEDMM
+    _maskValid = false; // WLEDMM
     //if (!Segment::_globalLeds) {ledsrgb = oldLeds; ledsrgbSize = oldLedsSize;}; // WLEDMM reuse leds instead of ledsrgb = nullptr;
     if (!Segment::_globalLeds) {ledsrgb = nullptr; ledsrgbSize = 0;};             // WLEDMM copy has no buffers (yet)
     // copy source data
@@ -341,7 +341,7 @@ Segment& Segment::operator= (Segment &&orig) noexcept {
     transitional = false; // just temporary
     if (name) { delete[] name; name = nullptr; } // free old name
     deallocateData(); // free old runtime data
-    clearMask();
+    clearMask(); // WLEDMM
     if (_t) { delete _t; _t = nullptr; }
     if (ledsrgb && !Segment::_globalLeds) free(ledsrgb); //WLEDMM: not needed anymore as we will use leds from copy. no need to nullify ledsrgb as it gets new value in memcpy
 
@@ -361,11 +361,11 @@ Segment& Segment::operator= (Segment &&orig) noexcept {
     orig.ledsrgb = nullptr;  //WLEDMM: do not free as moved to here
     orig.ledsrgbSize = 0;    //WLEDMM
     orig.jMap = nullptr; //WLEDMM jMap
-    orig._mask = nullptr;
-    orig._maskLen = 0;
-    orig._maskW = 0;
-    orig._maskH = 0;
-    orig._maskValid = false;
+    orig._mask = nullptr; // WLEDMM
+    orig._maskLen = 0; // WLEDMM
+    orig._maskW = 0; // WLEDMM
+    orig._maskH = 0; // WLEDMM
+    orig._maskValid = false; // WLEDMM
   }
   return *this;
 }
@@ -1535,8 +1535,8 @@ uint8_t Segment::differs(Segment& b) const {
   if (check3 != b.check3)       d |= SEG_DIFFERS_FX;
   if (startY != b.startY)       d |= SEG_DIFFERS_BOUNDS;
   if (stopY != b.stopY)         d |= SEG_DIFFERS_BOUNDS;
-  if (maskId != b.maskId)       d |= SEG_DIFFERS_OPT;
-  if (maskInvert != b.maskInvert) d |= SEG_DIFFERS_OPT;
+  if (maskId != b.maskId)       d |= SEG_DIFFERS_OPT; // WLEDMM
+  if (maskInvert != b.maskInvert) d |= SEG_DIFFERS_OPT; // WLEDMM
 
   //bit pattern: (msb first) set:2, sound:1, mapping:3, transposed, mirrorY, reverseY, [transitional, reset,] paused, mirrored, on, reverse, [selected]
   if ((options & 0b1111111110011110U) != (b.options & 0b1111111110011110U)) d |= SEG_DIFFERS_OPT;
@@ -1931,7 +1931,7 @@ void WS2812FX::enumerateLedmaps() {
   }
 }
 
-// enumerate all segmaskX.json files on FS
+// WLEDMM enumerate all segmaskX.json files on FS
 void WS2812FX::enumerateSegmasks() {
   segMasks = 0;
   for (int i = 1; i < WLED_MAX_SEGMASKS; i++) {
@@ -1956,7 +1956,7 @@ void WS2812FX::finalizeInit(void)
   // if we do it in json.cpp (serializeInfo()) we are getting flashes on LEDs
   // unfortunately this means we do not get updates after uploads
   enumerateLedmaps();
-  enumerateSegmasks();
+  enumerateSegmasks(); // WLEDMM
 
   _hasWhiteChannel = _isOffRefreshRequired = false;
 

@@ -335,7 +335,7 @@ void WLED::loop()
   if (loadLedmap) {
     if (!strip.deserializeMap(loadedLedmap) && strip.isMatrix) strip.setUpMatrix(); //WLEDMM: always if nonexistent:  && loadedLedmap == 0
     strip.enumerateLedmaps(); //WLEDMM
-    strip.enumerateSegmasks();
+    strip.enumerateSegmasks(); // WLEDMM
     loadLedmap = false;
   }
 
