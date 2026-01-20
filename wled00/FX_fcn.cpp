@@ -179,9 +179,9 @@ bool Segment::setMask(uint8_t id) {
 
   uint16_t w = 0;
   uint16_t h = 0;
-  size_t bitLen = 0;
-  uint8_t* bits = nullptr;
-  bool inv = maskInvert;
+  size_t bitLen = 0;            // WLEDMM total mask pixels (w*h)
+  uint8_t* bits = nullptr;      // WLEDMM bit-packed mask, 1 bit per pixel
+  bool inv = maskInvert;        // WLEDMM default to current invert setting
   bool ok = false;
 
   do {
@@ -200,6 +200,7 @@ bool Segment::setMask(uint8_t id) {
     bitLen = size_t(w) * size_t(h);
     if (bitLen == 0 || bitLen > (size_t(Segment::maxWidth) * size_t(Segment::maxHeight))) break;
 
+    // WLEDMM pack 8 pixels per byte, LSB-first (bit 0 = pixel 0)
     size_t byteLen = (bitLen + 7) / 8;
     bits = (uint8_t*)calloc(byteLen, 1);
     if (!bits) {
@@ -208,6 +209,7 @@ bool Segment::setMask(uint8_t id) {
     }
 
     f.seek(0);
+    // WLEDMM strict "inv" boolean parsing (true/false only)
     if (f.find("\"inv\":")) {
       String entry = f.readStringUntil(',');
       int end = entry.indexOf('}');
@@ -219,6 +221,7 @@ bool Segment::setMask(uint8_t id) {
     }
 
     f.seek(0);
+    // WLEDMM strict 0/1 mask array, use streaming parse (ledmap-style)
     if (!f.find("\"mask\":")) break;
     f.readBytesUntil('[', buf, sizeof(buf)-1);
 
@@ -234,8 +237,8 @@ bool Segment::setMask(uint8_t id) {
       }
       entry.trim();
       if (entry.length() == 0) { parsedOk = false; break; }
-      if (i >= bitLen) { parsedOk = false; break; }
-      if (entry == "1") bits[i >> 3] |= (0x01U << (i & 7));
+      if (i >= bitLen) { parsedOk = false; break; } // WLEDMM guard against overflow
+      if (entry == "1") bits[i >> 3] |= (0x01U << (i & 7)); // WLEDMM set bit (pixel i) in packed mask
       else if (entry != "0") { parsedOk = false; break; }
       i++;
       if (i > bitLen) { parsedOk = false; break; }
@@ -1134,7 +1137,7 @@ void IRAM_ATTR_YN WLED_O2_ATTR __attribute__((hot)) Segment::setPixelColor(int i
   i &= 0xFFFF;
   if (unsigned(i) >= virtualLength()) return;  // if pixel would fall out of segment just exit //WLEDMM unsigned(i)>SEGLEN also catches "i<0"
 
-  if ((Segment::maxHeight == 1) && !maskAllows(i)) return;
+  if ((Segment::maxHeight == 1) && !maskAllows(i)) return; // WLEDMM mask gate for 1D segments
 
 #ifndef WLED_DISABLE_2D
   if (is2D()) {

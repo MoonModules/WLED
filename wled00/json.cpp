@@ -361,13 +361,13 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   seg.check2 = elem["o2"] | seg.check2;
   seg.check3 = elem["o3"] | seg.check3;
 
-  if (elem.containsKey("mask")) {
+  if (elem.containsKey("mask")) { // WLEDMM segment mask id
     int maskVal = elem["mask"] | 0;
     if (maskVal < 0) maskVal = 0;
     uint8_t maskId = constrain(maskVal, 0, WLED_MAX_SEGMASKS-1);
     if (maskId != seg.maskId || (maskId != 0 && !seg.hasMask())) seg.setMask(maskId);
   }
-  if (elem.containsKey("minv")) {
+  if (elem.containsKey("minv")) { // WLEDMM segment mask invert
     seg.maskInvert = elem["minv"] | seg.maskInvert;
   }
 
@@ -768,8 +768,8 @@ void serializeSegment(JsonObject& root, Segment& seg, byte id, bool forPreset, b
   root["o3"]  = seg.check3;
   root["si"]  = seg.soundSim;
   root["m12"] = seg.map1D2D;
-  root["mask"] = seg.maskId;
-  root["minv"] = seg.maskInvert;
+  root["mask"] = seg.maskId;     // WLEDMM segment mask id
+  root["minv"] = seg.maskInvert; // WLEDMM segment mask invert
 }
 
 void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segmentBounds, bool selectedSegmentsOnly)
@@ -1073,7 +1073,7 @@ void serializeInfo(JsonObject root)
     }
   }
 
-  JsonArray masks = root.createNestedArray(F("masks"));
+  JsonArray masks = root.createNestedArray(F("masks")); // WLEDMM segment mask files
   for (size_t i=1; i<WLED_MAX_SEGMASKS; i++) {
     if ((segMasks>>i) & 0x00000001U) {
       JsonObject masks0 = masks.createNestedObject();

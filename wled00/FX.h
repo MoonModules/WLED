@@ -454,8 +454,8 @@ typedef struct Segment {
     uint16_t startY;  // start Y coodrinate 2D (top); there should be no more than 255 rows, but we cannot be sure.
     uint16_t stopY;   // stop Y coordinate 2D (bottom); there should be no more than 255 rows, but we cannot be sure.
     char *name = nullptr; // WLEDMM initialize to nullptr
-    uint8_t maskId = 0;   // segment mask ID (0 = none)
-    bool maskInvert = false;
+    uint8_t maskId = 0;   // WLEDMM segment mask ID (0 = none)
+    bool maskInvert = false; // WLEDMM invert mask bits (useful for "outside" masks)
 
     // runtime data
     unsigned long next_time;  // millis() of next update
@@ -471,11 +471,11 @@ typedef struct Segment {
     void *jMap = nullptr; //WLEDMM jMap
 
   private:
-    uint8_t *_mask = nullptr;
-    uint16_t _maskW = 0;
-    uint16_t _maskH = 0;
-    size_t _maskLen = 0;        // number of mask bits (virtual pixels)
-    bool _maskValid = false;
+    uint8_t *_mask = nullptr;   // WLEDMM bit-packed mask, 1 bit per virtual pixel
+    uint16_t _maskW = 0;        // WLEDMM mask width in virtual pixels
+    uint16_t _maskH = 0;        // WLEDMM mask height in virtual pixels
+    size_t _maskLen = 0;        // WLEDMM total bits (w*h), not bytes
+    bool _maskValid = false;    // WLEDMM cached dimension check vs virtual size
 
     union {
       uint8_t  _capabilities;
@@ -726,6 +726,7 @@ typedef struct Segment {
     inline bool maskAllows(uint16_t i) const {
       if (!_mask || !_maskValid) return true;
       if (size_t(i) >= _maskLen) return false;
+      // WLEDMM: bit-packed mask (LSB-first): byte = i>>3, bit = i&7
       bool bit = (_mask[i >> 3] >> (i & 7)) & 0x01;
       return maskInvert ? !bit : bit;
     }
@@ -734,6 +735,7 @@ typedef struct Segment {
       if (x < 0 || y < 0) return false;
       size_t idx = size_t(x) + (size_t(y) * _maskW);
       if (idx >= _maskLen) return false;
+      // WLEDMM: row-major (x + y*w), bit-packed mask (LSB-first in each byte)
       bool bit = (_mask[idx >> 3] >> (idx & 7)) & 0x01;
       return maskInvert ? !bit : bit;
     }
