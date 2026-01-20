@@ -95,6 +95,11 @@ Segment::Segment(const Segment &orig) {
   data = nullptr;
   _dataLen = 0;
   _t = nullptr;
+  _mask = nullptr;
+  _maskLen = 0;
+  _maskW = 0;
+  _maskH = 0;
+  _maskValid = false;
   if (ledsrgb && !Segment::_globalLeds) {ledsrgb = nullptr; ledsrgbSize = 0;}  // WLEDMM
   if (orig.name) { name = new(std::nothrow) char[strlen(orig.name)+1]; if (name) strcpy(name, orig.name); }
   if (orig.data) { if (allocateData(orig._dataLen, true)) memcpy(data, orig.data, orig._dataLen); }
@@ -142,6 +147,117 @@ void Segment::allocLeds() {
   }
 }
 
+void Segment::clearMask() {
+  if (_mask) {
+    free(_mask);
+    _mask = nullptr;
+  }
+  _maskLen = 0;
+  _maskW = 0;
+  _maskH = 0;
+  _maskValid = false;
+}
+
+bool Segment::setMask(uint8_t id) {
+  clearMask();
+  maskId = id;
+  if (id >= WLED_MAX_SEGMASKS) {
+    maskId = 0;
+    return false;
+  }
+  if (id == 0) return true;
+
+  char fileName[24] = {'\0'};
+  snprintf_P(fileName, sizeof(fileName), PSTR("/segmask%d.json"), id);
+  if (!WLED_FS.exists(fileName)) {
+    USER_PRINTF("Segment mask missing: %s\n", fileName);
+    return false;
+  }
+
+  File f = WLED_FS.open(fileName, "r");
+  if (!f) return false;
+
+  uint16_t w = 0;
+  uint16_t h = 0;
+  size_t bitLen = 0;
+  uint8_t* bits = nullptr;
+  bool inv = maskInvert;
+  bool ok = false;
+
+  do {
+    char buf[32] = { '\0' };
+    if (!f.find("\"w\":")) break;
+    f.readBytesUntil('\n', buf, sizeof(buf)-1);
+    w = atoi(cleanUpName(buf));
+
+    f.seek(0);
+    if (!f.find("\"h\":")) break;
+    memset(buf, 0, sizeof(buf));
+    f.readBytesUntil('\n', buf, sizeof(buf)-1);
+    h = atoi(cleanUpName(buf));
+
+    if (w == 0 || h == 0) break;
+    bitLen = size_t(w) * size_t(h);
+    if (bitLen == 0 || bitLen > (size_t(Segment::maxWidth) * size_t(Segment::maxHeight))) break;
+
+    size_t byteLen = (bitLen + 7) / 8;
+    bits = (uint8_t*)calloc(byteLen, 1);
+    if (!bits) {
+      errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
+      break;
+    }
+
+    f.seek(0);
+    if (f.find("\"inv\":")) {
+      String entry = f.readStringUntil(',');
+      int end = entry.indexOf('}');
+      if (end >= 0) entry.remove(end);
+      entry.trim();
+      if (entry == "true") inv = true;
+      else if (entry == "false") inv = false;
+      else break;
+    }
+
+    f.seek(0);
+    if (!f.find("\"mask\":")) break;
+    f.readBytesUntil('[', buf, sizeof(buf)-1);
+
+    size_t i = 0;
+    bool endOfArray = false;
+    bool parsedOk = true;
+    do {
+      String entry = f.readStringUntil(',');
+      int bracket = entry.indexOf(']');
+      if (bracket >= 0) {
+        entry.remove(bracket);
+        endOfArray = true;
+      }
+      entry.trim();
+      if (entry.length() == 0) { parsedOk = false; break; }
+      if (i >= bitLen) { parsedOk = false; break; }
+      if (entry == "1") bits[i >> 3] |= (0x01U << (i & 7));
+      else if (entry != "0") { parsedOk = false; break; }
+      i++;
+      if (i > bitLen) { parsedOk = false; break; }
+    } while (f.available() && !endOfArray);
+
+    if (!parsedOk || !endOfArray || i != bitLen) break;
+
+    _mask = bits;
+    bits = nullptr;
+    _maskW = w;
+    _maskH = h;
+    _maskLen = bitLen;
+    maskInvert = inv;
+    _maskValid = (_maskW == calc_virtualWidth() && _maskH == calc_virtualHeight());
+    ok = true;
+  } while (false);
+
+  if (!ok && bits) free(bits);
+  f.close();
+  return ok;
+}
+
 // move constructor --> moves everything (including buffer) from orig to this
 Segment::Segment(Segment &&orig) noexcept {
   DEBUG_PRINTLN(F("-- Move segment constructor --"));
@@ -163,6 +279,11 @@ Segment::Segment(Segment &&orig) noexcept {
   orig.ledsrgb = nullptr; //WLEDMM
   orig.ledsrgbSize = 0;   // WLEDMM
   orig.jMap = nullptr;    //WLEDMM jMap
+  orig._mask = nullptr;
+  orig._maskLen = 0;
+  orig._maskW = 0;
+  orig._maskH = 0;
+  orig._maskValid = false;
 }
 
 // copy assignment --> overwrite segment with orig - deletes old buffers in "this", but does not change orig!
@@ -173,6 +294,7 @@ Segment& Segment::operator= (const Segment &orig) {
     transitional = false; // copied segment cannot be in transition
     if (name) delete[] name;
     if (_t)   delete _t;
+    clearMask();
     CRGB* oldLeds = ledsrgb;
     size_t oldLedsSize = ledsrgbSize;
     if (ledsrgb && !Segment::_globalLeds) free(ledsrgb);
@@ -191,6 +313,11 @@ Segment& Segment::operator= (const Segment &orig) {
     data = nullptr;
     _dataLen = 0;
     _t = nullptr;
+    _mask = nullptr;
+    _maskLen = 0;
+    _maskW = 0;
+    _maskH = 0;
+    _maskValid = false;
     //if (!Segment::_globalLeds) {ledsrgb = oldLeds; ledsrgbSize = oldLedsSize;}; // WLEDMM reuse leds instead of ledsrgb = nullptr;
     if (!Segment::_globalLeds) {ledsrgb = nullptr; ledsrgbSize = 0;};             // WLEDMM copy has no buffers (yet)
     // copy source data
@@ -211,6 +338,7 @@ Segment& Segment::operator= (Segment &&orig) noexcept {
     transitional = false; // just temporary
     if (name) { delete[] name; name = nullptr; } // free old name
     deallocateData(); // free old runtime data
+    clearMask();
     if (_t) { delete _t; _t = nullptr; }
     if (ledsrgb && !Segment::_globalLeds) free(ledsrgb); //WLEDMM: not needed anymore as we will use leds from copy. no need to nullify ledsrgb as it gets new value in memcpy
 
@@ -230,6 +358,11 @@ Segment& Segment::operator= (Segment &&orig) noexcept {
     orig.ledsrgb = nullptr;  //WLEDMM: do not free as moved to here
     orig.ledsrgbSize = 0;    //WLEDMM
     orig.jMap = nullptr; //WLEDMM jMap
+    orig._mask = nullptr;
+    orig._maskLen = 0;
+    orig._maskW = 0;
+    orig._maskH = 0;
+    orig._maskValid = false;
   }
   return *this;
 }
@@ -1001,6 +1134,8 @@ void IRAM_ATTR_YN WLED_O2_ATTR __attribute__((hot)) Segment::setPixelColor(int i
   i &= 0xFFFF;
   if (unsigned(i) >= virtualLength()) return;  // if pixel would fall out of segment just exit //WLEDMM unsigned(i)>SEGLEN also catches "i<0"
 
+  if ((Segment::maxHeight == 1) && !maskAllows(i)) return;
+
 #ifndef WLED_DISABLE_2D
   if (is2D()) {
     uint16_t vH = virtualHeight();  // segment height in logical pixels
@@ -1397,6 +1532,8 @@ uint8_t Segment::differs(Segment& b) const {
   if (check3 != b.check3)       d |= SEG_DIFFERS_FX;
   if (startY != b.startY)       d |= SEG_DIFFERS_BOUNDS;
   if (stopY != b.stopY)         d |= SEG_DIFFERS_BOUNDS;
+  if (maskId != b.maskId)       d |= SEG_DIFFERS_OPT;
+  if (maskInvert != b.maskInvert) d |= SEG_DIFFERS_OPT;
 
   //bit pattern: (msb first) set:2, sound:1, mapping:3, transposed, mirrorY, reverseY, [transitional, reset,] paused, mirrored, on, reverse, [selected]
   if ((options & 0b1111111110011110U) != (b.options & 0b1111111110011110U)) d |= SEG_DIFFERS_OPT;
@@ -1791,6 +1928,16 @@ void WS2812FX::enumerateLedmaps() {
   }
 }
 
+// enumerate all segmaskX.json files on FS
+void WS2812FX::enumerateSegmasks() {
+  segMasks = 0;
+  for (int i = 1; i < WLED_MAX_SEGMASKS; i++) {
+    char fileName[24] = {'\0'};
+    snprintf_P(fileName, sizeof(fileName), PSTR("/segmask%d.json"), i);
+    if (WLED_FS.exists(fileName)) segMasks |= 1 << i;
+  }
+}
+
 
 //do not call this method from system context (network callback)
 void WS2812FX::finalizeInit(void)
@@ -1806,6 +1953,7 @@ void WS2812FX::finalizeInit(void)
   // if we do it in json.cpp (serializeInfo()) we are getting flashes on LEDs
   // unfortunately this means we do not get updates after uploads
   enumerateLedmaps();
+  enumerateSegmasks();
 
   _hasWhiteChannel = _isOffRefreshRequired = false;
 

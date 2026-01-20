@@ -91,6 +91,17 @@
   #endif
 #endif
 
+#if defined(WLED_MAX_SEGMASKS) && (WLED_MAX_SEGMASKS > 32 || WLED_MAX_SEGMASKS < 4)
+  #undef WLED_MAX_SEGMASKS
+#endif
+#ifndef WLED_MAX_SEGMASKS
+  #ifdef ESP8266
+    #define WLED_MAX_SEGMASKS 10
+  #else
+    #define WLED_MAX_SEGMASKS 16
+  #endif
+#endif
+
 #ifndef WLED_MAX_SEGNAME_LEN
   #ifdef ESP8266
     #define WLED_MAX_SEGNAME_LEN 32

@@ -817,6 +817,23 @@ function populateSegments(s)
 							`<option value="1" ${inst.si==1?' selected':''}>WeWillRockYou</option>`+
 						`</select></div>`+
 					`</div>`;
+		let maskSel = "";
+		let maskId = inst.mask || 0;
+		let maskInv = inst.minv || false;
+		let maskList = Array.isArray(li.masks) ? li.masks : [];
+		if (maskList.length > 0 || maskId > 0) {
+			let opts = `<option value="0"${maskId==0?' selected':''}>None</option>`;
+			for (const m of maskList) opts += `<option value="${m.id}"${maskId==m.id?' selected':''}>segmask${m.id}.json</option>`;
+			maskSel = `<div class="lbl-s">Mask<br>`+
+				`<div class="sel-p"><select class="sel-p" id="seg${i}msk" onchange="setMask(${i})">`+
+					`${opts}`+
+				`</select></div>`+
+			`</div>`+
+			`<label class="check revchkl">Invert mask`+
+				`<input type="checkbox" id="seg${i}minv" onchange="setMaskInv(${i})" ${maskInv?"checked":""}>`+
+				`<span class="checkmark"></span>`+
+			`</label>`;
+		}
 		//WLEDMM ARTIFX
 		let fxName = eJson.find((o)=>{return o.id==selectedFx}).name;
 		let cusEff = `<button class="btn" onclick="toggleCEEditor('${inst.n?inst.n:"default"}', ${i})">ARTI-FX Editor ☾</button><br>`;
@@ -870,6 +887,7 @@ function populateSegments(s)
 					`<div class="h bp" id="seg${i}len"></div>`+
 					(!isMSeg ? rvXck : '') +
 					(isMSeg&&stoY-staY>1&&stoX-staX>1 ? map2D : '') +
+					maskSel +
 					(s.AudioReactive && s.AudioReactive.on ? "" : sndSim) +
 					(s.ARTIFX && s.ARTIFX.on && fxName.includes("ARTI-FX") ? cusEff : "") + // <!--WLEDMM-->
 					`<label class="check revchkl" id="seg${i}lbtm">`+
@@ -2833,6 +2851,20 @@ function setM12(s)
 {
 	var value = gId(`seg${s}m12`).selectedIndex;
 	var obj = {"seg": {"id": s, "m12": value}};
+	requestJson(obj);
+}
+
+function setMask(s)
+{
+	var value = parseInt(gId(`seg${s}msk`).value);
+	var obj = {"seg": {"id": s, "mask": value}};
+	requestJson(obj);
+}
+
+function setMaskInv(s)
+{
+	var value = gId(`seg${s}minv`).checked;
+	var obj = {"seg": {"id": s, "minv": value}};
 	requestJson(obj);
 }
 

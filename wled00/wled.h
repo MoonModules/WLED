@@ -816,6 +816,11 @@ WLED_GLOBAL uint32_t ledMaps _INIT(0); // bitfield representation of available l
 #else
 WLED_GLOBAL uint16_t ledMaps _INIT(0); // bitfield representation of available ledmaps
 #endif
+#if WLED_MAX_SEGMASKS>16
+WLED_GLOBAL uint32_t segMasks _INIT(0); // bitfield representation of available segment masks
+#else
+WLED_GLOBAL uint16_t segMasks _INIT(0); // bitfield representation of available segment masks
+#endif
 
 // Usermod manager
 WLED_GLOBAL UsermodManager usermods _INIT(UsermodManager());
