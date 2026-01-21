@@ -722,15 +722,15 @@ typedef struct Segment {
 #else
     inline uint16_t virtualLength(void) const {return _virtuallength;}
 #endif
-    inline bool hasMask(void) const { return _mask != nullptr; } // WLEDMM
-    inline bool maskAllows(uint16_t i) const { // WLEDMM
+    [[gnu::hot]] inline bool hasMask(void) const { return _mask != nullptr; } // WLEDMM
+    [[gnu::hot]] inline bool maskAllows(uint16_t i) const { // WLEDMM
       if (!_mask || !_maskValid) return true;
       if (size_t(i) >= _maskLen) return false;
       // WLEDMM: bit-packed mask (LSB-first): byte = i>>3, bit = i&7
       bool bit = (_mask[i >> 3] >> (i & 7)) & 0x01;
       return maskInvert ? !bit : bit;
     }
-    inline bool maskAllowsXY(int x, int y) const { // WLEDMM
+    [[gnu::hot]] inline bool maskAllowsXY(int x, int y) const { // WLEDMM
       if (!_mask || !_maskValid) return true;
       if (x < 0 || y < 0) return false;
       size_t idx = size_t(x) + (size_t(y) * _maskW);

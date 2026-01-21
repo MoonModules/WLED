@@ -365,7 +365,11 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     int maskVal = elem["mask"] | 0;
     if (maskVal < 0) maskVal = 0;
     uint8_t maskId = constrain(maskVal, 0, WLED_MAX_SEGMASKS-1);
-    if (maskId != seg.maskId || (maskId != 0 && !seg.hasMask())) seg.setMask(maskId);
+    if (maskId == 0) { // WLEDMM explicit clear path
+      if (seg.hasMask()) seg.clearMask();
+    } else if (maskId != seg.maskId || !seg.hasMask()) {
+      seg.setMask(maskId);
+    }
   }
   if (elem.containsKey("minv")) { // WLEDMM segment mask invert
     seg.maskInvert = elem["minv"] | seg.maskInvert;

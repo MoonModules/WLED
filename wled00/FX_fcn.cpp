@@ -148,21 +148,27 @@ void Segment::allocLeds() {
 }
 
 void Segment::clearMask() { // WLEDMM
-  if (_mask) {
-    free(_mask);
+  uint8_t* oldMask = nullptr;
+  strip_wait_until_idle("Segment::clearMask"); // WLEDMM avoid swapping while renderer is active
+  if (esp32SemTake(segmentMux, 2100) == pdTRUE) { // WLEDMM serialize mask pointer changes with renderer
+    oldMask = _mask;
     _mask = nullptr;
+    _maskLen = 0;
+    _maskW = 0;
+    _maskH = 0;
+    _maskValid = false;
+    maskId = 0; // WLEDMM keep id in sync with buffer
+    esp32SemGive(segmentMux);
+  } else {
+    DEBUG_PRINTLN(F("Segment::clearMask: Failed to acquire segmentMux, skipping clear."));
+    return;
   }
-  _maskLen = 0;
-  _maskW = 0;
-  _maskH = 0;
-  _maskValid = false;
+  if (oldMask) free(oldMask);
 }
 
 bool Segment::setMask(uint8_t id) { // WLEDMM
   clearMask();
-  maskId = id;
   if (id >= WLED_MAX_SEGMASKS) {
-    maskId = 0;
     return false;
   }
   if (id == 0) return true;
@@ -250,15 +256,26 @@ bool Segment::setMask(uint8_t id) { // WLEDMM
 
     if (!parsedOk || !endOfArray || i != bitLen) break;
 
-    _mask = bits;
-    bits = nullptr;
-    _maskW = w;
-    _maskH = h;
-    _maskLen = bitLen;
-    maskInvert = inv;
-    _maskValid = (_maskW == calc_virtualWidth() && _maskH == calc_virtualHeight());
     ok = true;
   } while (false);
+
+  if (ok) {
+    strip_wait_until_idle("Segment::setMask"); // WLEDMM avoid swapping while renderer is active
+    if (esp32SemTake(segmentMux, 2100) == pdTRUE) { // WLEDMM serialize mask pointer changes with renderer
+      _mask = bits;
+      bits = nullptr;
+      _maskW = w;
+      _maskH = h;
+      _maskLen = bitLen;
+      maskInvert = inv;
+      _maskValid = (_maskW == calc_virtualWidth() && _maskH == calc_virtualHeight());
+      maskId = id; // WLEDMM commit mask id only on success
+      esp32SemGive(segmentMux);
+    } else {
+      DEBUG_PRINTLN(F("Segment::setMask: Failed to acquire segmentMux, skipping mask update."));
+      ok = false;
+    }
+  }
 
   if (!ok && bits) free(bits);
   if (!ok) maskId = 0; // WLEDMM avoid repeated reload attempts
@@ -728,6 +745,14 @@ void Segment::setUp(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, uint16_t
       spacing = spc;
     }
     if (ofs < UINT16_MAX) offset = ofs;
+    // WLEDMM keep mask validity aligned with current virtual geometry
+    if (_mask) {
+      uint16_t vW = calc_virtualWidth();
+      uint16_t vH = calc_virtualHeight();
+      _maskValid = (_maskW == vW && _maskH == vH);
+    } else {
+      _maskValid = false;
+    }
     esp32SemGive(segmentMux);
   } else {
     DEBUG_PRINTLN(F("Segment::setUp: Failed to acquire segmentMux, skipping bounds update."));
