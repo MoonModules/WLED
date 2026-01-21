@@ -192,96 +192,95 @@ bool Segment::setMask(uint8_t id) { // WLEDMM
   size_t bitLen = 0;            // WLEDMM total mask pixels (w*h)
   uint8_t* bits = nullptr;      // WLEDMM bit-packed mask, 1 bit per pixel
   bool inv = maskInvert;        // WLEDMM default to current invert setting
+  auto fail = [&]() -> bool {
+    if (bits) free(bits);
+    maskId = 0; // WLEDMM avoid repeated reload attempts
+    f.close();
+    return false;
+  };
+
+  char buf[32] = { '\0' };
+  if (!f.find("\"w\":")) return fail();
+  f.readBytesUntil('\n', buf, sizeof(buf)-1);
+  w = atoi(cleanUpName(buf));
+
+  f.seek(0);
+  if (!f.find("\"h\":")) return fail();
+  memset(buf, 0, sizeof(buf));
+  f.readBytesUntil('\n', buf, sizeof(buf)-1);
+  h = atoi(cleanUpName(buf));
+
+  if (w == 0 || h == 0) return fail();
+  bitLen = size_t(w) * size_t(h);
+  if (bitLen == 0 || bitLen > (size_t(Segment::maxWidth) * size_t(Segment::maxHeight))) return fail();
+
+  // WLEDMM pack 8 pixels per byte, LSB-first (bit 0 = pixel 0)
+  size_t byteLen = (bitLen + 7) / 8;
+  bits = (uint8_t*)calloc(byteLen, 1);
+  if (!bits) {
+    errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
+    return fail();
+  }
+
+  f.seek(0);
+  // WLEDMM strict "inv" boolean parsing (true/false only)
+  if (f.find("\"inv\":")) {
+    String entry = f.readStringUntil(',');
+    int end = entry.indexOf('}');
+    if (end >= 0) entry.remove(end);
+    entry.trim();
+    if (entry == "true") inv = true;
+    else if (entry == "false") inv = false;
+    else return fail();
+  }
+
+  f.seek(0);
+  // WLEDMM strict 0/1 mask array, use streaming parse (ledmap-style)
+  if (!f.find("\"mask\":")) return fail();
+  f.readBytesUntil('[', buf, sizeof(buf)-1);
+
+  size_t i = 0;
+  bool endOfArray = false;
+  while (f.available() && !endOfArray) {
+    String entry = f.readStringUntil(',');
+    int bracket = entry.indexOf(']');
+    if (bracket >= 0) {
+      entry.remove(bracket);
+      endOfArray = true;
+    }
+    entry.trim();
+    if (entry.length() == 0) return fail();
+    if (i >= bitLen) return fail(); // WLEDMM guard against overflow
+    if (entry == "1") bits[i >> 3] |= (0x01U << (i & 7)); // WLEDMM set bit (pixel i) in packed mask
+    else if (entry != "0") return fail();
+    i++;
+    if (i > bitLen) return fail();
+  }
+
+  if (!endOfArray || i != bitLen) return fail();
+
   bool ok = false;
-
-  do {
-    char buf[32] = { '\0' };
-    if (!f.find("\"w\":")) break;
-    f.readBytesUntil('\n', buf, sizeof(buf)-1);
-    w = atoi(cleanUpName(buf));
-
-    f.seek(0);
-    if (!f.find("\"h\":")) break;
-    memset(buf, 0, sizeof(buf));
-    f.readBytesUntil('\n', buf, sizeof(buf)-1);
-    h = atoi(cleanUpName(buf));
-
-    if (w == 0 || h == 0) break;
-    bitLen = size_t(w) * size_t(h);
-    if (bitLen == 0 || bitLen > (size_t(Segment::maxWidth) * size_t(Segment::maxHeight))) break;
-
-    // WLEDMM pack 8 pixels per byte, LSB-first (bit 0 = pixel 0)
-    size_t byteLen = (bitLen + 7) / 8;
-    bits = (uint8_t*)calloc(byteLen, 1);
-    if (!bits) {
-      errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
-      break;
-    }
-
-    f.seek(0);
-    // WLEDMM strict "inv" boolean parsing (true/false only)
-    if (f.find("\"inv\":")) {
-      String entry = f.readStringUntil(',');
-      int end = entry.indexOf('}');
-      if (end >= 0) entry.remove(end);
-      entry.trim();
-      if (entry == "true") inv = true;
-      else if (entry == "false") inv = false;
-      else break;
-    }
-
-    f.seek(0);
-    // WLEDMM strict 0/1 mask array, use streaming parse (ledmap-style)
-    if (!f.find("\"mask\":")) break;
-    f.readBytesUntil('[', buf, sizeof(buf)-1);
-
-    size_t i = 0;
-    bool endOfArray = false;
-    bool parsedOk = true;
-    do {
-      String entry = f.readStringUntil(',');
-      int bracket = entry.indexOf(']');
-      if (bracket >= 0) {
-        entry.remove(bracket);
-        endOfArray = true;
-      }
-      entry.trim();
-      if (entry.length() == 0) { parsedOk = false; break; }
-      if (i >= bitLen) { parsedOk = false; break; } // WLEDMM guard against overflow
-      if (entry == "1") bits[i >> 3] |= (0x01U << (i & 7)); // WLEDMM set bit (pixel i) in packed mask
-      else if (entry != "0") { parsedOk = false; break; }
-      i++;
-      if (i > bitLen) { parsedOk = false; break; }
-    } while (f.available() && !endOfArray);
-
-    if (!parsedOk || !endOfArray || i != bitLen) break;
-
+  strip_wait_until_idle("Segment::setMask"); // WLEDMM avoid swapping while renderer is active
+  // WLEDMM clear segment before enabling mask to avoid stale pixels outside the mask
+  if (esp32SemTake(busDrawMux, 250) == pdTRUE) {
+    fill(BLACK);
+    esp32SemGive(busDrawMux);
+  } else {
+    DEBUG_PRINTLN(F("Segment::setMask: Failed to acquire busDrawMux, skipping pre-mask clear."));
+  }
+  if (esp32SemTake(segmentMux, 2100) == pdTRUE) { // WLEDMM serialize mask pointer changes with renderer
+    _mask = bits;
+    bits = nullptr;
+    _maskW = w;
+    _maskH = h;
+    _maskLen = bitLen;
+    maskInvert = inv;
+    _maskValid = (_maskW == calc_virtualWidth() && _maskH == calc_virtualHeight());
+    maskId = id; // WLEDMM commit mask id only on success
+    esp32SemGive(segmentMux);
     ok = true;
-  } while (false);
-
-  if (ok) {
-    strip_wait_until_idle("Segment::setMask"); // WLEDMM avoid swapping while renderer is active
-    // WLEDMM clear segment before enabling mask to avoid stale pixels outside the mask
-    if (esp32SemTake(busDrawMux, 250) == pdTRUE) {
-      fill(BLACK);
-      esp32SemGive(busDrawMux);
-    } else {
-      DEBUG_PRINTLN(F("Segment::setMask: Failed to acquire busDrawMux, skipping pre-mask clear."));
-    }
-    if (esp32SemTake(segmentMux, 2100) == pdTRUE) { // WLEDMM serialize mask pointer changes with renderer
-      _mask = bits;
-      bits = nullptr;
-      _maskW = w;
-      _maskH = h;
-      _maskLen = bitLen;
-      maskInvert = inv;
-      _maskValid = (_maskW == calc_virtualWidth() && _maskH == calc_virtualHeight());
-      maskId = id; // WLEDMM commit mask id only on success
-      esp32SemGive(segmentMux);
-    } else {
-      DEBUG_PRINTLN(F("Segment::setMask: Failed to acquire segmentMux, skipping mask update."));
-      ok = false;
-    }
+  } else {
+    DEBUG_PRINTLN(F("Segment::setMask: Failed to acquire segmentMux, skipping mask update."));
   }
 
   if (!ok && bits) free(bits);
