@@ -261,6 +261,13 @@ bool Segment::setMask(uint8_t id) { // WLEDMM
 
   if (ok) {
     strip_wait_until_idle("Segment::setMask"); // WLEDMM avoid swapping while renderer is active
+    // WLEDMM clear segment before enabling mask to avoid stale pixels outside the mask
+    if (esp32SemTake(busDrawMux, 250) == pdTRUE) {
+      fill(BLACK);
+      esp32SemGive(busDrawMux);
+    } else {
+      DEBUG_PRINTLN(F("Segment::setMask: Failed to acquire busDrawMux, skipping pre-mask clear."));
+    }
     if (esp32SemTake(segmentMux, 2100) == pdTRUE) { // WLEDMM serialize mask pointer changes with renderer
       _mask = bits;
       bits = nullptr;
