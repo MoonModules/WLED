@@ -26,7 +26,7 @@ var ws, cpick, ranges;
 var cfg = {
 	theme:{base:"dark", bg:{url:""}, alpha:{bg:0.6,tab:0.8}, color:{bg:""}},
 	comp :{colors:{picker: true, rgb: false, quick: true, hex: false},
-          labels:true, pcmbot:false, pid:true, seglen:false, segpwr:false, segexp:true,
+          labels:true, pcmbot:false, pid:true, seglen:false, segpwr:false, segexp:true, 
           css:true, hdays:false, fxdef:true, fxdef2:false} //WLEDMM segexp true as default, fxdef2 added
 };
 var hol = [
@@ -722,13 +722,13 @@ ${inforow("Average FPS",i.leds.fps)}
 ${inforow("Signal strength",i.wifi.signal +"% ("+ i.wifi.rssi, " dBm)")}
 ${inforow("MAC address",i.mac)}
 ${inforow("Uptime",getRuntimeStr(i.uptime))}
-<!-- WLEDMM begin-->
+<!-- WLEDMM begin--> 
 <tr><td colspan=2><hr style="height:2px;border-width:0;color:SeaGreen;background-color:SeaGreen"></td></tr>
 ${inforow("Filesystem",i.fs.u + "/" + i.fs.t + " kB, " +Math.round(i.fs.u*100/i.fs.t) + "%")}
 ${theap>0?inforow("Heap ☾",((i.totalheap-i.freeheap)/1000).toFixed(0)+"/"+theap.toFixed(0)+" kB",", "+Math.round((i.totalheap-i.freeheap)/(10*theap))+"%"):inforow("Free heap",heap," kB")}  <!--WLEDMM different for 8266-->
-${i.minfreeheap?inforow("Max used heap ☾",((i.totalheap-i.minfreeheap)/1000).toFixed(0)+" kB",", "+Math.round((i.totalheap-i.minfreeheap)/(10*theap))+"%"):""}
-${i.psram?inforow("PSRAM ☾",((i.tpsram-i.psram)/1024).toFixed(0)+"/"+(i.tpsram/1024).toFixed(0)+" kB",", "+((i.tpsram-i.psram)*100.0/i.tpsram).toFixed(1)+"%"):""}
-${i.psusedram?inforow("Max used PSRAM ☾",((i.tpsram-i.psusedram)/1024).toFixed(0)+" kB",", "+((i.tpsram-i.psusedram)*100.0/i.tpsram).toFixed(1)+"%"):""}
+${i.minfreeheap?inforow("Max used heap ☾",((i.totalheap-i.minfreeheap)/1000).toFixed(0)+" kB",", "+Math.round((i.totalheap-i.minfreeheap)/(10*theap))+"%"):""} 
+${i.psram?inforow("PSRAM ☾",((i.tpsram-i.psram)/1024).toFixed(0)+"/"+(i.tpsram/1024).toFixed(0)+" kB",", "+((i.tpsram-i.psram)*100.0/i.tpsram).toFixed(1)+"%"):""} 
+${i.psusedram?inforow("Max used PSRAM ☾",((i.tpsram-i.psusedram)/1024).toFixed(0)+" kB",", "+((i.tpsram-i.psusedram)*100.0/i.tpsram).toFixed(1)+"%"):""} 
 ${i.freestack?inforow("Free stack ☾",(i.freestack/1000).toFixed(3)," kB"):""} <!--WLEDMM-->
 <tr><td colspan=2><hr style="height:1px;border-width:0;color:SeaGreen;background-color:SeaGreen"></td></tr>
 ${i.tpsram?inforow("PSRAM " + (i.psrmode?"("+i.psrmode+" mode) ":"") + " ☾",(i.tpsram/1024/1024).toFixed(0)," MB"):inforow("NO PSRAM found.", "")}
@@ -740,7 +740,7 @@ ${i.repo?inforow("Github",i.repo):""}
 ${i.e32code?inforow("Last ESP Restart ☾",i.e32code+" "+i.e32text):""}
 ${i.e32core0code?inforow("Core0 rst reason ☾",i.e32core0code, " "+i.e32core0text):""}
 ${i.e32core1code?inforow("Core1 rst reason ☾",i.e32core1code, " "+i.e32core1text):""}
-<!-- WLEDMM end-->
+<!-- WLEDMM end--> 
 </table>`;
 	gId('kv').innerHTML = cn;
 	//  update all sliders in Info
@@ -1298,7 +1298,7 @@ function populateNodes(i,n)
 				gId(`scale-bri${nodeNr}`).innerText = cfg.light["scale-bri"];
 				gId(`gcc${nodeNr}`).innerText = cfg.light.gc.col  > 1;
 				gId(`fps${nodeNr}`).innerText = cfg.hw.led.fps;
-
+				
 				//if the node has a matrix, show matrix info
 				if (cfg.hw.led.matrix) {
 					gId(`pnl0${nodeNr}`).innerText = showPanel(cfg.hw.led.matrix.panels[0]); //show the first panel
@@ -1309,11 +1309,11 @@ function populateNodes(i,n)
 						let panelIndex = 0; //loop over panels
 						for (let i=0; i<nnodes; i++) { //loop over all nodes found
 							if (panelIndex < cfg.hw.led.matrix.panels.length && n.nodes[i].ip != lastinfo.ip) { //loop over panels of self: assign each panel to a different node
-
+								
 								let panelX = cfg.hw.led.matrix.panels[panelIndex];
-
+								
 								gId(`pnlX${i}`).innerText = showPanel(panelX);
-
+								
 								//store data
 								//nodesData[i] does not exist if not all fetches done
 								if (!nodesData[i]) nodesData[i] = {};
@@ -1349,7 +1349,7 @@ function populateNodes(i,n)
 
 								panelIndex++;
 							}
-							else
+							else 
 								gId(`pnlX${i}`).innerText = "";
 						}
 					}
@@ -1362,7 +1362,7 @@ function populateNodes(i,n)
 		}, function(nodeNr, text) {
 			console.log("json error", nodeNr, ip, n.nodes[nodeNr].name, text);
 			callback(nodeNr); //also callback on error
-		});
+		}); 
 	} //fetchInfoAndCfg
 
 	if (n.nodes) {
@@ -1371,7 +1371,7 @@ function populateNodes(i,n)
 		thisNode.name = i.name;
 		thisNode.ip = i.ip;
 		n.nodes.push(thisNode);
-
+		
 		n.nodes.sort((a,b) => (a.name).localeCompare(b.name)); //alphabetic on name
 		// console.log("populateNodes",i,n);
 
@@ -1681,19 +1681,19 @@ function drawSegmentView() {
 	function post() {
 		for (let p=0; p<gId("segcont").children.length; p++) {
 			if (!initSegmentVars(p)) break;
-
+			
 			if (gId("segcont").children.length>1) { //only show number and name if more than one segment
-				ctx.font = '40px Arial';
+				ctx.font = '40px Arial'; 
 				ctx.fillStyle = "orange";
 				ctx.fillText(p, topLeftX + pw/2*ppL - 10, topLeftY + ph/2*ppL + 10);
 
 				//show name of fx
-				ctx.font = '20px Arial';
+				ctx.font = '20px Arial'; 
 				ctx.fillStyle = "white";
 				var name = eJson.find((o)=>{return o.id==fx}).name;
 				ctx.fillText(name, topLeftX+10, topLeftY + ph*ppL - 10);
 			}
-		}
+		}	
 	}
 
 	//draw the ledmap
@@ -1721,7 +1721,7 @@ function drawSegmentView() {
 			for (let i=0;i<customMappingTable.length;i++) {
 				let mapIndex = customMappingTable[i];
 				if (mapIndex != -1) {
-					ctx.font = parseInt(ppL/3) + 'px Arial';
+					ctx.font = parseInt(ppL/3) + 'px Arial'; 
 					ctx.fillStyle = "white";
 					if (lastinfo.outputs!=null) {
 						var ledcount = 0;
@@ -3382,7 +3382,7 @@ function genPresets()
 				if (!defaultString.includes("o2")) defaultString += ',"o2":0'; //Check 2
 				if (!defaultString.includes("o3")) defaultString += ',"o3":0'; //Check 3
 				if (!defaultString.includes("pal")) defaultString += ',"pal":11'; //Temporary for deterministic effects test: Set to 11/Raibow instead of 1/Random smooth palette (if not set different)
-				if (!defaultString.includes("m12") && m.includes("1") && !m.includes("1.5") && !m.includes("12"))
+				if (!defaultString.includes("m12") && m.includes("1") && !m.includes("1.5") && !m.includes("12")) 
 					defaultString += ',"rev":true,"mi":true,"rY":true,"mY":true,"m12":2'; //Arc expansion
 				else {
 					if (!defaultString.includes("rev")) defaultString += ',"rev":false';
@@ -3806,24 +3806,24 @@ function checkVersionUpgrade(info) {
 function showVersionUpgradePrompt(info, oldVersion, newVersion) {
 	// Determine if this is an install or upgrade
 	const isInstall = !oldVersion;
-
+	
 	// Create overlay and dialog
 	const overlay = d.createElement('div');
 	overlay.id = 'versionUpgradeOverlay';
 	overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
-
+	
 	const dialog = d.createElement('div');
 	dialog.style.cssText = 'background:var(--c-1);border-radius:10px;padding:25px;max-width:500px;margin:20px;box-shadow:0 4px 6px rgba(0,0,0,0.3);';
-
+	
 	// Build contextual message based on install vs upgrade
-	const title = isInstall
-		? '🎉 Thank you for installing WLED-MM!'
+	const title = isInstall 
+		? '🎉 Thank you for installing WLED-MM!' 
 		: '🎉 WLED-MM Upgrade Detected!';
-
+	
 	const description = isInstall
 		? `You are now running WLED-MM <strong>${newVersion}</strong>.`
 		: `Your WLED-MM has been upgraded from <strong>${oldVersion}</strong> to <strong>${newVersion}</strong>.`;
-
+	
 	const question = 'Would you like to help the WLED development team by reporting your installation? This helps us understand what hardware and versions are being used.'
 
 	dialog.innerHTML = `
@@ -3836,21 +3836,21 @@ function showVersionUpgradePrompt(info, oldVersion, newVersion) {
 			<button id="versionReportNever" class="btn">Never Ask</button>
 		</div>
 	`;
-
+	
 	overlay.appendChild(dialog);
 	d.body.appendChild(overlay);
-
+	
 	// Add event listeners
 	gId('versionReportYes').addEventListener('click', () => {
 		reportUpgradeEvent(oldVersion, newVersion);
 		d.body.removeChild(overlay);
 	});
-
+	
 	gId('versionReportNo').addEventListener('click', () => {
 		// Don't update version, will ask again on next load
 		d.body.removeChild(overlay);
 	});
-
+	
 	gId('versionReportNever').addEventListener('click', () => {
 		updateVersionInfo(newVersion, true);
 		d.body.removeChild(overlay);
@@ -3860,7 +3860,7 @@ function showVersionUpgradePrompt(info, oldVersion, newVersion) {
 
 function reportUpgradeEvent(oldVersion, newVersion) {
 	showToast('Reporting upgrade...');
-
+	
 	// Fetch fresh data from /json/info endpoint as requested
 	fetch('/json/info', {
 		method: 'get'
@@ -3918,12 +3918,12 @@ function updateVersionInfo(version, neverAsk) {
 		version: version,
 		neverAsk: neverAsk
 	};
-
+	
 	// Create a Blob with JSON content and use /upload endpoint
 	const blob = new Blob([JSON.stringify(versionInfo)], { type: 'application/json' });
 	const formData = new FormData();
 	formData.append('data', blob, 'version-info.json');
-
+	
 	fetch('/upload', {
 		method: 'POST',
 		body: formData
