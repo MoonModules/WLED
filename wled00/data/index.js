@@ -846,7 +846,6 @@ function populateSegments(s)
 					`<input type="checkbox" id="seg${i}minv" onchange="setMaskInv(${i})" ${maskInv?"checked":""}>`+
 					`<span class="checkmark"></span>`+
 				`</label>`;
-				maskInfo = `<div class="lbl-l">Mask clips output ☾; bounds and mapping still apply.</div>`; // WLEDMM
 			}
 		}
 		// WLEDMM end: segment mask UI
@@ -903,7 +902,7 @@ function populateSegments(s)
 					`<div class="h bp" id="seg${i}len"></div>`+
 					(!isMSeg ? rvXck : '') +
 					(isMSeg&&stoY-staY>1&&stoX-staX>1 ? map2D : '') +
-					maskSel + maskInvSel + maskInfo + // WLEDMM
+					maskSel + maskInvSel + // WLEDMM
 					(s.AudioReactive && s.AudioReactive.on ? "" : sndSim) +
 					(s.ARTIFX && s.ARTIFX.on && fxName.includes("ARTI-FX") ? cusEff : "") + // <!--WLEDMM-->
 					`<label class="check revchkl" id="seg${i}lbtm">`+
