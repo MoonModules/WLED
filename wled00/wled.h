@@ -8,7 +8,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef WLED_BUILD_VERSION // WLEDMM allow override by nightly build script
-  #define VERSION 2601151
+  #define VERSION 2601201
 #else
   #define VERSION WLED_BUILD_VERSION
 #endif
