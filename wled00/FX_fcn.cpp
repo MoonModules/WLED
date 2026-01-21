@@ -171,11 +171,15 @@ bool Segment::setMask(uint8_t id) { // WLEDMM
   snprintf_P(fileName, sizeof(fileName), PSTR("/segmask%d.json"), id);
   if (!WLED_FS.exists(fileName)) {
     USER_PRINTF("Segment mask missing: %s\n", fileName);
+    maskId = 0; // WLEDMM avoid repeated reload attempts
     return false;
   }
 
   File f = WLED_FS.open(fileName, "r");
-  if (!f) return false;
+  if (!f) {
+    maskId = 0; // WLEDMM avoid repeated reload attempts
+    return false;
+  }
 
   uint16_t w = 0;
   uint16_t h = 0;
@@ -257,6 +261,7 @@ bool Segment::setMask(uint8_t id) { // WLEDMM
   } while (false);
 
   if (!ok && bits) free(bits);
+  if (!ok) maskId = 0; // WLEDMM avoid repeated reload attempts
   f.close();
   return ok;
 }
