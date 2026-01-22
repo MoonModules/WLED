@@ -100,6 +100,8 @@ Segment::Segment(const Segment &orig) {
   _maskW = 0; // WLEDMM
   _maskH = 0; // WLEDMM
   _maskValid = false; // WLEDMM
+  maskId = 0; // WLEDMM keep id in sync with buffer
+  maskInvert = false; // WLEDMM keep invert in sync with buffer
   if (ledsrgb && !Segment::_globalLeds) {ledsrgb = nullptr; ledsrgbSize = 0;}  // WLEDMM
   if (orig.name) { name = new(std::nothrow) char[strlen(orig.name)+1]; if (name) strcpy(name, orig.name); }
   if (orig.data) { if (allocateData(orig._dataLen, true)) memcpy(data, orig.data, orig._dataLen); }
@@ -349,6 +351,8 @@ Segment& Segment::operator= (const Segment &orig) {
     _maskW = 0; // WLEDMM
     _maskH = 0; // WLEDMM
     _maskValid = false; // WLEDMM
+    maskId = 0; // WLEDMM keep id in sync with buffer
+    maskInvert = false; // WLEDMM keep invert in sync with buffer
     //if (!Segment::_globalLeds) {ledsrgb = oldLeds; ledsrgbSize = oldLedsSize;}; // WLEDMM reuse leds instead of ledsrgb = nullptr;
     if (!Segment::_globalLeds) {ledsrgb = nullptr; ledsrgbSize = 0;};             // WLEDMM copy has no buffers (yet)
     // copy source data
