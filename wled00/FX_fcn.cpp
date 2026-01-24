@@ -327,7 +327,11 @@ Segment& Segment::operator= (const Segment &orig) {
     transitional = false; // copied segment cannot be in transition
     if (name) delete[] name;
     if (_t)   delete _t;
-    clearMask(); // WLEDMM
+    if (_mask) { // WLEDMM free mask buffer directly to avoid deadlocks
+      strip_wait_until_idle("Segment::operator= mask cleanup"); // WLEDMM avoid freeing while renderer is active
+      free(_mask);
+      _mask = nullptr;
+    }
     CRGB* oldLeds = ledsrgb;
     size_t oldLedsSize = ledsrgbSize;
     if (ledsrgb && !Segment::_globalLeds) free(ledsrgb);
@@ -373,7 +377,11 @@ Segment& Segment::operator= (Segment &&orig) noexcept {
     transitional = false; // just temporary
     if (name) { delete[] name; name = nullptr; } // free old name
     deallocateData(); // free old runtime data
-    clearMask(); // WLEDMM
+    if (_mask) { // WLEDMM free mask buffer directly to avoid deadlocks
+      strip_wait_until_idle("Segment::operator= move mask cleanup"); // WLEDMM avoid freeing while renderer is active
+      free(_mask);
+      _mask = nullptr;
+    }
     if (_t) { delete _t; _t = nullptr; }
     if (ledsrgb && !Segment::_globalLeds) free(ledsrgb); //WLEDMM: not needed anymore as we will use leds from copy. no need to nullify ledsrgb as it gets new value in memcpy
 
