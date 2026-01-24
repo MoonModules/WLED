@@ -1177,7 +1177,7 @@ void IRAM_ATTR_YN WLED_O2_ATTR __attribute__((hot)) Segment::setPixelColor(int i
   i &= 0xFFFF;
   if (unsigned(i) >= virtualLength()) return;  // if pixel would fall out of segment just exit //WLEDMM unsigned(i)>SEGLEN also catches "i<0"
 
-  if (!is2D() && !maskAllows(i)) return; // WLEDMM mask gate for 1D segments
+  if (_maskValid && !maskAllows(i)) return; // WLEDMM mask gate for 1D segments
 
 #ifndef WLED_DISABLE_2D
   if (is2D()) {

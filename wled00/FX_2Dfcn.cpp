@@ -254,7 +254,7 @@ void Segment::startFrame(void) {
 // * expects scaled color (final brightness) as additional input parameter, plus segment  virtualWidth() and virtualHeight()
 void IRAM_ATTR __attribute__((hot)) Segment::setPixelColorXY_fast(int x, int y, uint32_t col, uint32_t scaled_col, int cols, int rows) const //WLEDMM
 {
-  if (!maskAllowsXY(x, y)) return; // WLEDMM mask gate for 2D pixels
+  if (_maskValid && !maskAllowsXY(x, y)) return; // WLEDMM mask gate for 2D pixels
   unsigned i = UINT_MAX;
   bool sameColor = false;
   if (ledsrgb) { // WLEDMM small optimization
@@ -311,7 +311,7 @@ void IRAM_ATTR_YN Segment::setPixelColorXY(int x, int y, uint32_t col) //WLEDMM:
   const int_fast16_t rows = virtualHeight();
 
   if (x<0 || y<0 || x >= cols || y >= rows) return;  // if pixel would fall out of virtual segment just exit
-  if (!maskAllowsXY(x, y)) return; // WLEDMM mask gate for 2D pixels
+  if (_maskValid && !maskAllowsXY(x, y)) return; // WLEDMM mask gate for 2D pixels
 
   unsigned i = UINT_MAX;
   bool sameColor = false;
