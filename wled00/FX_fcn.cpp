@@ -178,7 +178,7 @@ bool Segment::setMask(uint8_t id) { // WLEDMM
   char fileName[24] = {'\0'};
   snprintf_P(fileName, sizeof(fileName), PSTR("/segmask%d.json"), id);
   if (!WLED_FS.exists(fileName)) {
-    USER_PRINTF("Segment mask missing: %s\n", fileName);
+    DEBUG_PRINTF("Segment mask missing: %s\n", fileName);
     maskId = 0; // WLEDMM avoid repeated reload attempts
     return false;
   }
