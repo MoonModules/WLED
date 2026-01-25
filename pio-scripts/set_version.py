@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 
 PACKAGE_FILE = "package.json"
 
-# Read version from package.json
 with open(PACKAGE_FILE, "r") as package:
     version = json.load(package)["version"]
 
@@ -20,8 +19,8 @@ if os.environ.get('WLED_NIGHTLY_BUILD') == 'true':
     if "-mdev" in version:
         version = version.replace("-mdev", "-nightly")
     elif "-" in version:
-        # Has some other tag, replace it with -nightly
-        version = version.split("-")[0] + "-nightly"
+        # Replace any existing tag with -nightly (handles multiple hyphens correctly)
+        version = version.rsplit("-", 1)[0] + "-nightly"
     else:
         # No tag present, append -nightly
         version = version + "-nightly"
