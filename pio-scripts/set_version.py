@@ -15,10 +15,8 @@ if os.environ.get('WLED_NIGHTLY_BUILD') == 'true':
     env.Append(BUILD_FLAGS=[f"-DWLED_BUILD_VERSION={version_code}"])
     print(f"Nightly build: Setting VERSION to {version_code}")
     
-    # Update version tag: replace "-mdev" with "-nightly" or append "-nightly" if no tag
-    if "-mdev" in version:
-        version = version.replace("-mdev", "-nightly")
-    elif "-" in version:
+    # Update version tag: replace existing tag with "-nightly" or append "-nightly" if no tag
+    if "-" in version:
         # Replace any existing tag with -nightly (handles multiple hyphens correctly)
         version = version.rsplit("-", 1)[0] + "-nightly"
     else:
