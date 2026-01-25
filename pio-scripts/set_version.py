@@ -9,7 +9,7 @@ with open(PACKAGE_FILE, "r") as package:
     version = json.load(package)["version"]
 
 # Handle nightly build
-if os.environ.get('WLED_NIGHTLY_BUILD') == 'true':
+if os.environ.get('WLED_NIGHTLY_BUILD', '').lower() in ('true', '1', 'yes'):
     # VERSION format: yymmddb (b = build number, 0 for nightly)
     version_code = datetime.now(timezone.utc).strftime("%y%m%d") + "0"
     env.Append(BUILD_FLAGS=[f"-DWLED_BUILD_VERSION={version_code}"])
