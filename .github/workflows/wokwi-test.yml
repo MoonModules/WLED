@@ -183,7 +183,11 @@ jobs:
           elapsed=0
           while [ $elapsed -lt $max_wait ]; do
             if curl -s -f http://localhost:9080 > /dev/null 2>&1; then
-              echo "✅ Web server is ready after $elapsed seconds!"
+              echo "✅ Web server is ready on port 9080 after $elapsed seconds!"
+              break
+            fi
+            if curl -s -f http://localhost:8080 > /dev/null 2>&1; then
+              echo "✅ Web server is ready on port 8080 after $elapsed seconds!"
               break
             fi
             if ! kill -0 $WOKWI_PID 2>/dev/null; then

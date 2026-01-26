@@ -18,7 +18,7 @@ fi
 
 echo "Starting Wokwi simulator..."
 echo "Timeout: ${WOKWI_TIMEOUT} seconds"
-echo "Web server will be available at http://localhost:9080"
+echo "Web server will be available at http://localhost:8080"
 echo "Serial output will be displayed below"
 echo "=================================="
 echo ""

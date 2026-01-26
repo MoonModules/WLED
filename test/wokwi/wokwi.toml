@@ -17,5 +17,5 @@ file = "partitions.bin"
 
 [[net.forward]]
 # Forward the web server port
-from = "localhost:9080"
+from = "localhost:8080"
 to = "target:80"
