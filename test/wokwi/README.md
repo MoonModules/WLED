@@ -220,7 +220,7 @@ To add more tests:
 
 ### Web server not accessible
 - Wait 30-60 seconds for the ESP32 to boot and start WiFi
-- Check that port 8080 is not already in use
+- Check that port 9080 is not already in use
 - Verify port forwarding in wokwi.toml
 
 ### Tests fail

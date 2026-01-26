@@ -182,7 +182,7 @@ jobs:
           max_wait=240
           elapsed=0
           while [ $elapsed -lt $max_wait ]; do
-            if curl -s -f http://localhost:8080 > /dev/null 2>&1; then
+            if curl -s -f http://localhost:9080 > /dev/null 2>&1; then
               echo "✅ Web server is ready after $elapsed seconds!"
               break
             fi
