@@ -9,11 +9,15 @@
       "top": 0,
       "left": 0,
       "attrs": {}
-    }
+    },
+    { "type": "wokwi-neopixel", "id": "neopixel", "top": 20, "left": 219, "attrs": {} }
   ],
   "connections": [
     [ "esp:TX0", "$serialMonitor:RX", "", [] ],
-    [ "esp:RX0", "$serialMonitor:TX", "", [] ]
+    [ "esp:RX0", "$serialMonitor:TX", "", [] ],
+    [ "esp:GND.1", "neopixel:VSS", "black", [ "h0" ] ],
+    [ "esp:D4", "neopixel:DIN", "green", [ "h133.53", "v-143.57" ] ],
+    [ "esp:VIN", "neopixel:VDD", "red", [ "h-10.83", "v-197.43" ] ]
   ],
   "dependencies": {},
   "serialMonitor": {
