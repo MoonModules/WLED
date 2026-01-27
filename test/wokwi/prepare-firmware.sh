@@ -36,23 +36,24 @@ echo "Searching for required files in build directory..."
 echo ""
 
 # Function to find file with multiple possible locations
+# Debug output goes to stderr, only the file path goes to stdout
 find_file() {
     local file_desc=$1
     shift
     local found_file=""
     
-    echo "Looking for $file_desc:"
+    echo "Looking for $file_desc:" >&2
     for path in "$@"; do
-        echo "  Checking: $path"
+        echo "  Checking: $path" >&2
         if [ -f "$path" ]; then
             found_file="$path"
-            echo "  ✓ Found at: $path"
+            echo "  ✓ Found at: $path" >&2
             echo "$found_file"
             return 0
         fi
     done
     
-    echo "  ❌ Not found in any expected location"
+    echo "  ❌ Not found in any expected location" >&2
     return 1
 }
 
