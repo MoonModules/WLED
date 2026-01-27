@@ -193,16 +193,18 @@ jobs:
           # Export the token so it's available to child processes
           export WOKWI_CLI_TOKEN
           
-          # Start simulator in background with a 180 second timeout
+          # Start simulator in background with a 90 second timeout
           # Wokwi CLI outputs to stderr, serial output goes to stdout
-          WOKWI_TIMEOUT=300 ./run-simulator.sh >logs/serial.log 2>&1 &
+          ## WOKWI_TIMEOUT=300 ./run-simulator.sh >logs/serial.log 2>&1 &
+          WOKWI_TIMEOUT=90 ./run-simulator.sh >logs/serial.log 2>&1 &
           WOKWI_PID=$!
           echo "WOKWI_PID=$WOKWI_PID" >> $GITHUB_ENV
           echo "Started Wokwi simulator with PID $WOKWI_PID"
           
           # Wait for simulator to start and web server to be ready
           echo "Waiting for WLED web server to be ready..."
-          max_wait=240
+          #max_wait=240
+          max_wait=30
           elapsed=0
           while [ $elapsed -lt $max_wait ]; do
             if curl -s -f http://localhost:9080 > /dev/null 2>&1; then

@@ -733,7 +733,8 @@ void WLED::setup()
   fsinit = WLED_FS.begin();
 #endif
   if (!fsinit) {
-    USER_PRINTLN(F("Mount FS failed!"));  // WLEDMM
+    USER_PRINT(F("Mount FS failed!"));  // WLEDMM
+    USER_PRINTF(" errno=%d (%s)\n", errno, strerror(errno));
     errorFlag = ERR_FS_BEGIN;
   } else {
       USER_PRINTLN(F("Mount FS succeeded.")); // WLEDMM
@@ -1255,6 +1256,7 @@ void WLED::initInterfaces()
     MDNS.addServiceTxt("wled", "tcp", "mac", escapedMac.c_str());
   }
   server.begin();
+  DEBUG_PRINTLN("Web Server Started (sta mode)");
 
   if (udpPort > 0 && udpPort != ntpLocalPort) {
     udpConnected = notifierUdp.begin(udpPort);
