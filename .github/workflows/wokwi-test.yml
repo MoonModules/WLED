@@ -204,7 +204,7 @@ jobs:
           # Wait for simulator to start and web server to be ready
           echo "Waiting for WLED web server to be ready..."
           #max_wait=240
-          max_wait=30
+          max_wait=50
           elapsed=0
           while [ $elapsed -lt $max_wait ]; do
             if curl -s -f http://localhost:9080 > /dev/null 2>&1; then
