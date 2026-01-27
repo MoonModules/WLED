@@ -361,6 +361,20 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   seg.check2 = elem["o2"] | seg.check2;
   seg.check3 = elem["o3"] | seg.check3;
 
+  if (elem.containsKey("mask")) { // WLEDMM segment mask id
+    int maskVal = elem["mask"] | 0;
+    if (maskVal < 0) maskVal = 0;
+    uint8_t maskId = constrain(maskVal, 0, WLED_MAX_SEGMASKS-1);
+    if (maskId == 0) { // WLEDMM explicit clear path
+      if (seg.hasMask()) seg.clearMask();
+    } else if (maskId != seg.maskId || !seg.hasMask()) {
+      seg.setMask(maskId);
+    }
+  }
+  if (elem.containsKey("minv")) { // WLEDMM segment mask invert
+    seg.maskInvert = elem["minv"] | seg.maskInvert;
+  }
+
   JsonArray iarr = elem[F("i")]; //set individual LEDs
   if (!iarr.isNull()) {
     uint8_t oldMap1D2D = seg.map1D2D;
@@ -758,6 +772,8 @@ void serializeSegment(JsonObject& root, Segment& seg, byte id, bool forPreset, b
   root["o3"]  = seg.check3;
   root["si"]  = seg.soundSim;
   root["m12"] = seg.map1D2D;
+  root["mask"] = seg.maskId;     // WLEDMM segment mask id
+  root["minv"] = seg.maskInvert; // WLEDMM segment mask invert
 }
 
 void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segmentBounds, bool selectedSegmentsOnly)
@@ -1058,6 +1074,14 @@ void serializeInfo(JsonObject root)
       #ifndef ESP8266
       if (i && ledmapNames[i-1]) ledmaps0["n"] = ledmapNames[i-1];
       #endif
+    }
+  }
+
+  JsonArray masks = root.createNestedArray(F("masks")); // WLEDMM segment mask files
+  for (size_t i=1; i<WLED_MAX_SEGMASKS; i++) {
+    if ((segMasks>>i) & 0x00000001U) {
+      JsonObject masks0 = masks.createNestedObject();
+      masks0["id"] = i;
     }
   }
 

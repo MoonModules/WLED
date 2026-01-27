@@ -454,6 +454,8 @@ typedef struct Segment {
     uint16_t startY;  // start Y coodrinate 2D (top); there should be no more than 255 rows, but we cannot be sure.
     uint16_t stopY;   // stop Y coordinate 2D (bottom); there should be no more than 255 rows, but we cannot be sure.
     char *name = nullptr; // WLEDMM initialize to nullptr
+    uint8_t maskId = 0;   // WLEDMM segment mask ID (0 = none)
+    bool maskInvert = false; // WLEDMM invert mask bits (useful for "outside" masks)
 
     // runtime data
     unsigned long next_time;  // millis() of next update
@@ -469,6 +471,12 @@ typedef struct Segment {
     void *jMap = nullptr; //WLEDMM jMap
 
   private:
+    uint8_t *_mask = nullptr;   // WLEDMM bit-packed mask, 1 bit per virtual pixel
+    uint16_t _maskW = 0;        // WLEDMM mask width in virtual pixels
+    uint16_t _maskH = 0;        // WLEDMM mask height in virtual pixels
+    size_t _maskLen = 0;        // WLEDMM total bits (w*h), not bytes
+    bool _maskValid = false;    // WLEDMM cached dimension check vs virtual size
+
     union {
       uint8_t  _capabilities;
       struct {
@@ -563,6 +571,8 @@ typedef struct Segment {
       startY(0),
       stopY(1),
       name(nullptr),
+      maskId(0), // WLEDMM
+      maskInvert(false), // WLEDMM
       next_time(0),
       step(0),
       call(0),
@@ -571,6 +581,11 @@ typedef struct Segment {
       data(nullptr),
       ledsrgb(nullptr),
       ledsrgbSize(0), //WLEDMM
+      _mask(nullptr), // WLEDMM
+      _maskW(0), // WLEDMM
+      _maskH(0), // WLEDMM
+      _maskLen(0), // WLEDMM
+      _maskValid(false), // WLEDMM
       _capabilities(0),
       _dataLen(0),
       _t(nullptr)
@@ -612,6 +627,7 @@ typedef struct Segment {
       if ((Segment::_globalLeds == nullptr) && !strip_uses_global_leds() && (ledsrgb != nullptr)) {free(ledsrgb); ledsrgb = nullptr;}  // WLEDMM we need "!strip_uses_global_leds()" to avoid crashes (#104)
       if (name) { delete[] name; name = nullptr; }
       if (_t)   { transitional = false; delete _t; _t = nullptr; }
+      clearMask(); // WLEDMM
       deallocateData();
     }
 
@@ -666,6 +682,8 @@ typedef struct Segment {
     inline void markForReset(void) { reset = true; }  // setOption(SEG_OPTION_RESET, true)
     inline void markForBlank(void) { needsBlank = true; } // WLEDMM serialize "blank" requests, avoid parallel drawing from different task
     void setUpLeds(void);   // set up leds[] array for loseless getPixelColor()
+    bool setMask(uint8_t id); // WLEDMM
+    void clearMask(); // WLEDMM
 
     // transition functions
     void     startTransition(uint16_t dur); // transition has to start before actual segment values change
@@ -704,6 +722,23 @@ typedef struct Segment {
 #else
     inline uint16_t virtualLength(void) const {return _virtuallength;}
 #endif
+    inline bool hasMask(void) const { return _mask != nullptr; } // WLEDMM
+    inline bool maskAllows(uint16_t i) const { // WLEDMM
+      if (!_mask || !_maskValid) return true;
+      if (size_t(i) >= _maskLen) return false;
+      // WLEDMM: bit-packed mask (LSB-first): byte = i>>3, bit = i&7
+      bool bit = (_mask[i >> 3] >> (i & 7)) & 0x01;
+      return maskInvert ? !bit : bit;
+    }
+    inline bool maskAllowsXY(int x, int y) const { // WLEDMM
+      if (!_mask || !_maskValid) return true;
+      if (x < 0 || y < 0) return false;
+      size_t idx = size_t(x) + (size_t(y) * _maskW);
+      if (idx >= _maskLen) return false;
+      // WLEDMM: row-major (x + y*w), bit-packed mask (LSB-first in each byte)
+      bool bit = (_mask[idx >> 3] >> (idx & 7)) & 0x01;
+      return maskInvert ? !bit : bit;
+    }
     void setPixelColor(int n, uint32_t c); // set relative pixel within segment with color
     inline void setPixelColor(int n, byte r, byte g, byte b, byte w = 0) { setPixelColor(n, RGBW32(r,g,b,w)); } // automatically inline
     inline void setPixelColor(int n, CRGB c)                             { setPixelColor(n, uint32_t(c) & 0x00FFFFFF); } // automatically inline
@@ -1044,7 +1079,8 @@ class WS2812FX {  // 96 bytes
       fixInvalidSegments(),
       show(void),
       setTargetFps(uint8_t fps),
-      enumerateLedmaps(); //WLEDMM (from fcn_declare)
+      enumerateLedmaps(), //WLEDMM (from fcn_declare)
+      enumerateSegmasks(); // WLEDMM
 
     void setColor(uint8_t slot, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0) { setColor(slot, RGBW32(r,g,b,w)); }
     void fill(uint32_t c) { for (int i = 0; i < getLengthTotal(); i++) setPixelColor(i, c); } // fill whole strip with color (inline)

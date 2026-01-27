@@ -307,6 +307,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
   #endif
     DEBUG_PRINTLN(F("Enumerating ledmaps"));
     strip.enumerateLedmaps();
+    strip.enumerateSegmasks(); // WLEDMM
     DEBUG_PRINTLN(F("Loading custom palettes"));
     strip.loadCustomPalettes(); // (re)load all custom palettes
   }

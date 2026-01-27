@@ -95,6 +95,13 @@ Segment::Segment(const Segment &orig) {
   data = nullptr;
   _dataLen = 0;
   _t = nullptr;
+  _mask = nullptr; // WLEDMM
+  _maskLen = 0; // WLEDMM
+  _maskW = 0; // WLEDMM
+  _maskH = 0; // WLEDMM
+  _maskValid = false; // WLEDMM
+  maskId = 0; // WLEDMM keep id in sync with buffer
+  maskInvert = false; // WLEDMM keep invert in sync with buffer
   if (ledsrgb && !Segment::_globalLeds) {ledsrgb = nullptr; ledsrgbSize = 0;}  // WLEDMM
   if (orig.name) { name = new(std::nothrow) char[strlen(orig.name)+1]; if (name) strcpy(name, orig.name); }
   if (orig.data) { if (allocateData(orig._dataLen, true)) memcpy(data, orig.data, orig._dataLen); }
@@ -142,6 +149,148 @@ void Segment::allocLeds() {
   }
 }
 
+void Segment::clearMask() { // WLEDMM
+  uint8_t* oldMask = nullptr;
+  strip_wait_until_idle("Segment::clearMask"); // WLEDMM avoid swapping while renderer is active
+  if (esp32SemTake(segmentMux, 2100) == pdTRUE) { // WLEDMM serialize mask pointer changes with renderer
+    oldMask = _mask;
+    _mask = nullptr;
+    _maskLen = 0;
+    _maskW = 0;
+    _maskH = 0;
+    _maskValid = false;
+    maskId = 0; // WLEDMM keep id in sync with buffer
+    esp32SemGive(segmentMux);
+  } else {
+    DEBUG_PRINTLN(F("Segment::clearMask: Failed to acquire segmentMux, skipping clear."));
+    return;
+  }
+  if (oldMask) free(oldMask);
+}
+
+bool Segment::setMask(uint8_t id) { // WLEDMM
+  clearMask();
+  if (id >= WLED_MAX_SEGMASKS) {
+    return false;
+  }
+  if (id == 0) return true;
+
+  char fileName[24] = {'\0'};
+  snprintf_P(fileName, sizeof(fileName), PSTR("/segmask%d.json"), id);
+  if (!WLED_FS.exists(fileName)) {
+    DEBUG_PRINTF("Segment mask missing: %s\n", fileName);
+    maskId = 0; // WLEDMM avoid repeated reload attempts
+    return false;
+  }
+
+  File f = WLED_FS.open(fileName, "r");
+  if (!f) {
+    maskId = 0; // WLEDMM avoid repeated reload attempts
+    return false;
+  }
+
+  uint16_t w = 0;
+  uint16_t h = 0;
+  size_t bitLen = 0;            // WLEDMM total mask pixels (w*h)
+  uint8_t* bits = nullptr;      // WLEDMM bit-packed mask, 1 bit per pixel
+  bool inv = maskInvert;        // WLEDMM default to current invert setting
+  auto fail = [&]() -> bool {
+    if (bits) free(bits);
+    maskId = 0; // WLEDMM avoid repeated reload attempts
+    f.close();
+    return false;
+  };
+
+  char buf[32] = { '\0' };
+  if (!f.find("\"w\":")) return fail();
+  f.readBytesUntil('\n', buf, sizeof(buf)-1);
+  w = atoi(cleanUpName(buf));
+
+  f.seek(0);
+  if (!f.find("\"h\":")) return fail();
+  memset(buf, 0, sizeof(buf));
+  f.readBytesUntil('\n', buf, sizeof(buf)-1);
+  h = atoi(cleanUpName(buf));
+
+  if (w == 0 || h == 0) return fail();
+  bitLen = size_t(w) * size_t(h);
+  if (bitLen == 0 || bitLen > (size_t(Segment::maxWidth) * size_t(Segment::maxHeight))) return fail();
+
+  // WLEDMM pack 8 pixels per byte, LSB-first (bit 0 = pixel 0)
+  size_t byteLen = (bitLen + 7) / 8;
+  bits = (uint8_t*)calloc(byteLen, 1);
+  if (!bits) {
+    errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
+    return fail();
+  }
+
+  f.seek(0);
+  // WLEDMM strict "inv" boolean parsing (true/false only)
+  if (f.find("\"inv\":")) {
+    String entry = f.readStringUntil(',');
+    int end = entry.indexOf('}');
+    if (end >= 0) entry.remove(end);
+    entry.trim();
+    if (entry == "true") inv = true;
+    else if (entry == "false") inv = false;
+    else return fail();
+  }
+
+  f.seek(0);
+  // WLEDMM strict 0/1 mask array, use streaming parse (ledmap-style)
+  if (!f.find("\"mask\":")) return fail();
+  f.readBytesUntil('[', buf, sizeof(buf)-1);
+
+  size_t i = 0;
+  bool endOfArray = false;
+  while (f.available() && !endOfArray) {
+    String entry = f.readStringUntil(',');
+    int bracket = entry.indexOf(']');
+    if (bracket >= 0) {
+      entry.remove(bracket);
+      endOfArray = true;
+    }
+    entry.trim();
+    if (entry.length() == 0) return fail();
+    if (i >= bitLen) return fail(); // WLEDMM guard against overflow
+    if (entry == "1") bits[i >> 3] |= (0x01U << (i & 7)); // WLEDMM set bit (pixel i) in packed mask
+    else if (entry != "0") return fail();
+    i++;
+    if (i > bitLen) return fail();
+  }
+
+  if (!endOfArray || i != bitLen) return fail();
+
+  bool ok = false;
+  strip_wait_until_idle("Segment::setMask"); // WLEDMM avoid swapping while renderer is active
+  // WLEDMM clear segment before enabling mask to avoid stale pixels outside the mask
+  if (esp32SemTake(busDrawMux, 250) == pdTRUE) {
+    fill(BLACK);
+    esp32SemGive(busDrawMux);
+  } else {
+    DEBUG_PRINTLN(F("Segment::setMask: Failed to acquire busDrawMux, skipping pre-mask clear."));
+  }
+  if (esp32SemTake(segmentMux, 2100) == pdTRUE) { // WLEDMM serialize mask pointer changes with renderer
+    _mask = bits;
+    bits = nullptr;
+    _maskW = w;
+    _maskH = h;
+    _maskLen = bitLen;
+    maskInvert = inv;
+    _maskValid = (_maskW == calc_virtualWidth() && _maskH == calc_virtualHeight());
+    maskId = id; // WLEDMM commit mask id only on success
+    esp32SemGive(segmentMux);
+    ok = true;
+  } else {
+    DEBUG_PRINTLN(F("Segment::setMask: Failed to acquire segmentMux, skipping mask update."));
+  }
+
+  if (!ok && bits) free(bits);
+  if (!ok) maskId = 0; // WLEDMM avoid repeated reload attempts
+  f.close();
+  return ok;
+}
+
 // move constructor --> moves everything (including buffer) from orig to this
 Segment::Segment(Segment &&orig) noexcept {
   DEBUG_PRINTLN(F("-- Move segment constructor --"));
@@ -163,6 +312,11 @@ Segment::Segment(Segment &&orig) noexcept {
   orig.ledsrgb = nullptr; //WLEDMM
   orig.ledsrgbSize = 0;   // WLEDMM
   orig.jMap = nullptr;    //WLEDMM jMap
+  orig._mask = nullptr; // WLEDMM
+  orig._maskLen = 0; // WLEDMM
+  orig._maskW = 0; // WLEDMM
+  orig._maskH = 0; // WLEDMM
+  orig._maskValid = false; // WLEDMM
 }
 
 // copy assignment --> overwrite segment with orig - deletes old buffers in "this", but does not change orig!
@@ -173,6 +327,11 @@ Segment& Segment::operator= (const Segment &orig) {
     transitional = false; // copied segment cannot be in transition
     if (name) delete[] name;
     if (_t)   delete _t;
+    if (_mask) { // WLEDMM free mask buffer directly to avoid deadlocks
+      strip_wait_until_idle("Segment::operator= mask cleanup"); // WLEDMM avoid freeing while renderer is active
+      free(_mask);
+      _mask = nullptr;
+    }
     CRGB* oldLeds = ledsrgb;
     size_t oldLedsSize = ledsrgbSize;
     if (ledsrgb && !Segment::_globalLeds) free(ledsrgb);
@@ -191,6 +350,13 @@ Segment& Segment::operator= (const Segment &orig) {
     data = nullptr;
     _dataLen = 0;
     _t = nullptr;
+    _mask = nullptr; // WLEDMM
+    _maskLen = 0; // WLEDMM
+    _maskW = 0; // WLEDMM
+    _maskH = 0; // WLEDMM
+    _maskValid = false; // WLEDMM
+    maskId = 0; // WLEDMM keep id in sync with buffer
+    maskInvert = false; // WLEDMM keep invert in sync with buffer
     //if (!Segment::_globalLeds) {ledsrgb = oldLeds; ledsrgbSize = oldLedsSize;}; // WLEDMM reuse leds instead of ledsrgb = nullptr;
     if (!Segment::_globalLeds) {ledsrgb = nullptr; ledsrgbSize = 0;};             // WLEDMM copy has no buffers (yet)
     // copy source data
@@ -211,6 +377,11 @@ Segment& Segment::operator= (Segment &&orig) noexcept {
     transitional = false; // just temporary
     if (name) { delete[] name; name = nullptr; } // free old name
     deallocateData(); // free old runtime data
+    if (_mask) { // WLEDMM free mask buffer directly to avoid deadlocks
+      strip_wait_until_idle("Segment::operator= move mask cleanup"); // WLEDMM avoid freeing while renderer is active
+      free(_mask);
+      _mask = nullptr;
+    }
     if (_t) { delete _t; _t = nullptr; }
     if (ledsrgb && !Segment::_globalLeds) free(ledsrgb); //WLEDMM: not needed anymore as we will use leds from copy. no need to nullify ledsrgb as it gets new value in memcpy
 
@@ -230,6 +401,11 @@ Segment& Segment::operator= (Segment &&orig) noexcept {
     orig.ledsrgb = nullptr;  //WLEDMM: do not free as moved to here
     orig.ledsrgbSize = 0;    //WLEDMM
     orig.jMap = nullptr; //WLEDMM jMap
+    orig._mask = nullptr; // WLEDMM
+    orig._maskLen = 0; // WLEDMM
+    orig._maskW = 0; // WLEDMM
+    orig._maskH = 0; // WLEDMM
+    orig._maskValid = false; // WLEDMM
   }
   return *this;
 }
@@ -587,6 +763,14 @@ void Segment::setUp(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, uint16_t
       spacing = spc;
     }
     if (ofs < UINT16_MAX) offset = ofs;
+    // WLEDMM keep mask validity aligned with current virtual geometry
+    if (_mask) {
+      uint16_t vW = calc_virtualWidth();
+      uint16_t vH = calc_virtualHeight();
+      _maskValid = (_maskW == vW && _maskH == vH);
+    } else {
+      _maskValid = false;
+    }
     esp32SemGive(segmentMux);
   } else {
     DEBUG_PRINTLN(F("Segment::setUp: Failed to acquire segmentMux, skipping bounds update."));
@@ -1001,6 +1185,8 @@ void IRAM_ATTR_YN WLED_O2_ATTR __attribute__((hot)) Segment::setPixelColor(int i
   i &= 0xFFFF;
   if (unsigned(i) >= virtualLength()) return;  // if pixel would fall out of segment just exit //WLEDMM unsigned(i)>SEGLEN also catches "i<0"
 
+  if (_maskValid && !maskAllows(i)) return; // WLEDMM mask gate for 1D segments
+
 #ifndef WLED_DISABLE_2D
   if (is2D()) {
     uint16_t vH = virtualHeight();  // segment height in logical pixels
@@ -1397,6 +1583,8 @@ uint8_t Segment::differs(Segment& b) const {
   if (check3 != b.check3)       d |= SEG_DIFFERS_FX;
   if (startY != b.startY)       d |= SEG_DIFFERS_BOUNDS;
   if (stopY != b.stopY)         d |= SEG_DIFFERS_BOUNDS;
+  if (maskId != b.maskId)       d |= SEG_DIFFERS_OPT; // WLEDMM
+  if (maskInvert != b.maskInvert) d |= SEG_DIFFERS_OPT; // WLEDMM
 
   //bit pattern: (msb first) set:2, sound:1, mapping:3, transposed, mirrorY, reverseY, [transitional, reset,] paused, mirrored, on, reverse, [selected]
   if ((options & 0b1111111110011110U) != (b.options & 0b1111111110011110U)) d |= SEG_DIFFERS_OPT;
@@ -1791,6 +1979,16 @@ void WS2812FX::enumerateLedmaps() {
   }
 }
 
+// WLEDMM enumerate all segmaskX.json files on FS
+void WS2812FX::enumerateSegmasks() {
+  segMasks = 0;
+  for (int i = 1; i < WLED_MAX_SEGMASKS; i++) {
+    char fileName[24] = {'\0'};
+    snprintf_P(fileName, sizeof(fileName), PSTR("/segmask%d.json"), i);
+    if (WLED_FS.exists(fileName)) segMasks |= 1 << i;
+  }
+}
+
 
 //do not call this method from system context (network callback)
 void WS2812FX::finalizeInit(void)
@@ -1806,6 +2004,7 @@ void WS2812FX::finalizeInit(void)
   // if we do it in json.cpp (serializeInfo()) we are getting flashes on LEDs
   // unfortunately this means we do not get updates after uploads
   enumerateLedmaps();
+  enumerateSegmasks(); // WLEDMM
 
   _hasWhiteChannel = _isOffRefreshRequired = false;
 

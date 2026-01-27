@@ -8,7 +8,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef WLED_BUILD_VERSION // WLEDMM allow override by nightly build script
-  #define VERSION 2601151
+  #define VERSION 2601231
 #else
   #define VERSION WLED_BUILD_VERSION
 #endif
@@ -816,6 +816,7 @@ WLED_GLOBAL uint32_t ledMaps _INIT(0); // bitfield representation of available l
 #else
 WLED_GLOBAL uint16_t ledMaps _INIT(0); // bitfield representation of available ledmaps
 #endif
+WLED_GLOBAL uint32_t segMasks _INIT(0); // WLEDMM bitfield of available segment masks
 
 // Usermod manager
 WLED_GLOBAL UsermodManager usermods _INIT(UsermodManager());
