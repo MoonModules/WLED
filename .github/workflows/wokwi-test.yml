@@ -89,15 +89,15 @@ jobs:
           # Add Wokwi CLI to PATH for this step
           export PATH="$HOME/.wokwi-ci/bin:$PATH"
           
-          # Verify firmware files exist
-          echo "Checking for firmware files..."
-          if [ ! -f "firmware.bin" ]; then
-            echo "❌ ERROR: firmware.bin not found in $(pwd)"
+          # Verify combined firmware image exists (recommended approach for Wokwi)
+          echo "Checking for combined firmware image..."
+          if [ ! -f "firmware-combined.bin" ]; then
+            echo "❌ ERROR: firmware-combined.bin not found in $(pwd)"
             echo "Available files:"
             ls -la
             exit 1
           fi
-          echo "✅ firmware.bin found ($(du -h firmware.bin | cut -f1))"
+          echo "✅ firmware-combined.bin found ($(du -h firmware-combined.bin | cut -f1))"
           
           if [ -f "firmware.elf" ]; then
             echo "✅ firmware.elf found ($(du -h firmware.elf | cut -f1))"
@@ -105,37 +105,52 @@ jobs:
             echo "⚠️  firmware.elf not found (optional for simulation)"
           fi
           
-          # Verify bootloader and partitions exist (required for filesystem)
-          if [ -f "bootloader.bin" ]; then
-            echo "✅ bootloader.bin found ($(du -h bootloader.bin | cut -f1))"
-          else
-            echo "❌ ERROR: bootloader.bin not found - filesystem will not work!"
-            echo "Available files:"
-            ls -la
+          # Verify combined firmware image structure
+          echo ""
+          echo "Verifying combined firmware image structure..."
+          python3 << 'EOF'
+import sys
+try:
+    with open('firmware-combined.bin', 'rb') as f:
+        data = f.read()
+    
+    size_mb = len(data) / 1024 / 1024
+    print(f"✓ Image size: {len(data)} bytes ({size_mb:.2f} MB)")
+    
+    # Check bootloader at 0x1000
+    if len(data) > 0x1000 and data[0x1000] == 0xe9:
+        print("✓ Bootloader found at 0x1000 (magic byte: 0xe9)")
+    else:
+        print("⚠ Bootloader magic byte not found at 0x1000")
+        sys.exit(1)
+    
+    # Check partition table at 0x8000  
+    if len(data) > 0x8000 and data[0x8000:0x8002] == b'\xaa\x50':
+        print("✓ Partition table found at 0x8000 (magic: 0xaa50)")
+    else:
+        print("⚠ Partition table magic not found at 0x8000")
+        sys.exit(1)
+    
+    # Check application at 0x10000
+    if len(data) > 0x10000 and data[0x10000] == 0xe9:
+        print("✓ Application found at 0x10000 (magic byte: 0xe9)")
+    else:
+        print("⚠ Application magic byte not found at 0x10000")
+        sys.exit(1)
+    
+    print("✅ Combined firmware image structure is valid")
+    
+except Exception as e:
+    print(f"❌ ERROR verifying combined image: {e}")
+    sys.exit(1)
+EOF
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ Combined firmware image verification failed"
+            echo "Hex dump of first 256 bytes:"
+            hexdump -C firmware-combined.bin | head -16
             exit 1
           fi
-          
-          if [ -f "partitions.bin" ]; then
-            echo "✅ partitions.bin found ($(du -h partitions.bin | cut -f1))"
-          else
-            echo "❌ ERROR: partitions.bin not found - filesystem will not work!"
-            echo "Available files:"
-            ls -la
-            exit 1
-          fi
-          
-          # Verify firmware can be read and has valid ESP32 header
-          echo ""
-          echo "Firmware file details:"
-          ls -lh firmware.bin firmware.elf bootloader.bin partitions.bin 2>/dev/null || true
-          echo ""
-          echo "Firmware.bin first 64 bytes (hex):"
-          hexdump -C firmware.bin | head -4 || echo "Cannot read firmware.bin"
-          echo "Note: ESP32 firmware should start with magic byte 0xe9"
-          echo ""
-          echo "Partitions.bin first 64 bytes (hex):"
-          hexdump -C partitions.bin | head -4 || echo "Cannot read partitions.bin"
-          echo "Note: Partition table defines flash layout including SPIFFS filesystem"
           
           echo ""
           echo "Running quick boot check scenario (15 seconds)..."

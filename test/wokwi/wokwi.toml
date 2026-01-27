@@ -1,19 +1,15 @@
 [wokwi]
 version = 1
-firmware = "firmware.bin"
+# Use combined firmware image that includes bootloader, partitions, and application
+# This is the recommended approach for Wokwi to ensure proper filesystem support
+firmware = "firmware-combined.bin"
 elf = "firmware.elf"
-partitions = "partitions.bin"
 gdbServerPort=3333
 
-# Flash additional files at specific offsets
-# These are required for ESP32 to boot properly with filesystem support
-[[wokwi.flashFiles]]
-offset = 0x1000
-file = "bootloader.bin"
-
-[[wokwi.flashFiles]]
-offset = 0x8000
-file = "partitions.bin"
+# Combined firmware layout:
+#   0x1000  - bootloader
+#   0x8000  - partition table
+#   0x10000 - application
 
 [[net.forward]]
 # Forward the web server port

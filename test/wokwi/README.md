@@ -6,46 +6,55 @@ This directory contains configuration and tests for running WLED-MM in the Wokwi
 
 The Wokwi testing workflow:
 1. Builds the WLED firmware for ESP32
-2. Runs the firmware in the Wokwi ESP32 simulator
-3. Uses Playwright to test the web interface
-4. Verifies pages load without JavaScript errors
+2. Creates a combined firmware image with esptool.py
+3. Runs the firmware in the Wokwi ESP32 simulator
+4. Uses Playwright to test the web interface
+5. Verifies pages load without JavaScript errors
 
 ## Files
 
 - `diagram.json` - Wokwi hardware configuration (ESP32 DevKit) with serial monitor settings
-- `wokwi.toml` - Wokwi CLI configuration, flash files, and port forwarding
-- `prepare-firmware.sh` - Script to copy built firmware, bootloader, and partitions to test directory
+- `wokwi.toml` - Wokwi CLI configuration using combined firmware image
+- `prepare-firmware.sh` - Script to create combined firmware image using esptool.py
 - `run-simulator.sh` - Script to start the Wokwi simulator
-- `firmware.bin` - Main firmware binary (copied from build)
+- `firmware-combined.bin` - Combined firmware image (bootloader + partitions + app)
 - `firmware.elf` - Firmware with debug symbols (copied from build)
-- `bootloader.bin` - ESP32 bootloader (copied from build, flashed at 0x1000)
-- `partitions.bin` - Partition table (copied from build, flashed at 0x8000)
 
-## Flash Files Configuration
+## Combined Firmware Image
 
-The simulator requires multiple binary files to properly emulate ESP32 boot and filesystem:
+**Wokwi's recommended approach** is to use a single combined firmware image that includes bootloader, partition table, and application. This ensures proper filesystem support and eliminates potential issues with separate flash files.
 
-**wokwi.toml flash configuration:**
+**wokwi.toml configuration:**
 ```toml
 [wokwi]
-firmware = "firmware.bin"        # Main application code
-elf = "firmware.elf"             # Debug symbols
-partitions = "partitions.bin"    # Partition table
-
-[[wokwi.flashFiles]]
-offset = 0x1000                  # Bootloader location
-file = "bootloader.bin"
-
-[[wokwi.flashFiles]]
-offset = 0x8000                  # Partition table location
-file = "partitions.bin"
+firmware = "firmware-combined.bin"  # Combined image with everything
+elf = "firmware.elf"                # Debug symbols
 ```
 
-**Why these files are needed:**
-- `bootloader.bin` - ESP32 second-stage bootloader, loads the application
-- `partitions.bin` - Partition table defining flash memory layout (app, SPIFFS, etc.)
-- Without these, filesystem operations will fail with "partition not found" errors
-- Standard ESP32 flash layout: bootloader@0x1000, partitions@0x8000, app@0x10000
+**Combined image structure:**
+- `0x1000` - Bootloader (ESP32 second-stage bootloader)
+- `0x8000` - Partition table (defines flash memory layout)
+- `0x10000` - Application (main WLED firmware)
+
+**How it's created:**
+The `prepare-firmware.sh` script uses `esptool.py merge_bin` to combine the three components:
+```bash
+esptool.py --chip esp32 merge_bin \
+    -o firmware-combined.bin \
+    --flash_mode dio \
+    --flash_freq 40m \
+    --flash_size 4MB \
+    0x1000 bootloader.bin \
+    0x8000 partitions.bin \
+    0x10000 firmware.bin
+```
+
+**Why this approach:**
+- Recommended by Wokwi for reliable filesystem support
+- Ensures correct alignment and offsets for all components
+- Eliminates "partition not found" errors
+- Single file is simpler and more reliable than multiple flash files
+- Matches how real ESP32 devices are typically flashed
 
 ## Serial Monitor Configuration
 
@@ -204,39 +213,53 @@ To add more tests:
 ## Troubleshooting
 
 ### Simulator doesn't start
-- Check that firmware.bin exists in test/wokwi/
+- Check that firmware-combined.bin exists in test/wokwi/
 - Verify Wokwi CLI is installed: `wokwi-cli --version`
 - Check Wokwi CLI logs for errors
 
 ### No serial output from firmware
 - Verify `serialMonitor` configuration in diagram.json
-- Check firmware.bin is valid:
+- Check firmware-combined.bin is valid:
   ```bash
-  hexdump -C firmware.bin | head -4
-  # Should show ESP32 magic byte 0xe9 at start
+  hexdump -C firmware-combined.bin | head -16
+  # Should show bootloader at 0x1000, partitions at 0x8000, app at 0x10000
   ```
-- Ensure firmware was copied: `ls -lh test/wokwi/firmware.bin`
+- Ensure combined image was created: `ls -lh test/wokwi/firmware-combined.bin`
 - Check firmware build logs for errors
 
 ### Filesystem/partition errors
 **Error:** `partition "spiffs" could not be found`
 
-**Cause:** Missing or incorrect partition table configuration
+**Cause:** Missing or incorrect combined firmware image
 
 **Solutions:**
-1. Verify bootloader.bin and partitions.bin are present:
+1. Verify firmware-combined.bin exists and has correct structure:
    ```bash
-   ls -lh test/wokwi/bootloader.bin test/wokwi/partitions.bin
+   python3 << 'EOF'
+   with open('test/wokwi/firmware-combined.bin', 'rb') as f:
+       data = f.read()
+   print(f"Size: {len(data)} bytes")
+   print(f"Bootloader at 0x1000: {data[0x1000:0x1004].hex()}")
+   print(f"Partitions at 0x8000: {data[0x8000:0x8004].hex()}")
+   print(f"App at 0x10000: {data[0x10000:0x10004].hex()}")
+   EOF
    ```
 
-2. Check that prepare-firmware.sh copied all files:
+2. Rebuild combined image:
    ```bash
-   ./test/wokwi/prepare-firmware.sh esp32_V4_wokwi_debug
+   cd test/wokwi
+   ./prepare-firmware.sh esp32_V4_wokwi_debug
    ```
 
-3. Verify partitions.bin content:
+3. Verify esptool.py is installed:
    ```bash
-   hexdump -C test/wokwi/partitions.bin | head -4
+   pip install esptool
+   ```
+
+4. Check that bootloader.bin, partitions.bin, and firmware.bin exist in build directory:
+   ```bash
+   ls -lh .pio/build/esp32_V4_wokwi_debug/{bootloader.bin,partitions.bin,firmware.bin}
+   # May also check: .pio/build/esp32_V4_wokwi_debug/bootloader/bootloader.bin
    ```
 
 4. Check the partition table source CSV file:
