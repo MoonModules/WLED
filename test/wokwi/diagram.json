@@ -22,6 +22,7 @@
   "dependencies": {},
   "serialMonitor": {
     "display": "always",
-    "newline": "lf"
+    "newline": "lf",
+    "bufferSize": 8192
   }
 }

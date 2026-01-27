@@ -5,6 +5,7 @@ version = 1
 firmware = "firmware-combined.bin"
 elf = "firmware.elf"
 gdbServerPort=3333
+logLevel = "warn"  # Enable Wokwi debug logging (error, warn, info, debug, trace)
 
 # Combined firmware layout:
 #   0x1000  - bootloader
@@ -15,3 +16,4 @@ gdbServerPort=3333
 # Forward the web server port
 from = "localhost:8080"
 to = "target:80"
+logLevel = "debug"  # Log all network traffic for debugging AsyncWebServer issues
