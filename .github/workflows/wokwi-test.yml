@@ -108,42 +108,42 @@ jobs:
           # Verify combined firmware image structure
           echo ""
           echo "Verifying combined firmware image structure..."
-          python3 << 'EOF'
-import sys
-try:
-    with open('firmware-combined.bin', 'rb') as f:
-        data = f.read()
-    
-    size_mb = len(data) / 1024 / 1024
-    print(f"✓ Image size: {len(data)} bytes ({size_mb:.2f} MB)")
-    
-    # Check bootloader at 0x1000
-    if len(data) > 0x1000 and data[0x1000] == 0xe9:
-        print("✓ Bootloader found at 0x1000 (magic byte: 0xe9)")
-    else:
-        print("⚠ Bootloader magic byte not found at 0x1000")
-        sys.exit(1)
-    
-    # Check partition table at 0x8000  
-    if len(data) > 0x8000 and data[0x8000:0x8002] == b'\xaa\x50':
-        print("✓ Partition table found at 0x8000 (magic: 0xaa50)")
-    else:
-        print("⚠ Partition table magic not found at 0x8000")
-        sys.exit(1)
-    
-    # Check application at 0x10000
-    if len(data) > 0x10000 and data[0x10000] == 0xe9:
-        print("✓ Application found at 0x10000 (magic byte: 0xe9)")
-    else:
-        print("⚠ Application magic byte not found at 0x10000")
-        sys.exit(1)
-    
-    print("✅ Combined firmware image structure is valid")
-    
-except Exception as e:
-    print(f"❌ ERROR verifying combined image: {e}")
-    sys.exit(1)
-EOF
+          python3 <<'EOF'
+          import sys
+          try:
+              with open('firmware-combined.bin', 'rb') as f:
+                  data = f.read()
+              
+              size_mb = len(data) / 1024 / 1024
+              print(f"✓ Image size: {len(data)} bytes ({size_mb:.2f} MB)")
+              
+              # Check bootloader at 0x1000
+              if len(data) > 0x1000 and data[0x1000] == 0xe9:
+                  print("✓ Bootloader found at 0x1000 (magic byte: 0xe9)")
+              else:
+                  print("⚠ Bootloader magic byte not found at 0x1000")
+                  sys.exit(1)
+              
+              # Check partition table at 0x8000  
+              if len(data) > 0x8000 and data[0x8000:0x8002] == b'\xaa\x50':
+                  print("✓ Partition table found at 0x8000 (magic: 0xaa50)")
+              else:
+                  print("⚠ Partition table magic not found at 0x8000")
+                  sys.exit(1)
+              
+              # Check application at 0x10000
+              if len(data) > 0x10000 and data[0x10000] == 0xe9:
+                  print("✓ Application found at 0x10000 (magic byte: 0xe9)")
+              else:
+                  print("⚠ Application magic byte not found at 0x10000")
+                  sys.exit(1)
+              
+              print("✅ Combined firmware image structure is valid")
+              
+          except Exception as e:
+              print(f"❌ ERROR verifying combined image: {e}")
+              sys.exit(1)
+          EOF
           
           if [ $? -ne 0 ]; then
             echo "❌ Combined firmware image verification failed"
