@@ -208,10 +208,13 @@ jobs:
           # Export the token so it's available to child processes
           export WOKWI_CLI_TOKEN
           
+          # Add PATH for wokwi-cli
+          export PATH="$HOME/.wokwi-ci/bin:$PATH"
+          
           # Start simulator in background with a 90 second timeout
-          # Wokwi CLI outputs to stderr, serial output goes to stdout
-          ## WOKWI_TIMEOUT=300 ./run-simulator.sh >logs/serial.log 2>&1 &
-          WOKWI_TIMEOUT=90 ./run-simulator.sh >logs/serial.log 2>&1 &
+          # Serial output (stdout) goes to serial.log
+          # Wokwi CLI diagnostics (stderr) including debug logs go to wokwi.log
+          WOKWI_TIMEOUT=90 ./run-simulator.sh >logs/serial.log 2>logs/wokwi.log &
           WOKWI_PID=$!
           echo "WOKWI_PID=$WOKWI_PID" >> $GITHUB_ENV
           echo "Started Wokwi simulator with PID $WOKWI_PID"
@@ -261,6 +264,9 @@ jobs:
           echo ""
           echo "=== First 50 lines of Serial output ==="
           head -50 logs/serial.log || true
+          echo ""
+          echo "=== Wokwi CLI debug log (network traffic) ==="
+          tail -100 logs/wokwi.log || echo "No wokwi.log available"
 
       - name: Run Playwright tests
         run: npm run test:wokwi
