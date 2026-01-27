@@ -9,9 +9,9 @@ WOKWI_TIMEOUT=${WOKWI_TIMEOUT:-300}
 
 cd "$SCRIPT_DIR"
 
-# Check if firmware exists
-if [ ! -f "firmware.bin" ]; then
-    echo "Error: firmware.bin not found in $SCRIPT_DIR"
+# Check if combined firmware exists
+if [ ! -f "firmware-combined.bin" ]; then
+    echo "Error: firmware-combined.bin not found in $SCRIPT_DIR"
     echo "Please run prepare-firmware.sh first"
     exit 1
 fi
