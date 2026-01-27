@@ -218,6 +218,56 @@ To add more tests:
 - Ensure firmware was copied: `ls -lh test/wokwi/firmware.bin`
 - Check firmware build logs for errors
 
+### Filesystem/partition errors
+**Error:** `partition "spiffs" could not be found`
+
+**Cause:** Missing or incorrect partition table configuration
+
+**Solutions:**
+1. Verify bootloader.bin and partitions.bin are present:
+   ```bash
+   ls -lh test/wokwi/bootloader.bin test/wokwi/partitions.bin
+   ```
+
+2. Check that prepare-firmware.sh copied all files:
+   ```bash
+   ./test/wokwi/prepare-firmware.sh esp32_V4_wokwi_debug
+   ```
+
+3. Verify partitions.bin content:
+   ```bash
+   hexdump -C test/wokwi/partitions.bin | head -4
+   ```
+
+4. Check the partition table source CSV file:
+   ```bash
+   # The esp32_V4_wokwi_debug build uses:
+   cat tools/WLED_ESP32_4MB_256KB_FS.csv
+   # Should include a line with: spiffs, data, spiffs, ...
+   ```
+
+5. Rebuild firmware to regenerate partition files:
+   ```bash
+   pio run -e esp32_V4_wokwi_debug --target clean
+   pio run -e esp32_V4_wokwi_debug
+   ```
+
+6. Check wokwi.toml flash configuration:
+   ```toml
+   [wokwi]
+   partitions = "partitions.bin"
+   
+   [[wokwi.flashFiles]]
+   offset = 0x1000
+   file = "bootloader.bin"
+   
+   [[wokwi.flashFiles]]
+   offset = 0x8000
+   file = "partitions.bin"
+   ```
+
+**Note:** The bootloader and partition table are essential for filesystem support. Without them, SPIFFS cannot mount and the firmware will show "partition not found" errors.
+
 ### Web server not accessible
 - Wait 30-60 seconds for the ESP32 to boot and start WiFi
 - Check that port 9080 is not already in use
