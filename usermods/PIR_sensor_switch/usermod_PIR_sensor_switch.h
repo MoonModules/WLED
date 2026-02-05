@@ -256,15 +256,25 @@ public:
   {
     if (enabled) {
       // pin retrieved from cfg.json (readFromConfig()) prior to running setup()
-      if (PIRsensorPin >= 0 && pinManager.allocatePin(PIRsensorPin, false, PinOwner::UM_PIR)) {
+      // Validate pin before attempting allocation to prevent conflicts with Ethernet, etc.
+      if (PIRsensorPin < 0) {
+        DEBUG_PRINTLN(F("PIRSensorSwitch: no pin configured."));
+        enabled = false;
+      } else if (!pinManager.isPinOk(PIRsensorPin, false)) {
+        DEBUG_PRINTLN(F("PIRSensorSwitch: pin not valid for this board."));
+        PIRsensorPin = -1;
+        enabled = false;
+      } else if (pinManager.isPinAllocated(PIRsensorPin)) {
+        DEBUG_PRINTF("PIRSensorSwitch: pin %d already in use by %s.\n", PIRsensorPin, pinManager.getPinOwnerText(PIRsensorPin));
+        PIRsensorPin = -1;
+        enabled = false;
+      } else if (pinManager.allocatePin(PIRsensorPin, false, PinOwner::UM_PIR)) {
         // PIR Sensor mode INPUT_PULLUP
         pinMode(PIRsensorPin, INPUT_PULLUP);
         sensorPinState = digitalRead(PIRsensorPin);
       } else {
-        if (PIRsensorPin >= 0) {
-          DEBUG_PRINTLN(F("PIRSensorSwitch pin allocation failed."));
-        }
-        PIRsensorPin = -1;  // allocation failed
+        DEBUG_PRINTLN(F("PIRSensorSwitch pin allocation failed."));
+        PIRsensorPin = -1;
         enabled = false;
       }
     }
@@ -455,6 +465,11 @@ public:
     }
 
     PIRsensorPin = top["pin"] | PIRsensorPin;
+    // Early validation - reject obviously invalid pins
+    if (PIRsensorPin >= 0 && !pinManager.isPinOk(PIRsensorPin, false)) {
+      DEBUG_PRINTLN(F("PIRSensorSwitch: configured pin is not valid for this board."));
+      PIRsensorPin = -1;
+    }
 
     enabled = top[FPSTR(_enabled)] | enabled;
 
@@ -482,7 +497,10 @@ public:
           // if we are changing pin in settings page
           // deallocate old pin
           pinManager.deallocatePin(oldPin, PinOwner::UM_PIR);
-          if (pinManager.allocatePin(PIRsensorPin, false, PinOwner::UM_PIR)) {
+          // Validate new pin before allocation
+          if (PIRsensorPin >= 0 && pinManager.isPinOk(PIRsensorPin, false) &&
+              !pinManager.isPinAllocated(PIRsensorPin) &&
+              pinManager.allocatePin(PIRsensorPin, false, PinOwner::UM_PIR)) {
             pinMode(PIRsensorPin, INPUT_PULLUP);
           } else {
             // allocation failed
@@ -490,7 +508,7 @@ public:
             enabled = false;
           }
         }
-        if (enabled) {
+        if (enabled && PIRsensorPin >= 0) {
           sensorPinState = digitalRead(PIRsensorPin);
         }
       }

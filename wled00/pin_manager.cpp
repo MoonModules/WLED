@@ -5,7 +5,121 @@
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 2, 0)
 #include <soc/soc_caps.h> // WLEDMM
 #endif
+#include <esp_system.h>  // for esp_chip_info() and CHIP_FEATURE_EMB_PSRAM
+
+// CHIP_FEATURE_EMB_PSRAM was added in IDF 4.4+ - define it for older versions
+#ifndef CHIP_FEATURE_EMB_PSRAM
+#define CHIP_FEATURE_EMB_PSRAM BIT(7)
 #endif
+
+/*
+ * ESP32-PICO variant detection and pin compatibility:
+ *
+ * ESP32-PICO-D4:  4MB embedded flash, no PSRAM
+ *   - GPIO 6,7,8,11,16,17 used for in-package flash (unavailable)
+ *   - GPIO 9,10 free for use
+ *
+ * ESP32-PICO-V3:  8MB embedded flash, no PSRAM
+ *   - GPIO 6,11 used for in-package flash (unavailable)
+ *   - GPIO 7,8,9,10,20 free for use
+ *   - GPIO 16,18,23 are NC (not connected)
+ *
+ * ESP32-PICO-V3-02: 8MB embedded flash + 2MB embedded PSRAM
+ *   - GPIO 6,11 used for in-package flash (unavailable)
+ *   - GPIO 9,10 used for in-package PSRAM (unavailable)
+ *   - GPIO 7,8,20 free for use
+ *   - GPIO 16,18,23 are NC (not connected)
+ *
+ * Detection strategy: Use embedded flash size and PSRAM presence to distinguish variants.
+ */
+
+// ESP32-PICO variant types
+enum class ESP32PicoVariant : uint8_t {
+  NotPico = 0,   // Not a PICO chip
+  PicoD4,        // ESP32-PICO-D4 (4MB flash)
+  PicoV3,        // ESP32-PICO-V3 (8MB flash, no PSRAM)
+  PicoV3_02      // ESP32-PICO-V3-02 (8MB flash + 2MB PSRAM)
+};
+
+// Detect which PICO variant we're running on (cached for performance)
+static ESP32PicoVariant detectPicoVariant() {
+  static ESP32PicoVariant cachedVariant = ESP32PicoVariant::NotPico;
+  static bool detected = false;
+
+  if (detected) return cachedVariant;
+  detected = true;
+
+  // Check if this is a PICO-like chip with embedded flash
+  const char* model = ESP.getChipModel();
+  bool isPicoChip = (strncmp_P(PSTR("ESP32-PICO"), model, 10) == 0) ||
+                    (strncmp_P(PSTR("ESP32-U4WDH"), model, 11) == 0) ||
+                    (strncmp_P(PSTR("ESP32-PICO-D2"), model, 13) == 0);  // Arduino bug: D4 reports as D2
+
+  if (!isPicoChip) {
+    cachedVariant = ESP32PicoVariant::NotPico;
+    return cachedVariant;
+  }
+
+  // Distinguish variants by flash size and embedded PSRAM feature
+  uint32_t flashSizeBytes = ESP.getFlashChipSize();
+
+  // Use chip feature flags to detect embedded PSRAM reliably
+  // This works even when build-time PSRAM support is disabled
+  esp_chip_info_t chipInfo;
+  esp_chip_info(&chipInfo);
+  bool hasEmbeddedPsram = (chipInfo.features & CHIP_FEATURE_EMB_PSRAM) != 0;
+
+  if (hasEmbeddedPsram) {
+    // V3-02 has embedded PSRAM (detected via chip feature flag)
+    cachedVariant = ESP32PicoVariant::PicoV3_02;
+  } else if (flashSizeBytes >= 8 * 1024 * 1024) {
+    // V3 has 8MB flash but no PSRAM
+    cachedVariant = ESP32PicoVariant::PicoV3;
+  } else {
+    // D4 has 4MB flash
+    cachedVariant = ESP32PicoVariant::PicoD4;
+  }
+
+  return cachedVariant;
+}
+
+// Check if a GPIO is reserved for in-package flash/PSRAM on PICO variants
+static bool isPicoReservedPin(byte gpio) {
+  ESP32PicoVariant variant = detectPicoVariant();
+
+  switch (variant) {
+    case ESP32PicoVariant::PicoD4:
+      // GPIO 6,7,8,11,16,17 used for in-package flash
+      return (gpio == 6 || gpio == 7 || gpio == 8 || gpio == 11 || gpio == 16 || gpio == 17);
+
+    case ESP32PicoVariant::PicoV3:
+      // GPIO 6,11 used for flash; GPIO 16,18,23 are NC (not connected)
+      return (gpio == 6 || gpio == 11 || gpio == 16 || gpio == 18 || gpio == 23);
+
+    case ESP32PicoVariant::PicoV3_02:
+      // GPIO 6,11 used for flash; GPIO 9,10 used for PSRAM; GPIO 16,18,23 are NC
+      return (gpio == 6 || gpio == 9 || gpio == 10 || gpio == 11 || gpio == 16 || gpio == 18 || gpio == 23);
+
+    default:
+      return false;
+  }
+}
+
+// Check if PSRAM is actually present at runtime (cached for performance)
+// This allows builds with BOARD_HAS_PSRAM to correctly handle boards without physical PSRAM
+static bool hasPsramRuntime() {
+  static int8_t cachedResult = -1;
+  if (cachedResult < 0) {
+    #if defined(BOARD_HAS_PSRAM)
+      cachedResult = psramFound() ? 1 : 0;
+    #else
+      cachedResult = 0;
+    #endif
+  }
+  return cachedResult == 1;
+}
+
+#endif // ARDUINO_ARCH_ESP32
 
 #ifdef WLED_DEBUG
 static void DebugPrintOwnerTag(PinOwner tag)
@@ -105,17 +219,27 @@ String PinManagerClass::getPinSpecialText(int gpio) {  // special purpose PIN in
   if (isPinAllocated(gpio)) {
     if ((gpio == i2c_sda)  && (getPinOwner(gpio) == PinOwner::HW_I2C)) return(F("I2C SDA"));
     if ((gpio == i2c_scl)  && (getPinOwner(gpio) == PinOwner::HW_I2C)) return(F("I2C SCL"));
-    if ((gpio == spi_sclk) && (getPinOwner(gpio) == PinOwner::HW_SPI)) return(F("SPI SLK  / SCK"));
-    if ((gpio == spi_mosi) && (getPinOwner(gpio) == PinOwner::HW_SPI)) return(F("SPI PICO / MOSI"));
-    if ((gpio == spi_miso) && (getPinOwner(gpio) == PinOwner::HW_SPI)) return(F("SPI POCI / MISO"));
+    #if defined(CONFIG_ETH_SPI_ETHERNET_W5500)
+      if ((gpio == spi_mosi) && (getPinOwner(gpio) == PinOwner::HW_SPI)) return spi_use_for_w5500 ? F("SPI Ethernet MOSI / PICO") : F("SPI MOSI / PICO");
+      if ((gpio == spi_miso) && (getPinOwner(gpio) == PinOwner::HW_SPI)) return spi_use_for_w5500 ? F("SPI Ethernet MISO / POCI") : F("SPI MISO / POCI");
+      if ((gpio == spi_sclk) && (getPinOwner(gpio) == PinOwner::HW_SPI)) return spi_use_for_w5500 ? F("SPI Ethernet SCLK / SCK")  : F("SPI SCLK / SCK");
+      if ((gpio == spi_cs)   && (getPinOwner(gpio) == PinOwner::HW_SPI)) return spi_use_for_w5500 ? F("SPI Ethernet CS   / SS")   : F("SPI CS   / SS");
+      if ((gpio == spi_int)  && (getPinOwner(gpio) == PinOwner::HW_SPI)) return spi_use_for_w5500 ? F("SPI Ethernet INT  / IRQ")  : F("SPI INT  / IRQ");
+      if ((gpio == spi_rst)  && (getPinOwner(gpio) == PinOwner::HW_SPI)) return spi_use_for_w5500 ? F("SPI Ethernet RST  / RSET") : F("SPI RST  / RSET");
+    #else 
+      if ((gpio == spi_mosi) && (getPinOwner(gpio) == PinOwner::HW_SPI)) return F("SPI MOSI / PICO");
+      if ((gpio == spi_miso) && (getPinOwner(gpio) == PinOwner::HW_SPI)) return F("SPI MISO / POCI");
+      if ((gpio == spi_sclk) && (getPinOwner(gpio) == PinOwner::HW_SPI)) return F("SPI SCLK / SCK");
+    #endif
   }
   // MCU special PINS
   #ifdef ARDUINO_ARCH_ESP32
     #if defined(CONFIG_IDF_TARGET_ESP32S3)
       // ESP32-S3
       if (gpio > 18 && gpio < 21) return (F("USB (CDC) or JTAG"));
-      #if CONFIG_ESPTOOLPY_FLASHMODE_OPI || (CONFIG_SPIRAM_MODE_OCT && defined(BOARD_HAS_PSRAM))
-        if (gpio > 32 && gpio < 38)  return (F("(reserved) Octal PSRAM or Octal Flash"));
+      #if CONFIG_ESPTOOLPY_FLASHMODE_OPI || CONFIG_SPIRAM_MODE_OCT
+        // Use runtime check - only show as reserved if PSRAM is actually present
+        if (gpio > 32 && gpio < 38 && hasPsramRuntime()) return (F("(reserved) Octal PSRAM or Octal Flash"));
       #endif
       //if (gpio == 0 || gpio == 3 || gpio == 45 || gpio == 46) return (F("(strapping pin)"));
       #ifdef ARDUINO_TTGO_T7_S3
@@ -138,20 +262,42 @@ String PinManagerClass::getPinSpecialText(int gpio) {  // special purpose PIN in
       //if (gpio == 2 || gpio == 8 || gpio == 9) return (F("(strapping pin)"));
 
     #else
-      // "classic" ESP32, or ESP32 PICO-D4
+      // "classic" ESP32 or ESP32-PICO variants
       //if (gpio == 0 || gpio == 2 || gpio == 5) return (F("(strapping pin)"));
       //if (gpio == 12) return (F("(strapping pin - MTDI)"));
       //if (gpio == 15) return (F("(strapping pin - MTDO)"));
       //if (gpio > 11 && gpio < 16) return (F("(optional) JTAG debug probe"));
-      #if defined(BOARD_HAS_PSRAM)
+
+      // PICO variant-specific pin info
+      {
+        ESP32PicoVariant variant = detectPicoVariant();
+        if (variant == ESP32PicoVariant::PicoD4) {
+          if (gpio == 6 || gpio == 7 || gpio == 8 || gpio == 11) return (F("(reserved) PICO-D4 flash"));
+          if (gpio == 16 || gpio == 17) return (F("(reserved) PICO-D4 flash"));
+        } else if (variant == ESP32PicoVariant::PicoV3) {
+          if (gpio == 6 || gpio == 11) return (F("(reserved) PICO-V3 flash"));
+          if (gpio == 16 || gpio == 18 || gpio == 23) return (F("(NC) PICO-V3 not connected"));
+        } else if (variant == ESP32PicoVariant::PicoV3_02) {
+          if (gpio == 6 || gpio == 11) return (F("(reserved) PICO-V3-02 flash"));
+          if (gpio == 9 || gpio == 10) return (F("(reserved) PICO-V3-02 PSRAM"));
+          if (gpio == 16 || gpio == 18 || gpio == 23) return (F("(NC) PICO-V3-02 not connected"));
+        }
+      }
+
+      // On non-PICO ESP32 with external PSRAM, GPIO 16/17 are used for PSRAM
+      // PICO variants use different pins (handled above)
+      // Use runtime check to avoid reserving pins when PSRAM isn't actually present
+      if (hasPsramRuntime() && detectPicoVariant() == ESP32PicoVariant::NotPico) {
         if (gpio == 16 || gpio == 17) return (F("(reserved) PSRAM"));
-      #endif
+      }
       #if defined(ARDUINO_TTGO_T7_V14_Mini32) || defined(ARDUINO_LOLIN_D32_PRO) || defined(ARDUINO_ADAFRUIT_FEATHER_ESP32_V2)
         if (gpio == 35) return (F("(reserved) _VBAT voltage monitoring"));  // WLEDMM experimental
       #endif
-      #if (defined(ARDUINO_TTGO_T7_V14_Mini32) || defined(ARDUINO_TTGO_T7_V15_Mini32)) && defined(BOARD_HAS_PSRAM)
-        if (gpio == 25) return (F("cross-connected to pin 16")); // WLEDMM experimental
-        if (gpio == 27) return (F("Cross-connected to pin 17")); // WLEDMM experimental
+      #if defined(ARDUINO_TTGO_T7_V14_Mini32) || defined(ARDUINO_TTGO_T7_V15_Mini32)
+        if (hasPsramRuntime()) {
+          if (gpio == 25) return (F("cross-connected to pin 16")); // WLEDMM experimental
+          if (gpio == 27) return (F("Cross-connected to pin 17")); // WLEDMM experimental
+        }
       #endif
     #endif
   #else
@@ -167,9 +313,9 @@ String PinManagerClass::getPinSpecialText(int gpio) {  // special purpose PIN in
   // hardware special purpose PINS. part2 - default pins
   if (gpio == i2c_sda)   return(F("(default) I2C SDA"));
   if (gpio == i2c_scl)   return(F("(default) I2C SCL"));
-  if (gpio == spi_sclk)  return(F("(default) SPI SLK  / SCK"));
-  if (gpio == spi_mosi)  return(F("(default) SPI PICO / MOSI"));
-  if (gpio == spi_miso)  return(F("(default) SPI POCI / MISO"));
+  if (gpio == spi_mosi)  return(F("(default) SPI MOSI / PICO"));
+  if (gpio == spi_miso)  return(F("(default) SPI MISO / POCI"));
+  if (gpio == spi_sclk)  return(F("(default) SPI SCLK / SCK"));
   //if ((gpio == spi_cs)   || ((gpio == HW_PIN_CS) && (spi_cs < 0)))         return(F("(default) SPI CS   / SS"));
 #if defined(WLED_USE_SD_MMC) || defined(WLED_USE_SD_SPI) || defined(SD_ADAPTER)
   if ((gpio == HW_PIN_CSSPI)) return(F("(default) SPI CS  / SS"));  // no part of usermod default settings, currently only needed by SD_CARD usermod
@@ -744,9 +890,11 @@ bool PinManagerClass::isPinOk(byte gpio, bool output) const
     if (gpio > 18 && gpio < 21) return false;     // 19 + 20 = USB-JTAG. Not recommended for other uses.
     #endif
     if (gpio > 21 && gpio < 33) return false;     // 22 to 32: not connected + SPI FLASH
-    // #if CONFIG_SPIRAM_MODE_OCT && defined(BOARD_HAS_PSRAM)
-    //   if (gpio > 32 && gpio < 38) return !psramFound(); // 33 to 37: not available if using _octal_ SPI Flash or _octal_ PSRAM
-    // #endif
+    #if CONFIG_SPIRAM_MODE_OCT || CONFIG_ESPTOOLPY_FLASHMODE_OPI
+      // 33 to 37: not available if using octal SPI Flash or octal PSRAM
+      // Use runtime check to allow these pins when PSRAM isn't actually present
+      if (gpio > 32 && gpio < 38 && hasPsramRuntime()) return false;
+    #endif
     // 38 to 48 are for general use. Be careful about straping pins GPIO45 and GPIO46 - these may be pull-up or pulled-down on your board.
   #elif defined(CONFIG_IDF_TARGET_ESP32S2)
     // strapping pins: 0, 45 & 46
@@ -755,22 +903,16 @@ bool PinManagerClass::isPinOk(byte gpio, bool output) const
     // JTAG: GPIO39-42 are usually used for inline debugging
     // GPIO46 is input only and pulled down
   #else
-    if ((gpio > 5 && gpio < 12) &&   // WLEDMM slightly faster to first check for "potentially reserved pins" and then call ESP.getChipModel()
-        ((strncmp_P(PSTR("ESP32-U4WDH"), ESP.getChipModel(), 11) == 0) ||    // this is the correct identifier, but....
-         (strncmp_P(PSTR("ESP32-PICO-D2"), ESP.getChipModel(), 13) == 0)))   // https://github.com/espressif/arduino-esp32/issues/10683
-    {
-      // this chip has 4 MB of internal Flash and different packaging, so available pins are different!
-      if (((gpio > 5) && (gpio < 9)) || (gpio == 11))
-        return false;
-    } else {
-      // for classic ESP32 (non-mini) modules, these are the SPI flash pins
-      if (gpio > 5 && gpio < 12) return false;      //SPI flash pins
+    // "classic" ESP32 and ESP32-PICO variants
+    // Check for PICO variant first - each variant has different reserved pins
+    if (isPicoReservedPin(gpio)) {
+      return false;  // Pin is reserved for in-package flash/PSRAM or is NC
     }
-    //WLEDMM gpio 16/17 (PSRAM or SPI FLASH) are handled differently
-    // if (((strncmp_P(PSTR("ESP32-PICO"), ESP.getChipModel(), 10) == 0) ||
-    //     (strncmp_P(PSTR("ESP32-U4WDH"), ESP.getChipModel(), 11) == 0))
-    //    && (gpio == 16 || gpio == 17)) return false; // PICO-D4/U4WDH: gpio16+17 are in use for onboard SPI FLASH
-    // if (gpio == 16 || gpio == 17) return !psramFound(); //PSRAM pins on ESP32 (these are IO)
+
+    // For non-PICO classic ESP32 modules, GPIO 6-11 are SPI flash pins
+    if (detectPicoVariant() == ESP32PicoVariant::NotPico) {
+      if (gpio > 5 && gpio < 12) return false;  // SPI flash pins
+    }
   #endif
     if (output) return digitalPinCanOutput(gpio);
     else        return true;

@@ -38,6 +38,24 @@ class UsermodSdCard : public Usermod {
         if(!configSdEnabled) return;
         if(sdInitDone) return;
 
+        // Validate pins before attempting allocation to prevent conflicts with Ethernet, etc.
+        if (!pinManager.isPinOk(configPinSourceSelect, true) ||
+            !pinManager.isPinOk(configPinSourceClock, true) ||
+            !pinManager.isPinOk(configPinPoci, false) ||
+            !pinManager.isPinOk(configPinPico, true)) {
+            DEBUG_PRINTF("[%s] SD (SPI) pin not valid for this board!\n", _name);
+            sdInitDone = false;
+            return;
+        }
+        if (pinManager.isPinAllocated(configPinSourceSelect) ||
+            pinManager.isPinAllocated(configPinSourceClock) ||
+            pinManager.isPinAllocated(configPinPoci) ||
+            pinManager.isPinAllocated(configPinPico)) {
+            DEBUG_PRINTF("[%s] SD (SPI) pin already in use!\n", _name);
+            sdInitDone = false;
+            return;
+        }
+
         PinManagerPinType pins[5] = {
         { configPinSourceSelect, true },
         { configPinSourceClock, true },
@@ -155,10 +173,10 @@ class UsermodSdCard : public Usermod {
           return false;
         }
 
-        uint8_t oldPinSourceSelect  = configPinSourceSelect;
-        uint8_t oldPinSourceClock = configPinSourceClock;
-        uint8_t oldPinPoci = configPinPoci;
-        uint8_t oldPinPico = configPinPico;
+        int8_t oldPinSourceSelect  = configPinSourceSelect;
+        int8_t oldPinSourceClock = configPinSourceClock;
+        int8_t oldPinPoci = configPinPoci;
+        int8_t oldPinPico = configPinPico;
         bool    oldSdEnabled = configSdEnabled;
 
         getJsonValue(top["pinSourceSelect"], configPinSourceSelect);
@@ -166,6 +184,12 @@ class UsermodSdCard : public Usermod {
         getJsonValue(top["pinPoci"],         configPinPoci);
         getJsonValue(top["pinPico"],         configPinPico);
         getJsonValue(top["sdEnabled"],       configSdEnabled);
+
+        // Early validation - reject obviously invalid pins
+        if (!pinManager.isPinOk(configPinSourceSelect, true)) configPinSourceSelect = -1;
+        if (!pinManager.isPinOk(configPinSourceClock, true)) configPinSourceClock = -1;
+        if (!pinManager.isPinOk(configPinPoci, false)) configPinPoci = -1;
+        if (!pinManager.isPinOk(configPinPico, true)) configPinPico = -1;
 
         if(configSdEnabled != oldSdEnabled) {
           configSdEnabled ? init_SD_SPI() : deinit_SD_SPI();

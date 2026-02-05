@@ -28,6 +28,18 @@ class PwmOutput {
       if (pin_ < 0)
         return;
 
+      // Validate pin before attempting allocation
+      if (!pinManager.isPinOk(pin_, true)) {
+        DEBUG_PRINTF("pwm_output[%d]: pin not valid for this board\n", pin_);
+        pin_ = -1;
+        return;
+      }
+      if (pinManager.isPinAllocated(pin_)) {
+        DEBUG_PRINTF("pwm_output[%d]: pin already in use\n", pin_);
+        pin_ = -1;
+        return;
+      }
+
       DEBUG_PRINTF("pwm_output[%d]: setup to freq %d\n", pin_, freq_);
       if (!pinManager.allocatePin(pin_, true, PinOwner::UM_PWM_OUTPUTS))
         return;

@@ -5,11 +5,16 @@
 
 #ifdef WLED_USE_ETHERNET
 #pragma message "Ethernet support enabled"
+#ifdef CONFIG_ETH_SPI_ETHERNET_W5500
+#pragma message "W5500 support should be enabled"
+#endif
 
 // The following six pins are neither configurable nor
 // can they be re-assigned through IOMUX / GPIO matrix.
 // See https://docs.espressif.com/projects/esp-idf/en/latest/esp32/hw-reference/esp32/get-started-ethernet-kit-v1.1.html#ip101gri-phy-interface
-const managed_pin_type esp32_nonconfigurable_ethernet_pins[WLED_ETH_RSVD_PINS_COUNT] = {
+
+#if defined(CONFIG_ETH_PHY_INTERFACE_RMII) || defined(CONFIG_EMAC_TASK_PRIORITY) // this seems to be in IDF v3 sdkconfig
+managed_pin_type esp32_nonconfigurable_ethernet_pins[6] = {
     { 21, true  }, // RMII EMAC TX EN  == When high, clocks the data on TXD0 and TXD1 to transmitter
     { 19, true  }, // RMII EMAC TXD0   == First bit of transmitted data
     { 22, true  }, // RMII EMAC TXD1   == Second bit of transmitted data
@@ -17,6 +22,13 @@ const managed_pin_type esp32_nonconfigurable_ethernet_pins[WLED_ETH_RSVD_PINS_CO
     { 26, false }, // RMII EMAC RXD1   == Second bit of received data
     { 27, true  }, // RMII EMAC CRS_DV == Carrier Sense and RX Data Valid
 };
+#else
+managed_pin_type esp32_nonconfigurable_ethernet_pins[WLED_ETH_RSVD_PINS_COUNT] = {};
+#endif
+
+#ifndef CONFIG_ETH_SPI_ETHERNET_W5500
+  #define ETH_PHY_W5500 ETH_PHY_MAX
+#endif
 
 const ethernet_settings ethernetBoards[] = {
   // None
@@ -33,6 +45,12 @@ const ethernet_settings ethernetBoards[] = {
     16,                   // eth_power,
     23,                   // eth_mdc,
     18,                   // eth_mdio,
+    GPIO_NUM_NC,          // eth_mosi_pin,
+    GPIO_NUM_NC,          // eth_miso_pin,
+    GPIO_NUM_NC,          // eth_sclk_pin,
+    GPIO_NUM_NC,          // eth_cs_pin,
+    GPIO_NUM_NC,          // eth_int_pin,
+    GPIO_NUM_NC,          // eth_rst_pin,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO0_IN    // eth_clk_mode
   },
@@ -43,6 +61,12 @@ const ethernet_settings ethernetBoards[] = {
     12,                   // eth_power,
     23,                   // eth_mdc,
     18,                   // eth_mdio,
+    GPIO_NUM_NC,          // eth_mosi_pin,
+    GPIO_NUM_NC,          // eth_miso_pin,
+    GPIO_NUM_NC,          // eth_sclk_pin,
+    GPIO_NUM_NC,          // eth_cs_pin,
+    GPIO_NUM_NC,          // eth_int_pin,
+    GPIO_NUM_NC,          // eth_rst_pin,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO17_OUT  // eth_clk_mode
   },
@@ -53,6 +77,12 @@ const ethernet_settings ethernetBoards[] = {
     -1,			              // eth_power,
     16,			              // eth_mdc,
     17,			              // eth_mdio,
+    GPIO_NUM_NC,          // eth_mosi_pin,
+    GPIO_NUM_NC,          // eth_miso_pin,
+    GPIO_NUM_NC,          // eth_sclk_pin,
+    GPIO_NUM_NC,          // eth_cs_pin,
+    GPIO_NUM_NC,          // eth_int_pin,
+    GPIO_NUM_NC,          // eth_rst_pin,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO0_IN	  // eth_clk_mode
   },
@@ -63,6 +93,12 @@ const ethernet_settings ethernetBoards[] = {
     5,			              // eth_power,
     23,			              // eth_mdc,
     18,			              // eth_mdio,
+    GPIO_NUM_NC,          // eth_mosi_pin,
+    GPIO_NUM_NC,          // eth_miso_pin,
+    GPIO_NUM_NC,          // eth_sclk_pin,
+    GPIO_NUM_NC,          // eth_cs_pin,
+    GPIO_NUM_NC,          // eth_int_pin,
+    GPIO_NUM_NC,          // eth_rst_pin,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO17_OUT	// eth_clk_mode
   },
@@ -73,6 +109,12 @@ const ethernet_settings ethernetBoards[] = {
     5,			              // eth_power,
     23,			              // eth_mdc,
     18,			              // eth_mdio,
+    GPIO_NUM_NC,          // eth_mosi_pin,
+    GPIO_NUM_NC,          // eth_miso_pin,
+    GPIO_NUM_NC,          // eth_sclk_pin,
+    GPIO_NUM_NC,          // eth_cs_pin,
+    GPIO_NUM_NC,          // eth_int_pin,
+    GPIO_NUM_NC,          // eth_rst_pin,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO17_OUT	// eth_clk_mode
   },
@@ -83,6 +125,12 @@ const ethernet_settings ethernetBoards[] = {
     -1,                   // eth_power,
     23,                   // eth_mdc,
     18,                   // eth_mdio,
+    GPIO_NUM_NC,          // eth_mosi_pin,
+    GPIO_NUM_NC,          // eth_miso_pin,
+    GPIO_NUM_NC,          // eth_sclk_pin,
+    GPIO_NUM_NC,          // eth_cs_pin,
+    GPIO_NUM_NC,          // eth_int_pin,
+    GPIO_NUM_NC,          // eth_rst_pin,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO17_OUT  // eth_clk_mode
   },
@@ -93,6 +141,12 @@ const ethernet_settings ethernetBoards[] = {
     5,                    // eth_power,
     23,                   // eth_mdc,
     18,                   // eth_mdio,
+    GPIO_NUM_NC,          // eth_mosi_pin,
+    GPIO_NUM_NC,          // eth_miso_pin,
+    GPIO_NUM_NC,          // eth_sclk_pin,
+    GPIO_NUM_NC,          // eth_cs_pin,
+    GPIO_NUM_NC,          // eth_int_pin,
+    GPIO_NUM_NC,          // eth_rst_pin,
     ETH_PHY_IP101,        // eth_type,
     ETH_CLOCK_GPIO0_IN    // eth_clk_mode
   },
@@ -103,6 +157,12 @@ const ethernet_settings ethernetBoards[] = {
     -1,			              // eth_power,
     23,			              // eth_mdc,
     18,			              // eth_mdio,
+    GPIO_NUM_NC,          // eth_mosi_pin,
+    GPIO_NUM_NC,          // eth_miso_pin,
+    GPIO_NUM_NC,          // eth_sclk_pin,
+    GPIO_NUM_NC,          // eth_cs_pin,
+    GPIO_NUM_NC,          // eth_int_pin,
+    GPIO_NUM_NC,          // eth_rst_pin,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO17_OUT	// eth_clk_mode
   },
@@ -113,6 +173,12 @@ const ethernet_settings ethernetBoards[] = {
     5,                    // eth_power, 
     23,                   // eth_mdc, 
     33,                   // eth_mdio, 
+    GPIO_NUM_NC,          // eth_mosi_pin,
+    GPIO_NUM_NC,          // eth_miso_pin,
+    GPIO_NUM_NC,          // eth_sclk_pin,
+    GPIO_NUM_NC,          // eth_cs_pin,
+    GPIO_NUM_NC,          // eth_int_pin,
+    GPIO_NUM_NC,          // eth_rst_pin,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO17_OUT	// eth_clk_mode
   },
@@ -123,6 +189,12 @@ const ethernet_settings ethernetBoards[] = {
     5,                    // eth_power,
     23,                   // eth_mdc,
     18,                   // eth_mdio,
+    GPIO_NUM_NC,          // eth_mosi_pin,
+    GPIO_NUM_NC,          // eth_miso_pin,
+    GPIO_NUM_NC,          // eth_sclk_pin,
+    GPIO_NUM_NC,          // eth_cs_pin,
+    GPIO_NUM_NC,          // eth_int_pin,
+    GPIO_NUM_NC,          // eth_rst_pin,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO17_OUT  // eth_clk_mode
   },
@@ -133,6 +205,12 @@ const ethernet_settings ethernetBoards[] = {
     12,                   // eth_power,
     23,                   // eth_mdc,
     18,                   // eth_mdio,
+    GPIO_NUM_NC,          // eth_mosi_pin,
+    GPIO_NUM_NC,          // eth_miso_pin,
+    GPIO_NUM_NC,          // eth_sclk_pin,
+    GPIO_NUM_NC,          // eth_cs_pin,
+    GPIO_NUM_NC,          // eth_int_pin,
+    GPIO_NUM_NC,          // eth_rst_pin,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO0_OUT   // eth_clk_mode
   },
@@ -144,6 +222,12 @@ const ethernet_settings ethernetBoards[] = {
     5,			              // eth_power,
     23,			              // eth_mdc,
     18,			              // eth_mdio,
+    GPIO_NUM_NC,          // eth_mosi_pin,
+    GPIO_NUM_NC,          // eth_miso_pin,
+    GPIO_NUM_NC,          // eth_sclk_pin,
+    GPIO_NUM_NC,          // eth_cs_pin,
+    GPIO_NUM_NC,          // eth_int_pin,
+    GPIO_NUM_NC,          // eth_rst_pin,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO0_OUT	// eth_clk_mode
   },
@@ -154,10 +238,15 @@ const ethernet_settings ethernetBoards[] = {
     5,                    // eth_power, 
     23,                   // eth_mdc, 
     33,                   // eth_mdio, 
+    GPIO_NUM_NC,          // eth_mosi_pin,
+    GPIO_NUM_NC,          // eth_miso_pin,
+    GPIO_NUM_NC,          // eth_sclk_pin,
+    GPIO_NUM_NC,          // eth_cs_pin,
+    GPIO_NUM_NC,          // eth_int_pin,
+    GPIO_NUM_NC,          // eth_rst_pin,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO0_IN	 // eth_clk_mode
   },
-
 
   //WLEDMM: Olimex-ESP32-Gateway (like QuinLed-ESP32-Ethernet
   {
@@ -165,8 +254,62 @@ const ethernet_settings ethernetBoards[] = {
     5,			              // eth_power,
     23,			              // eth_mdc,
     18,			              // eth_mdio,
+    GPIO_NUM_NC,          // eth_mosi_pin,
+    GPIO_NUM_NC,          // eth_miso_pin,
+    GPIO_NUM_NC,          // eth_sclk_pin,
+    GPIO_NUM_NC,          // eth_cs_pin,
+    GPIO_NUM_NC,          // eth_int_pin,
+    GPIO_NUM_NC,          // eth_rst_pin,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO17_OUT	// eth_clk_mode
+  },
+
+  // WLEDMM: TTGO T-ETH-Lite S3 (W5500) ☾
+  {
+    1,			              // eth_address,
+    GPIO_NUM_NC,			    // eth_power,
+    GPIO_NUM_NC,			    // eth_mdc,
+    GPIO_NUM_NC,			    // eth_mdio,
+    12,                   // eth_mosi_pin,
+    11,                   // eth_miso_pin,
+    10,                   // eth_sclk_pin,
+    9,                    // eth_cs_pin,
+    13,                   // eth_int_pin,
+    14,                   // eth_rst_pin,
+    ETH_PHY_W5500,        // eth_type,
+    ETH_CLOCK_GPIO0_OUT	  // eth_clk_mode (ignored for W5500)
+  },
+
+  // WaveShare ESP32-S3-ETH (W5500) ☾
+  {
+    1,			              // eth_address,
+    GPIO_NUM_NC,			    // eth_power,
+    GPIO_NUM_NC,			    // eth_mdc,
+    GPIO_NUM_NC,			    // eth_mdio,
+    11,                   // eth_mosi_pin,
+    12,                   // eth_miso_pin,
+    13,                   // eth_sclk_pin,
+    14,                   // eth_cs_pin,
+    10,                   // eth_int_pin,
+    9,                    // eth_rst_pin,
+    ETH_PHY_W5500,        // eth_type,
+    ETH_CLOCK_GPIO0_OUT	  // eth_clk_mode (ignored for W5500)
+  },
+
+  // W5500 Generic, based on some ESP32 Troy had lying around ☾
+  {
+    1,			              // eth_address,
+    GPIO_NUM_NC,          // eth_power,
+    GPIO_NUM_NC,			    // eth_mdc,
+    GPIO_NUM_NC,			    // eth_mdio,
+    13,                   // eth_mosi_pin,
+    12,                   // eth_miso_pin,
+    14,                   // eth_sclk_pin,
+    25,                   // eth_cs_pin,
+    27,                   // eth_int_pin,
+    26,                   // eth_rst_pin,
+    ETH_PHY_W5500,        // eth_type,
+    ETH_CLOCK_GPIO0_OUT	  // eth_clk_mode (ignored for W5500)
   }
 
 };
@@ -211,14 +354,17 @@ void WiFiEvent(WiFiEvent_t event)
     case SYSTEM_EVENT_ETH_GOT_IP:
       if (Network.isEthernet()) {
         if (!apActive) {
-          DEBUG_PRINTLN(F("WiFi Connected *and* ETH Connected. Disabling WIFi"));
-          WiFi.disconnect(true);
+          DEBUG_PRINTLN(F("ETH got IP. Disabling WiFi"));
+          // WiFi.disconnect(true);
         } else {
-          DEBUG_PRINTLN(F("WiFi Connected *and* ETH Connected. Leaving AP WiFi active"));
+          DEBUG_PRINTLN(F("ETH got IP. Leaving AP WiFi active"));
         }
       } else {
-        DEBUG_PRINTLN(F("WiFi Connected. No ETH"));
+        DEBUG_PRINTLN(F("ETH got IP but Network.isEthernet() is false?")); // this shouldn't happen. 
       }
+      // Only force reconnect if this is a reconnect (interfaces already initialized),
+      // not on initial boot where the normal flow handles initialization
+      if (interfacesInited) forceReconnect = true;
       break;
     case SYSTEM_EVENT_ETH_CONNECTED:
       {
@@ -233,6 +379,12 @@ void WiFiEvent(WiFiEvent_t event)
       prepareHostname(hostname);
       ETH.setHostname(hostname);
       showWelcomePage = false;
+      USER_PRINTF("Ethernet link is %sup. Speed is %u mbit and link is %sfull duplex! (MAC: ", ETH.linkUp() ? "" : "not ", ETH.linkSpeed(), ETH.fullDuplex() ? "" : "not ");
+      USER_PRINT(ETH.macAddress());
+      USER_PRINTLN(")");
+      escapedMac = ETH.macAddress();
+      escapedMac.replace(":", "");
+      escapedMac.toLowerCase();
       break;
       }
     case SYSTEM_EVENT_ETH_DISCONNECTED:
@@ -246,6 +398,7 @@ void WiFiEvent(WiFiEvent_t event)
       break;
 #endif
     default:
+      DEBUG_PRINTF("Unhandled Network event: %d\n", (int)event);
       break;
   }
 }

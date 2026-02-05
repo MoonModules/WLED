@@ -68,7 +68,21 @@ class PWMFanUsermod : public Usermod {
     static const char _lock[];
 
     void initTacho(void) {
-      if (tachoPin < 0 || !pinManager.allocatePin(tachoPin, false, PinOwner::UM_Unspecified)){
+      if (tachoPin < 0) {
+        return;
+      }
+      // Validate pin before attempting allocation to prevent conflicts with Ethernet, etc.
+      if (!pinManager.isPinOk(tachoPin, false)) {
+        DEBUG_PRINTLN(F("PWM-fan: tacho pin not valid for this board."));
+        tachoPin = -1;
+        return;
+      }
+      if (pinManager.isPinAllocated(tachoPin)) {
+        DEBUG_PRINTF("PWM-fan: tacho pin %d already in use.\n", tachoPin);
+        tachoPin = -1;
+        return;
+      }
+      if (!pinManager.allocatePin(tachoPin, false, PinOwner::UM_Unspecified)){
         tachoPin = -1;
         return;
       }
@@ -104,7 +118,28 @@ class PWMFanUsermod : public Usermod {
 
     // https://randomnerdtutorials.com/esp32-pwm-arduino-ide/
     void initPWMfan(void) {
-      if (pwmPin < 0 || !pinManager.allocatePin(pwmPin, true, PinOwner::UM_Unspecified)) {
+      if (pwmPin < 0) {
+        deinitTacho();
+        enabled = false;
+        return;
+      }
+      // Validate pin before attempting allocation to prevent conflicts with Ethernet, etc.
+      if (!pinManager.isPinOk(pwmPin, true)) {
+        DEBUG_PRINTLN(F("PWM-fan: PWM pin not valid for this board."));
+        deinitTacho();
+        enabled = false;
+        pwmPin = -1;
+        return;
+      }
+      if (pinManager.isPinAllocated(pwmPin)) {
+        DEBUG_PRINTF("PWM-fan: PWM pin %d already in use.\n", pwmPin);
+        deinitTacho();
+        enabled = false;
+        pwmPin = -1;
+        return;
+      }
+      if (!pinManager.allocatePin(pwmPin, true, PinOwner::UM_Unspecified)) {
+        deinitTacho();
         enabled = false;
         pwmPin = -1;
         return;
@@ -344,6 +379,9 @@ class PWMFanUsermod : public Usermod {
       enabled           = top[FPSTR(_enabled)] | enabled;
       newTachoPin       = top[FPSTR(_tachoPin)] | newTachoPin;
       newPwmPin         = top[FPSTR(_pwmPin)] | newPwmPin;
+      // Early validation - reject obviously invalid pins
+      if (newTachoPin >= 0 && !pinManager.isPinOk(newTachoPin, false)) newTachoPin = -1;
+      if (newPwmPin >= 0 && !pinManager.isPinOk(newPwmPin, true)) newPwmPin = -1;
       tachoUpdateSec    = top[FPSTR(_tachoUpdateSec)] | tachoUpdateSec;
       tachoUpdateSec    = (uint8_t) max(1,(int)tachoUpdateSec); // bounds checking
       targetTemperature = top[FPSTR(_temperature)] | targetTemperature;

@@ -659,9 +659,35 @@ void FourLineDisplayUsermod::setup() {
     isHW = (ioPin[0]==spi_sclk && ioPin[1]==spi_mosi);
     if ((ioPin[0] == -1) || (ioPin[1] == -1)) isHW = true;  // WLEDMM "use global" = hardware
     if ((spi_sclk <0) || (spi_mosi < 0)) isHW = false;      // no global pins - use software emulation
+    // Validate SPI control pins before allocation
+    for (int i = 2; i <= 4; i++) {
+      if (ioPin[i] >= 0) {
+        if (!pinManager.isPinOk(ioPin[i], true)) {
+          typeOK=false; sprintf_P(errorMessage, PSTR("SPI pin[%d]=%d invalid"), i, ioPin[i]); return;
+        }
+        if (pinManager.isPinAllocated(ioPin[i])) {
+          typeOK=false; sprintf_P(errorMessage, PSTR("SPI pin[%d]=%d in use"), i, ioPin[i]); return;
+        }
+      }
+    }
     PinManagerPinType cspins[3] = { { ioPin[2], true }, { ioPin[3], true }, { ioPin[4], true } };
     if (!pinManager.allocateMultiplePins(cspins, 3, PinOwner::UM_FourLineDisplay)) { typeOK=false; strcpy(errorMessage, PSTR("SPI3 alloc pins failed")); return; }
     if (isHW) po = PinOwner::HW_SPI;  // allow multiple allocations of HW I2C bus pins
+    // Validate SPI data pins before allocation (skip for HW SPI which allows shared use)
+    if (po != PinOwner::HW_SPI) {
+      for (int i = 0; i <= 1; i++) {
+        if (ioPin[i] >= 0) {
+          if (!pinManager.isPinOk(ioPin[i], true)) {
+            pinManager.deallocateMultiplePins(cspins, 3, PinOwner::UM_FourLineDisplay);
+            typeOK=false; sprintf_P(errorMessage, PSTR("SPI pin[%d]=%d invalid"), i, ioPin[i]); return;
+          }
+          if (pinManager.isPinAllocated(ioPin[i])) {
+            pinManager.deallocateMultiplePins(cspins, 3, PinOwner::UM_FourLineDisplay);
+            typeOK=false; sprintf_P(errorMessage, PSTR("SPI pin[%d]=%d in use"), i, ioPin[i]); return;
+          }
+        }
+      }
+    }
     PinManagerPinType pins[2] = { { ioPin[0], true }, { ioPin[1], true } };
     if (!pinManager.allocateMultiplePins(pins, 2, po)) {
       pinManager.deallocateMultiplePins(cspins, 3, PinOwner::UM_FourLineDisplay);
@@ -689,6 +715,20 @@ void FourLineDisplayUsermod::setup() {
 
     if ((ioPin[0] < 0 || ioPin[1] < 0) && (i2c_scl < 0 || i2c_sda < 0))  {        // invalid pins, or "use global" and global pins not defined
       typeOK=false; strcpy(errorMessage, PSTR("I2C No Pins defined")); return; }  //WLEDMM bugfix - ensure that "final" GPIO are valid
+
+    // Validate I2C pins before allocation (skip for HW I2C which allows shared use)
+    if (po != PinOwner::HW_I2C) {
+      for (int i = 0; i <= 1; i++) {
+        if (ioPin[i] >= 0) {
+          if (!pinManager.isPinOk(ioPin[i], true)) {
+            typeOK=false; sprintf_P(errorMessage, PSTR("I2C pin[%d]=%d invalid"), i, ioPin[i]); return;
+          }
+          if (pinManager.isPinAllocated(ioPin[i])) {
+            typeOK=false; sprintf_P(errorMessage, PSTR("I2C pin[%d]=%d in use"), i, ioPin[i]); return;
+          }
+        }
+      }
+    }
 
     if (isHW) {
       if (!pinManager.joinWire(i2c_sda, i2c_scl)) { typeOK=false; strcpy(errorMessage, PSTR("I2C HW init failed")); return; }  // WLEDMM join the HW bus
@@ -1607,6 +1647,13 @@ bool FourLineDisplayUsermod::readFromConfig(JsonObject& root) {
   enabled       = top[FPSTR(_enabled)] | enabled;
   newType       = top["type"] | newType;
   for (byte i=0; i<5; i++) ioPin[i] = top["pin"][i] | ioPin[i];
+  // Early validation - reject obviously invalid pins (actual check happens in setup())
+  for (byte i=0; i<5; i++) {
+    if (ioPin[i] >= 0 && !pinManager.isPinOk(ioPin[i], true)) {
+      DEBUG_PRINTF("[%s] pin[%d]=%d not valid for this board.\n", _name, i, ioPin[i]);
+      ioPin[i] = -1;
+    }
+  }
   flip          = top[FPSTR(_flip)] | flip;
   contrast      = top[FPSTR(_contrast)] | contrast;
   #if !defined(ARDUINO_ARCH_ESP32) || !defined(FLD_ESP32_USE_THREADS)

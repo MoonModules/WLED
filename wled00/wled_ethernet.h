@@ -17,19 +17,56 @@
 //              ETH_CLOCK_GPIO0_OUT   == ESP32 provides 50MHz clock output via GPIO0
 //              ETH_CLOCK_GPIO16_OUT  == ESP32 provides 50MHz clock output via GPIO16
 //              ETH_CLOCK_GPIO17_OUT  == ESP32 provides 50MHz clock output via GPIO17
+
+#ifndef GPIO_NUM_NC
+  #define GPIO_NUM_NC -1
+#endif
+
+#if defined(CONFIG_ETH_PHY_INTERFACE_RMII) || defined(CONFIG_EMAC_TASK_PRIORITY) // this seems to be in IDF v3 sdkconfig
+#define WLED_ETH_RSVD_PINS_COUNT 6
+extern managed_pin_type esp32_nonconfigurable_ethernet_pins[WLED_ETH_RSVD_PINS_COUNT];
 typedef struct EthernetSettings {
   uint8_t        eth_address;
   int            eth_power;
   int            eth_mdc;
   int            eth_mdio;
+  int            eth_mosi_pin;
+  int            eth_miso_pin;
+  int            eth_sclk_pin;
+  int            eth_cs_pin;
+  int            eth_int_pin;
+  int            eth_rst_pin;
   eth_phy_type_t eth_type;
   eth_clock_mode_t eth_clk_mode;
 } ethernet_settings;
+#else
+#define ETH_PHY_LAN8720 0
+#define ETH_CLOCK_GPIO0_IN 0
+#define ETH_CLOCK_GPIO0_OUT 1
+#define ETH_CLOCK_GPIO17_OUT 3
+#define ETH_CLOCK_GPIO16_OUT 2
+#define ETH_PHY_IP101 1
+
+typedef struct EthernetSettings {
+  uint8_t        eth_address;
+  int            eth_power;
+  int            eth_mdc;
+  int            eth_mdio;
+  int            eth_mosi_pin;
+  int            eth_miso_pin;
+  int            eth_sclk_pin;
+  int            eth_cs_pin;
+  int            eth_int_pin;
+  int            eth_rst_pin;
+  int            eth_type;
+  int            eth_clk_mode;
+} ethernet_settings;
+#define WLED_ETH_RSVD_PINS_COUNT 0
+extern managed_pin_type esp32_nonconfigurable_ethernet_pins[];
+#endif
 
 extern const ethernet_settings ethernetBoards[];
 
-#define WLED_ETH_RSVD_PINS_COUNT 6
-extern const managed_pin_type esp32_nonconfigurable_ethernet_pins[WLED_ETH_RSVD_PINS_COUNT];
-#endif
+#endif // WLED_USE_ETHERNET
 
-#endif
+#endif // WLED_ETHERNET_H

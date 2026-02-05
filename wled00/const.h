@@ -309,7 +309,7 @@
 #define BTN_TYPE_TOUCH_SWITCH     9    //WLEDMM not yet supported
 
 //Ethernet board types
-#define WLED_NUM_ETH_TYPES       15 //WLEDMM +1 for Olimex ESP32-Gateway
+#define WLED_NUM_ETH_TYPES       17
 
 #define WLED_ETH_NONE             0
 #define WLED_ETH_WT32_ETH01       1
@@ -326,6 +326,8 @@
 #define WLED_ETH_LILYGO_T_POE_PRO 12
 #define WLED_ETH_GLEDOPTO         13
 #define WLED_ETH_OLIMEX_GTW      14
+#define WLED_ETH_TTGO_T_ETH_LITE_S3 15
+#define WLED_ETH_WAVESHARE_ESP32_S3_ETH 16
 
 //Hue error codes
 #define HUE_ERROR_INACTIVE        0
@@ -451,7 +453,7 @@
 #if !defined(ARDUINO_ARCH_ESP32)
   #define MAX_LEDS_PER_BUS 2048   // may not be enough for fast LEDs (i.e. APA102)
 #else
-  #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
+#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32C3
     #define MAX_LEDS_PER_BUS MAX_LEDS // for fast LEDs and fast MCUs (i.e. APA102, HUB75, ART.Net) - allows to have all LEDs on one bus
   #else
     #define MAX_LEDS_PER_BUS 2048     // may not be enough for fast LEDs (i.e. APA102)
@@ -603,10 +605,19 @@
   #define HW_PIN_CLOCKSPI -1 //WLEDMM if not defined -1 will be used (not SCK/18)
 #endif
 #ifndef HW_PIN_MOSISPI  //WLEDMM renamed from HW_PIN_DATASPI
-  #define HW_PIN_MOSISPI -1 //WLEDMM if not defined -1 will be used (not MOSI/23)
+  #define HW_PIN_MOSISPI -1 //WLEDMM if not defined -1 will be used
 #endif
 #ifndef HW_PIN_MISOSPI
-  #define HW_PIN_MISOSPI -1 //WLEDMM if not defined -1 will be used (not MISO/19)
+  #define HW_PIN_MISOSPI -1 //WLEDMM if not defined -1 will be used
+#endif
+#ifndef HW_PIN_CSSPI
+  #define HW_PIN_CSSPI -1 //WLEDMM if not defined -1 will be used
+#endif
+#ifndef HW_PIN_INTSPI
+  #define HW_PIN_INTSPI -1 //WLEDMM if not defined -1 will be used
+#endif
+#ifndef HW_PIN_RSTSPI
+  #define HW_PIN_RSTSPI -1 //WLEDMM if not defined -1 will be used
 #endif
 
 // WLEDMM: IRAM_ATTR for 8266 causes error: section `.text1' will not fit in region `iram1_0_seg'

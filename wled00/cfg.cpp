@@ -33,7 +33,9 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   JsonObject ethernet = doc[F("eth")];
   CJSON(ethernetType, ethernet["type"]);
   // NOTE: Ethernet configuration takes priority over other use of pins
-  WLED::instance().initEthernet();
+  // When fromFS==true, defer initEthernet() until after JSON buffer lock is released
+  // to prevent reentrancy issues with W5500 async events
+  if (!fromFS) WLED::instance().initEthernet();
   #endif
 
   JsonObject id = doc["id"];
@@ -351,6 +353,35 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   CJSON(spi_mosi, hw_if_spi[0]);
   CJSON(spi_sclk, hw_if_spi[1]);
   CJSON(spi_miso, hw_if_spi[2]);
+
+  #ifdef CONFIG_ETH_SPI_ETHERNET_W5500
+  CJSON(spi_cs, hw_if_spi[3]);
+  CJSON(spi_int, hw_if_spi[4]);
+  CJSON(spi_rst, hw_if_spi[5]);
+
+  JsonObject hw_if_spi_use = hw[F("if")][F("spi-use")];
+  if (!hw_if_spi_use[F("use-for-w5500")].isNull()) {
+    spi_use_for_w5500 = hw_if_spi_use[F("use-for-w5500")].as<bool>();
+    if (spi_use_for_w5500) DEBUG_PRINTLN("use-for-w5500 is TRUE");
+    if (!spi_use_for_w5500) DEBUG_PRINTLN("use-for-w5500 is FALSE");
+  } else {
+    DEBUG_PRINTLN("use-for-w5500 was not found");
+  }
+
+  PinManagerPinType spi[6] = { { spi_mosi, true }, { spi_miso, true }, { spi_sclk, true }, { spi_cs, true }, { spi_int, false }, { spi_rst, true } };
+  if (spi_mosi >= 0 && spi_sclk >= 0 && pinManager.allocateMultiplePins(spi, 6, PinOwner::HW_SPI)) {
+    if (!spi_use_for_w5500) {
+      #ifdef ESP32
+      SPI.begin(spi_sclk, spi_miso, spi_mosi);  // SPI global uses VSPI on ESP32 and FSPI on C3, S3
+      #else
+      SPI.begin();
+      #endif
+    }
+    DEBUG_PRINTF("pinmgr success for global spi %d %d %d %d %d %d\n", spi_mosi, spi_miso, spi_sclk, spi_cs, spi_int, spi_rst);
+  } else {
+    DEBUG_PRINTF("pinmgr not success for global spi %d %d %d %d %d %d\n", spi_mosi, spi_miso, spi_sclk, spi_cs, spi_int, spi_rst);
+  }
+  #else
   PinManagerPinType spi[3] = { { spi_mosi, true }, { spi_miso, true }, { spi_sclk, true } };
   if (spi_mosi >= 0 && spi_sclk >= 0 && pinManager.allocateMultiplePins(spi, 3, PinOwner::HW_SPI)) {
     #ifdef ESP32
@@ -362,7 +393,12 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   } else {
     DEBUG_PRINTF("pinmgr not success for global spi %d %d %d\n", spi_mosi, spi_miso, spi_sclk);
   }
+  #endif
 
+  // NOTE: Ethernet initialization must be deferred until after deserializeConfigFromFS() releases the JSON buffer lock
+  // and completes. Calling initEthernet() here can trigger async events that may try to serialize config while
+  // the lock is held, potentially corrupting cfg.json. The fromFS parameter signals this case.
+    
   //int hw_status_pin = hw[F("status")]["pin"]; // -1
 
   JsonObject light = doc[F("light")];
@@ -682,6 +718,12 @@ void deserializeConfigFromFS() {
   bool needsSave = deserializeConfig(doc.as<JsonObject>(), true);
   releaseJSONBufferLock();
 
+  // Initialize Ethernet AFTER releasing the JSON buffer lock to prevent race conditions.
+  // Ethernet events can trigger async operations that may try to serialize config.
+  #ifdef WLED_USE_ETHERNET
+  WLED::instance().initEthernet();
+  #endif
+
   if (needsSave) serializeConfig(); // usermods required new parameters
 }
 
@@ -742,25 +784,38 @@ void serializeConfig() {
   wifi[F("phy")] = force802_3g;
 
   #ifdef WLED_USE_ETHERNET
+
+  #ifndef CONFIG_ETH_SPI_ETHERNET_W5500
+  #define ETH_PHY_W5500 ETH_PHY_MAX
+  #endif
+
   JsonObject ethernet = doc.createNestedObject("eth");
   ethernet["type"] = ethernetType;
   if (ethernetType != WLED_ETH_NONE && ethernetType < WLED_NUM_ETH_TYPES) {
     JsonArray pins = ethernet.createNestedArray("pin");
-    for (uint8_t p=0; p<WLED_ETH_RSVD_PINS_COUNT; p++) pins.add(esp32_nonconfigurable_ethernet_pins[p].pin);
-    if (ethernetBoards[ethernetType].eth_power>=0)     pins.add(ethernetBoards[ethernetType].eth_power);
-    if (ethernetBoards[ethernetType].eth_mdc>=0)       pins.add(ethernetBoards[ethernetType].eth_mdc);
-    if (ethernetBoards[ethernetType].eth_mdio>=0)      pins.add(ethernetBoards[ethernetType].eth_mdio);
-    switch (ethernetBoards[ethernetType].eth_clk_mode) {
-      case ETH_CLOCK_GPIO0_IN:
-      case ETH_CLOCK_GPIO0_OUT:
-        pins.add(0);
-        break;
-      case ETH_CLOCK_GPIO16_OUT:
-        pins.add(16);
-        break;
-      case ETH_CLOCK_GPIO17_OUT:
-        pins.add(17);
-        break;
+    for (uint8_t p = 0; p < WLED_ETH_RSVD_PINS_COUNT; p++)  pins.add(esp32_nonconfigurable_ethernet_pins[p].pin);
+    if (ethernetBoards[ethernetType].eth_power >= 0)        pins.add(ethernetBoards[ethernetType].eth_power);
+    if (ethernetBoards[ethernetType].eth_mdc >= 0)          pins.add(ethernetBoards[ethernetType].eth_mdc);
+    if (ethernetBoards[ethernetType].eth_mdio >= 0)         pins.add(ethernetBoards[ethernetType].eth_mdio);
+    if (ethernetBoards[ethernetType].eth_miso_pin >= 0)     pins.add(ethernetBoards[ethernetType].eth_miso_pin);
+    if (ethernetBoards[ethernetType].eth_mosi_pin >= 0)     pins.add(ethernetBoards[ethernetType].eth_mosi_pin);
+    if (ethernetBoards[ethernetType].eth_cs_pin >= 0)       pins.add(ethernetBoards[ethernetType].eth_cs_pin);
+    if (ethernetBoards[ethernetType].eth_rst_pin >= 0)      pins.add(ethernetBoards[ethernetType].eth_rst_pin);
+    if (ethernetBoards[ethernetType].eth_int_pin >= 0)      pins.add(ethernetBoards[ethernetType].eth_int_pin);
+    if (ethernetBoards[ethernetType].eth_sclk_pin >= 0)     pins.add(ethernetBoards[ethernetType].eth_sclk_pin);
+    if (ethernetBoards[ethernetType].eth_type != ETH_PHY_W5500) {
+      switch (ethernetBoards[ethernetType].eth_clk_mode) {
+        case ETH_CLOCK_GPIO0_IN:
+        case ETH_CLOCK_GPIO0_OUT:
+          pins.add(0);
+          break;
+        case ETH_CLOCK_GPIO16_OUT:
+          pins.add(16);
+          break;
+        case ETH_CLOCK_GPIO17_OUT:
+          pins.add(17);
+          break;
+      }
     }
   }
   #endif
@@ -889,6 +944,14 @@ void serializeConfig() {
   hw_if_spi.add(spi_mosi);
   hw_if_spi.add(spi_sclk);
   hw_if_spi.add(spi_miso);
+  #ifdef CONFIG_ETH_SPI_ETHERNET_W5500
+  hw_if_spi.add(spi_cs);
+  hw_if_spi.add(spi_int);
+  hw_if_spi.add(spi_rst);
+
+  JsonObject spi_use = hw_if.createNestedObject(F("spi-use"));
+  spi_use[F("use-for-w5500")] = (spi_use_for_w5500) ? spi_use_for_w5500 : false;
+  #endif
 
   //JsonObject hw_status = hw.createNestedObject("status");
   //hw_status["pin"] = -1;

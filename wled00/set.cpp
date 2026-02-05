@@ -59,6 +59,9 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
 
     #ifdef WLED_USE_ETHERNET
     ethernetType = request->arg(F("ETH")).toInt();
+    #ifdef CONFIG_ETH_SPI_ETHERNET_W5500
+    DEBUG_PRINTF("spi_use_for_w5500 is %s\n", spi_use_for_w5500 ? "true" : "false");
+    #endif
     WLED::instance().initEthernet();
     #endif
 
@@ -593,21 +596,40 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     int8_t hw_miso_pin = -2;//!request->arg(F("MISOpin")).length() ? -1 : (int)request->arg(F("MISOpin")).toInt();
     int8_t hw_sclk_pin = -2;//!request->arg(F("SCLKpin")).length() ? -1 : (int)request->arg(F("SCLKpin")).toInt();
 
+    #ifdef CONFIG_ETH_SPI_ETHERNET_W5500
+    int8_t hw_cs_pin = -2;
+    int8_t hw_int_pin = -2;
+    int8_t hw_rst_pin = -2;
+    bool use_spi_for_w5500 = false;
+    #endif
+
     //WLEDMM: :pin values have 2 occurrences: the type and the value, we need the value
     int paramsNr = request->params();
     AsyncWebParameter* p_prev = nullptr;
-    for (int i=0;i<paramsNr;i++) {
+    for (int i=0; i < paramsNr; i++) {
       AsyncWebParameter* p = request->getParam(i);
-      if (p_prev != nullptr && p->name() == p_prev->name())
-      {
+      if (p_prev != nullptr && p->name() == p_prev->name()) {
+        DEBUG_PRINT(p->name());
+        DEBUG_PRINT("=");
+        DEBUG_PRINTLN(p->value());
         if (p->name() == "if:SDA:pin") hw_sda_pin = p->value().toInt();
         if (p->name() == "if:SCL:pin") hw_scl_pin = p->value().toInt();
         if (p->name() == "if:MOSI:pin") hw_mosi_pin = p->value().toInt();
         if (p->name() == "if:MISO:pin") hw_miso_pin = p->value().toInt();
         if (p->name() == "if:SCLK:pin") hw_sclk_pin = p->value().toInt();
+        #ifdef CONFIG_ETH_SPI_ETHERNET_W5500
+        if (p->name() == "if:CS:pin") hw_cs_pin = p->value().toInt();
+        if (p->name() == "if:INT:pin") hw_int_pin = p->value().toInt();
+        if (p->name() == "if:RST:pin") hw_rst_pin = p->value().toInt();
+        if (p->name() == "if:use_for_w5500:use") {
+          const String & v = p->value();
+          use_spi_for_w5500 = (v == "1" || v == "true" || v == "on");
+          DEBUG_PRINTF("**** use_spi_for_w5500 == %d\n", use_spi_for_w5500);
+        }
+        #endif
       }
       p_prev = p;
-  }
+    }
 
     #ifdef ESP8266
     // cannot change pins on ESP8266 --> actually we can
@@ -643,11 +665,36 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     if (hw_miso_pin >= 0 && hw_miso_pin != HW_PIN_MISOSPI)  hw_mosi_pin = HW_PIN_MISOSPI;
     if (hw_sclk_pin >= 0 && hw_sclk_pin != HW_PIN_CLOCKSPI) hw_sclk_pin = HW_PIN_CLOCKSPI;
     #endif
+
+    spi_mosi = hw_mosi_pin;
+    spi_miso = hw_miso_pin;
+    spi_sclk = hw_sclk_pin;
+
+    #ifdef CONFIG_ETH_SPI_ETHERNET_W5500
+    PinManagerPinType spi[6] = { { hw_mosi_pin, true }, { hw_miso_pin, true }, { hw_sclk_pin, true }, { hw_cs_pin, true }, { hw_int_pin, false  }, { hw_rst_pin, true } };
+    USER_PRINTF("spi_use_for_w5500 = %d   use_spi_for_w5500 = %d\n", spi_use_for_w5500, use_spi_for_w5500);
+    spi_cs = hw_cs_pin;
+    spi_int = hw_int_pin;
+    spi_rst = hw_rst_pin;
+    if (hw_mosi_pin >= 0 && hw_sclk_pin >= 0 && use_spi_for_w5500 == true) {
+      spi_use_for_w5500 = use_spi_for_w5500;
+      USER_PRINTLN("Trying to start W5500 SPI Ethernet");
+      WLED::instance().initEthernet();
+    } else if (hw_mosi_pin >= 0 && hw_sclk_pin >= 0 && !use_spi_for_w5500 && pinManager.allocateMultiplePins(spi, 6, PinOwner::HW_SPI)) {
+      spi_use_for_w5500 = false;
+    } else {
+      if (hw_mosi_pin == -1 || hw_sclk_pin == -1) { // WLEDMM bugfix allow pin = -1
+        spi_use_for_w5500 = false;
+      }
+      DEBUG_PRINTLN(F("Could not allocate SPI pins."));
+      uint8_t spi[6] = { static_cast<uint8_t>(spi_mosi), static_cast<uint8_t>(spi_miso), static_cast<uint8_t>(spi_sclk), static_cast<uint8_t>(spi_cs), static_cast<uint8_t>(spi_int), static_cast<uint8_t>(spi_rst) };
+      pinManager.deallocateMultiplePins(spi, 6, PinOwner::HW_SPI); // just in case deallocation of old pins
+      DEBUG_PRINTF("pinmgr not success for global spi %d %d %d %d %d %d\n", spi_mosi, spi_miso, spi_sclk, spi_cs, spi_int, spi_rst);
+      spi_use_for_w5500 = false;
+    }
+    #else
     PinManagerPinType spi[3] = { { hw_mosi_pin, true }, { hw_miso_pin, true }, { hw_sclk_pin, true } };
     if (hw_mosi_pin >= 0 && hw_sclk_pin >= 0 && pinManager.allocateMultiplePins(spi, 3, PinOwner::HW_SPI)) {
-      spi_mosi = hw_mosi_pin;
-      spi_miso = hw_miso_pin;
-      spi_sclk = hw_sclk_pin;
       // no bus re-initialisation as usermods do not get any notification
       //SPI.end();
       #ifdef ESP32
@@ -667,6 +714,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       pinManager.deallocateMultiplePins(spi, 3, PinOwner::HW_SPI); // just in case deallocation of old pins
       DEBUG_PRINTF("pinmgr not success for global spi %d %d %d\n", spi_mosi, spi_miso, spi_sclk);
     }
+    #endif
 
     JsonObject um = doc.createNestedObject("um");
 

@@ -655,9 +655,16 @@ void WLED::setup()
   //managed_pin_type pins[] = { {12, true}, {13, true}, {14, true}, {15, true}, {16, true}, {17, true} };
   //pinManager.allocateMultiplePins(pins, sizeof(pins)/sizeof(managed_pin_type), PinOwner::SPI_RAM);
   #else
-  // GPIO16/GPIO17 reserved for SPI RAM
-  managed_pin_type pins[] = { {16, true}, {17, true} };
-  pinManager.allocateMultiplePins(pins, sizeof(pins)/sizeof(managed_pin_type), PinOwner::SPI_RAM);
+  // GPIO16/GPIO17 reserved for SPI RAM on classic ESP32
+  // Skip PICO variants - their reserved pins are already protected by isPinOk()
+  {
+    const char* model = ESP.getChipModel();
+    bool isPico = (strncmp("ESP32-PICO", model, 10) == 0) || (strncmp("ESP32-U4WDH", model, 11) == 0);
+    if (!isPico) {
+      managed_pin_type pins[] = { {16, true}, {17, true} };
+      pinManager.allocateMultiplePins(pins, sizeof(pins)/sizeof(managed_pin_type), PinOwner::SPI_RAM);
+    }
+  }
   #endif
   #if defined(BOARD_HAS_PSRAM) && (defined(WLED_USE_PSRAM) || defined(WLED_USE_PSRAM_JSON))       // WLEDMM
   if (psramFound()) {
@@ -668,14 +675,8 @@ void WLED::setup()
     DEBUG_PRINTLN(F("PSRAM not used."));
   #endif
 #endif
-#if defined(ARDUINO_ARCH_ESP32)
-  if ((strncmp("ESP32-PICO", ESP.getChipModel(), 10) == 0) || (strncmp("ESP32-U4WDH", ESP.getChipModel(), 11) == 0))
-  { // WLEDMM detect pico board and esp32-mini1 board at runtime
-    // special handling for PICO-D4: gpio16+17 are in use for onboard SPI FLASH (not PSRAM)
-    managed_pin_type pins[] = { {16, true}, {17, true} };
-    pinManager.allocateMultiplePins(pins, sizeof(pins)/sizeof(managed_pin_type), PinOwner::SPI_RAM);
-  }
-#endif
+// Note: PICO variants (D4, V3, V3-02) have their reserved pins already protected
+// by isPinOk() in pin_manager.cpp - no explicit allocation needed here.
 
   //DEBUG_PRINT(F("LEDs inited. heap usage ~"));
   //DEBUG_PRINTLN(heapPreAlloc - ESP.getFreeHeap());
@@ -1010,14 +1011,17 @@ void WLED::initAP(bool resetAP)
 
 bool WLED::initEthernet()
 {
-#if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
-
+  #if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
+  
   static bool successfullyConfiguredEthernet = false;
+  ethernet_settings es = {};
 
   if (successfullyConfiguredEthernet) {
-    // DEBUG_PRINTLN(F("initE: ETH already successfully configured, ignoring"));
+    DEBUG_PRINTLN(F("initE: ETH already successfully configured, ignoring"));
     return false;
   }
+
+  // Validate ethernetType unconditionally before any board-specific logic
   if (ethernetType == WLED_ETH_NONE) {
     return false;
   }
@@ -1029,55 +1033,32 @@ bool WLED::initEthernet()
   DEBUG_PRINT(F("initE: Attempting ETH config: ")); DEBUG_PRINTLN(ethernetType);
 
   // Ethernet initialization should only succeed once -- else reboot required
-  ethernet_settings es = ethernetBoards[ethernetType];
-  managed_pin_type pinsToAllocate[10] = {
-    // first six pins are non-configurable
-    esp32_nonconfigurable_ethernet_pins[0],
-    esp32_nonconfigurable_ethernet_pins[1],
-    esp32_nonconfigurable_ethernet_pins[2],
-    esp32_nonconfigurable_ethernet_pins[3],
-    esp32_nonconfigurable_ethernet_pins[4],
-    esp32_nonconfigurable_ethernet_pins[5],
-    { (int8_t)es.eth_mdc,   true },  // [6] = MDC  is output and mandatory
-    { (int8_t)es.eth_mdio,  true },  // [7] = MDIO is bidirectional and mandatory
-    { (int8_t)es.eth_power, true },  // [8] = optional pin, not all boards use
-    { ((int8_t)0xFE),       false }, // [9] = replaced with eth_clk_mode, mandatory
-  };
-  // update the clock pin....
-  if (es.eth_clk_mode == ETH_CLOCK_GPIO0_IN) {
-    pinsToAllocate[9].pin = 0;
-    pinsToAllocate[9].isOutput = false;
-  } else if (es.eth_clk_mode == ETH_CLOCK_GPIO0_OUT) {
-    pinsToAllocate[9].pin = 0;
-    pinsToAllocate[9].isOutput = true;
-  } else if (es.eth_clk_mode == ETH_CLOCK_GPIO16_OUT) {
-    pinsToAllocate[9].pin = 16;
-    pinsToAllocate[9].isOutput = true;
-  } else if (es.eth_clk_mode == ETH_CLOCK_GPIO17_OUT) {
-    pinsToAllocate[9].pin = 17;
-    pinsToAllocate[9].isOutput = true;
-  } else {
-    DEBUG_PRINT(F("initE: Failing due to invalid eth_clk_mode ("));
-    DEBUG_PRINT(es.eth_clk_mode);
-    DEBUG_PRINTLN(")");
-    return false;
-  }
+  es = ethernetBoards[ethernetType];
 
-  if (!pinManager.allocateMultiplePins(pinsToAllocate, 10, PinOwner::Ethernet)) {
-    DEBUG_PRINTLN(F("initE: Failed to allocate ethernet pins"));
-    return false;
+  #ifdef CONFIG_ETH_SPI_ETHERNET_W5500
+  #pragma message "ETHClass2 in use"
+  // Only override with global SPI settings if the selected board is actually a W5500
+  if (spi_use_for_w5500 && es.eth_type == ETH_PHY_W5500) {
+    es.eth_address = 1;
+    es.eth_miso_pin = spi_miso;
+    es.eth_mosi_pin = spi_mosi;
+    es.eth_cs_pin = spi_cs;
+    es.eth_rst_pin = spi_rst;
+    es.eth_int_pin = spi_int;
+    es.eth_sclk_pin = spi_sclk;
   }
+  #endif
 
   /*
   For LAN8720 the most correct way is to perform clean reset each time before init
   applying LOW to power or nRST pin for at least 100 us (please refer to datasheet, page 59)
-  ESP_IDF > V4 implements it (150 us, lan87xx_reset_hw(esp_eth_phy_t *phy) function in 
+  ESP_IDF > V4 implements it (150 us, lan87xx_reset_hw(esp_eth_phy_t *phy) function in
   /components/esp_eth/src/esp_eth_phy_lan87xx.c, line 280)
   but ESP_IDF < V4 does not. Lets do it:
   [not always needed, might be relevant in some EMI situations at startup and for hot resets]
   */
   #if ESP_IDF_VERSION_MAJOR==3
-  if(es.eth_power>0 && es.eth_type==ETH_PHY_LAN8720) {
+  if (es.eth_power > 0 && es.eth_type == ETH_PHY_LAN8720) {
     pinMode(es.eth_power, OUTPUT);
     digitalWrite(es.eth_power, 0);
     delayMicroseconds(150);
@@ -1086,26 +1067,165 @@ bool WLED::initEthernet()
   }
   #endif
 
-  if (!ETH.begin(
-                (uint8_t) es.eth_address,
-                (int)     es.eth_power,
-                (int)     es.eth_mdc,
-                (int)     es.eth_mdio,
-                (eth_phy_type_t)   es.eth_type,
-                (eth_clock_mode_t) es.eth_clk_mode
-                )) {
-    DEBUG_PRINTLN(F("initC: ETH.begin() failed"));
-    // de-allocate the allocated pins
-    for (managed_pin_type mpt : pinsToAllocate) {
-      pinManager.deallocatePin(mpt.pin, PinOwner::Ethernet);
-    }
-    return false;
-  }
+  #ifdef CONFIG_ETH_SPI_ETHERNET_W5500
+    #if !defined(SPI3_HOST)
+      #define SPI3_HOST SPI2_HOST // at a minimum there are 2 SPI Hosts
+    #endif
 
+    if (es.eth_type == ETH_PHY_W5500) {
+      managed_pin_type pinsToAllocate[6] = {
+        { (int8_t)es.eth_miso_pin,  false },  // MISO is input
+        { (int8_t)es.eth_mosi_pin,  true  },  // MOSI is output
+        { (int8_t)es.eth_cs_pin,    true  },  // CS is output
+        { (int8_t)es.eth_rst_pin,   true  },  // RST is output
+        { (int8_t)es.eth_int_pin,   false },  // INT is input
+        { (int8_t)es.eth_sclk_pin,  true  },  // SCLK is output
+      };
+
+      if (spi_use_for_w5500 == false) {
+        if (!pinManager.allocateMultiplePins(pinsToAllocate, 6, PinOwner::Ethernet)) {
+          USER_PRINTLN(F("initE: Failed to allocate ethernet pins"));
+          return false;
+        }
+      }
+
+      if (!ETH.begin(ETH_PHY_W5500, es.eth_address, es.eth_cs_pin, es.eth_int_pin, es.eth_rst_pin, SPI3_HOST, es.eth_sclk_pin, es.eth_miso_pin, es.eth_mosi_pin)) {
+        DEBUG_PRINTLN(F("initC: ETHClass2 SPI ETH.begin() failed"));
+
+        // Only deallocate pins if we allocated them (when not using global SPI)
+        if (!spi_use_for_w5500) {
+          for (managed_pin_type mpt : pinsToAllocate) {
+            pinManager.deallocatePin(mpt.pin, PinOwner::Ethernet);
+          }
+        }
+
+        return false;
+      } else {
+        USER_PRINTLN("ETH initialized W5500!");
+      }
+    } else {
+      #ifdef CONFIG_ETH_PHY_INTERFACE_RMII
+      managed_pin_type pinsToAllocate[10] = {
+        // first six pins are non-configurable
+        esp32_nonconfigurable_ethernet_pins[0],
+        esp32_nonconfigurable_ethernet_pins[1],
+        esp32_nonconfigurable_ethernet_pins[2],
+        esp32_nonconfigurable_ethernet_pins[3],
+        esp32_nonconfigurable_ethernet_pins[4],
+        esp32_nonconfigurable_ethernet_pins[5],
+        { (int8_t)es.eth_mdc,   true },  // [6] = MDC  is output and mandatory
+        { (int8_t)es.eth_mdio,  true },  // [7] = MDIO is bidirectional and mandatory
+        { (int8_t)es.eth_power, true },  // [8] = optional pin, not all boards use
+        { ((int8_t)0xFE),       false }, // [9] = replaced with eth_clk_mode, mandatory
+      };
+      // update the clock pin....
+      if (es.eth_clk_mode == ETH_CLOCK_GPIO0_IN) {
+        pinsToAllocate[9].pin = 0;
+        pinsToAllocate[9].isOutput = false;
+      } else if (es.eth_clk_mode == ETH_CLOCK_GPIO0_OUT) {
+        pinsToAllocate[9].pin = 0;
+        pinsToAllocate[9].isOutput = true;
+      } else if (es.eth_clk_mode == ETH_CLOCK_GPIO16_OUT) {
+        pinsToAllocate[9].pin = 16;
+        pinsToAllocate[9].isOutput = true;
+      } else if (es.eth_clk_mode == ETH_CLOCK_GPIO17_OUT) {
+        pinsToAllocate[9].pin = 17;
+        pinsToAllocate[9].isOutput = true;
+      } else {
+        DEBUG_PRINT(F("initE: Failing due to invalid eth_clk_mode ("));
+        DEBUG_PRINT(es.eth_clk_mode);
+        DEBUG_PRINTLN(")");
+        return false;
+      }
+      if (!pinManager.allocateMultiplePins(pinsToAllocate, 10, PinOwner::Ethernet)) {
+        DEBUG_PRINTLN(F("initE: Failed to allocate ethernet pins"));
+        return false;
+      }
+      
+      if (!ETH.begin(
+        (eth_phy_type_t)es.eth_type,
+        (uint8_t)es.eth_address,
+        (int)es.eth_mdc,
+        (int)es.eth_mdio,
+        (int)es.eth_power,
+        (eth_clock_mode_t)es.eth_clk_mode
+      )) {
+        DEBUG_PRINTLN(F("initC: ETHClass2 RMII ETH.begin() failed"));
+        // de-allocate the allocated pins
+        for (managed_pin_type mpt : pinsToAllocate) {
+          pinManager.deallocatePin(mpt.pin, PinOwner::Ethernet);
+        }
+        return false;
+      }
+      #else
+      return false;
+      #endif
+    }
+  #else
+  #if defined(CONFIG_ETH_PHY_INTERFACE_RMII) || defined(CONFIG_EMAC_TASK_PRIORITY) // this seems to be in IDF v3 sdkconfig
+    // Ethernet initialization should only succeed once -- else reboot required
+    managed_pin_type pinsToAllocate[10] = {
+      // first six pins are non-configurable
+      esp32_nonconfigurable_ethernet_pins[0],
+      esp32_nonconfigurable_ethernet_pins[1],
+      esp32_nonconfigurable_ethernet_pins[2],
+      esp32_nonconfigurable_ethernet_pins[3],
+      esp32_nonconfigurable_ethernet_pins[4],
+      esp32_nonconfigurable_ethernet_pins[5],
+      { (int8_t)es.eth_mdc,   true },  // [6] = MDC  is output and mandatory
+      { (int8_t)es.eth_mdio,  true },  // [7] = MDIO is bidirectional and mandatory
+      { (int8_t)es.eth_power, true },  // [8] = optional pin, not all boards use
+      { ((int8_t)0xFE),       false }, // [9] = replaced with eth_clk_mode, mandatory
+    };
+    // update the clock pin....
+    if (es.eth_clk_mode == ETH_CLOCK_GPIO0_IN) {
+      pinsToAllocate[9].pin = 0;
+      pinsToAllocate[9].isOutput = false;
+    } else if (es.eth_clk_mode == ETH_CLOCK_GPIO0_OUT) {
+      pinsToAllocate[9].pin = 0;
+      pinsToAllocate[9].isOutput = true;
+    } else if (es.eth_clk_mode == ETH_CLOCK_GPIO16_OUT) {
+      pinsToAllocate[9].pin = 16;
+      pinsToAllocate[9].isOutput = true;
+    } else if (es.eth_clk_mode == ETH_CLOCK_GPIO17_OUT) {
+      pinsToAllocate[9].pin = 17;
+      pinsToAllocate[9].isOutput = true;
+    } else {
+      DEBUG_PRINT(F("initE: Failing due to invalid eth_clk_mode ("));
+      DEBUG_PRINT(es.eth_clk_mode);
+      DEBUG_PRINTLN(")");
+      return false;
+    }
+
+    if (!pinManager.allocateMultiplePins(pinsToAllocate, 10, PinOwner::Ethernet)) {
+      DEBUG_PRINTLN(F("initE: Failed to allocate ethernet pins"));
+      return false;
+    }
+
+    if (!ETH.begin(
+      (uint8_t)es.eth_address,
+      (int)es.eth_power,
+      (int)es.eth_mdc,
+      (int)es.eth_mdio,
+      (eth_phy_type_t)es.eth_type,
+      (eth_clock_mode_t)es.eth_clk_mode
+    )) {
+      DEBUG_PRINTLN(F("initC: original ETH.begin() failed"));
+      // de-allocate the allocated pins
+      for (managed_pin_type mpt : pinsToAllocate) {
+        pinManager.deallocatePin(mpt.pin, PinOwner::Ethernet);
+      }
+      return false;
+    }
+    #else
+    return false;
+    #endif
+  #endif
   successfullyConfiguredEthernet = true;
   USER_PRINTLN(F("initC: *** Ethernet successfully configured! ***"));  // WLEDMM
   return true;
 #else
+  DEBUG_PRINTLN(F("initE: RMII not available for this board type"));
   return false; // Ethernet not enabled for build
 #endif
 
@@ -1123,7 +1243,7 @@ void WLED::initConnection()
   //if (strip.isUpdating()) USER_PRINTLN("WLED::initConnection: strip still updating.");
 #endif
 
-  WiFi.disconnect(true);        // close old connections
+  if (WiFi.isConnected()) WiFi.disconnect(true);        // close old connections
   delay(5);                     // wait for hardware to be ready
 #ifdef ESP8266
   WiFi.setPhyMode(force802_3g ? WIFI_PHY_MODE_11G : WIFI_PHY_MODE_11N);
@@ -1411,8 +1531,8 @@ void WLED::handleConnection()
     USER_PRINT(Network.localIP());
     if (Network.isEthernet()) {
      #if ESP32
-     USER_PRINTLN(" via Ethernet (disabling WiFi)");
-     WiFi.disconnect(true);
+     USER_PRINTLN(" via Ethernet (disabled WiFi)");
+     WiFi.disconnect();
      #endif
     } else {
      USER_PRINTLN(" via WiFi");

@@ -29,16 +29,25 @@
 // * display network (long press buttion)
 //
 
-#ifndef ENCODER_DT_PIN
-#define ENCODER_DT_PIN 18
-#endif
+#ifndef WLED_USE_ETHERNET
+  #ifndef ENCODER_DT_PIN
+    #define ENCODER_DT_PIN 18
+  #endif
 
-#ifndef ENCODER_CLK_PIN
+  #ifndef ENCODER_CLK_PIN
 #define ENCODER_CLK_PIN 5
-#endif
+  #endif
 
-#ifndef ENCODER_SW_PIN
-#define ENCODER_SW_PIN 19
+  #ifndef ENCODER_SW_PIN
+    #define ENCODER_SW_PIN 19
+  #endif
+#else
+  #undef ENCODER_DT_PIN
+  #undef ENCODER_CLK_PIN
+  #undef ENCODER_SW_PIN
+  #define ENCODER_DT_PIN -1
+  #define ENCODER_CLK_PIN -1
+  #define ENCODER_SW_PIN -1
 #endif
 
 // The last UI state, remove color and saturation option if diplay not active(too many options)
@@ -421,15 +430,39 @@ void RotaryEncoderUIUsermod::setup()
   if ((pinA < 0) || (pinB < 0)) {                                               //WLEDMM catch error: [  1839][E][esp32-hal-gpio.c:102] __pinMode(): Invalid pin selected
     enabled = false;
     DEBUG_PRINTLN(F("Invalid GPIO pins for Usermod Rotary Encoder (ALT)."));   //WLEDMM add debug info
-    return;      
+    return;
   }
   if (!enabled) return;     // WLEDMM don't allocated PINS if disabled
+  // Validate pins before attempting allocation to prevent conflicts with Ethernet, etc.
+  if (!pinManager.isPinOk(pinA, false) || !pinManager.isPinOk(pinB, false)) {
+    DEBUG_PRINTLN(F("Rotary Encoder: DT or CLK pin not valid for this board."));
+    pinA = pinB = pinC = -1;
+    enabled = false;
+    return;
+  }
+  if (pinManager.isPinAllocated(pinA)) {
+    DEBUG_PRINTF("Rotary Encoder: DT pin %d already in use by %s.\n", pinA, pinManager.getPinOwnerText(pinA));
+    pinA = pinB = pinC = -1;
+    enabled = false;
+    return;
+  }
+  if (pinManager.isPinAllocated(pinB)) {
+    DEBUG_PRINTF("Rotary Encoder: CLK pin %d already in use by %s.\n", pinB, pinManager.getPinOwnerText(pinB));
+    pinA = pinB = pinC = -1;
+    enabled = false;
+    return;
+  }
+  if (pinC >= 0 && !pinManager.isPinOk(pinC, false)) {
+    DEBUG_PRINTLN(F("Rotary Encoder: SW pin not valid for this board."));
+    pinC = -1;  // Disable switch but continue with encoder
+  }
+  if (pinC >= 0 && pinManager.isPinAllocated(pinC)) {
+    DEBUG_PRINTF("Rotary Encoder: SW pin %d already in use by %s.\n", pinC, pinManager.getPinOwnerText(pinC));
+    pinC = -1;  // Disable switch but continue with encoder
+  }
+  // Update pins array after potential pinC changes
+  pins[2].pin = pinC;
   if (!pinManager.allocateMultiplePins(pins, 3, PinOwner::UM_RotaryEncoderUI)) {
-    // BUG: configuring this usermod with conflicting pins
-    //      will cause it to de-allocate pins it does not own
-    //      (at second config)
-    //      This is the exact type of bug solved by pinManager
-    //      tracking the owner tags....
     pinA = pinB = pinC = -1;
     enabled = false;
     DEBUG_PRINTLN(F("Failed to allocate GPIO pins for Usermod Rotary Encoder (ALT)."));   //WLEDMM add debug info
@@ -1065,6 +1098,20 @@ bool RotaryEncoderUIUsermod::readFromConfig(JsonObject &root) {
   int8_t newDTpin  = top[FPSTR(_DT_pin)]  | pinA;
   int8_t newCLKpin = top[FPSTR(_CLK_pin)] | pinB;
   int8_t newSWpin  = top[FPSTR(_SW_pin)]  | pinC;
+
+  // Early validation - reject obviously invalid pins (setup() does full conflict check)
+  if (newDTpin >= 0 && !pinManager.isPinOk(newDTpin, false)) {
+    DEBUG_PRINTLN(F("Rotary Encoder: DT pin not valid for this board."));
+    newDTpin = -1;
+  }
+  if (newCLKpin >= 0 && !pinManager.isPinOk(newCLKpin, false)) {
+    DEBUG_PRINTLN(F("Rotary Encoder: CLK pin not valid for this board."));
+    newCLKpin = -1;
+  }
+  if (newSWpin >= 0 && !pinManager.isPinOk(newSWpin, false)) {
+    DEBUG_PRINTLN(F("Rotary Encoder: SW pin not valid for this board."));
+    newSWpin = -1;
+  }
 
   presetHigh = top[FPSTR(_presetHigh)] | presetHigh;
   presetLow  = top[FPSTR(_presetLow)]  | presetLow;

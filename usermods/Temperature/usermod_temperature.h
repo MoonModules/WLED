@@ -4,12 +4,17 @@
 #include "OneWire.h"
 
 //Pin defaults for QuinLed Dig-Uno if not overriden
-#ifndef TEMPERATURE_PIN
-  #ifdef ARDUINO_ARCH_ESP32
-    #define TEMPERATURE_PIN 18
-  #else //ESP8266 boards
-    #define TEMPERATURE_PIN 14
+#ifndef WLED_USE_ETHERNET
+  #ifndef TEMPERATURE_PIN
+    #ifdef ARDUINO_ARCH_ESP32
+      #define TEMPERATURE_PIN 18
+    #else //ESP8266 boards
+      #define TEMPERATURE_PIN 14
+    #endif
   #endif
+#else
+  #undef TEMPERATURE_PIN
+  #define TEMPERATURE_PIN -1
 #endif
 
 // the frequency to check temperature, 1 minute
@@ -206,7 +211,16 @@ void UsermodTemperature::setup() {
     // config says we are enabled
     DEBUG_PRINTLN(F("Allocating temperature pin..."));
     // pin retrieved from cfg.json (readFromConfig()) prior to running setup()
-    if (temperaturePin >= 0 && pinManager.allocatePin(temperaturePin, true, PinOwner::UM_Temperature)) {
+    // Validate pin before attempting allocation to prevent conflicts with Ethernet, etc.
+    if (temperaturePin < 0) {
+      DEBUG_PRINTLN(F("Temperature: no pin configured."));
+    } else if (!pinManager.isPinOk(temperaturePin, true)) {
+      DEBUG_PRINTLN(F("Temperature: pin not valid for this board."));
+      temperaturePin = -1;
+    } else if (pinManager.isPinAllocated(temperaturePin)) {
+      DEBUG_PRINTF("Temperature: pin %d already in use by %s.\n", temperaturePin, pinManager.getPinOwnerText(temperaturePin));
+      temperaturePin = -1;
+    } else if (pinManager.allocatePin(temperaturePin, true, PinOwner::UM_Temperature)) {
       oneWire = new OneWire(temperaturePin);
       if (oneWire->reset()) {
         while (!findSensor() && retries--) {
@@ -220,9 +234,7 @@ void UsermodTemperature::setup() {
         parasitePin = -1;
       }
     } else {
-      if (temperaturePin >= 0) {
-        DEBUG_PRINTLN(F("Temperature pin allocation failed."));
-      }
+      DEBUG_PRINTLN(F("Temperature pin allocation failed."));
       temperaturePin = -1;  // allocation failed
     }
   }
@@ -381,6 +393,11 @@ bool UsermodTemperature::readFromConfig(JsonObject &root) {
   }
 
   newTemperaturePin = top["pin"] | newTemperaturePin;
+  // Early validation - reject obviously invalid pins (setup() does full conflict check)
+  if (newTemperaturePin >= 0 && !pinManager.isPinOk(newTemperaturePin, true)) {
+    DEBUG_PRINTLN(F("Temperature: configured pin is not valid for this board."));
+    newTemperaturePin = -1;
+  }
   degC              = top["degC"] | degC;
   readingInterval   = top[FPSTR(_readInterval)] | readingInterval/1000;
   readingInterval   = min(120,max(10,(int)readingInterval)) * 1000;  // convert to ms

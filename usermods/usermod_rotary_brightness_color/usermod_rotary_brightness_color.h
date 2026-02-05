@@ -37,6 +37,48 @@ public:
   void setup()
   {
     //Serial.println("Hello from my usermod!");
+    // Validate pins before use to prevent conflicts with Ethernet, etc.
+    if (pins[0] < 0 || pins[1] < 0) {
+      DEBUG_PRINTLN(F("RotaryEncoderBrightnessColor: DT or CLK pin not configured."));
+      enabled = false;
+      return;
+    }
+    if (!pinManager.isPinOk(pins[0], false) || !pinManager.isPinOk(pins[1], false)) {
+      DEBUG_PRINTLN(F("RotaryEncoderBrightnessColor: DT or CLK pin not valid for this board."));
+      pins[0] = pins[1] = pins[2] = -1;
+      enabled = false;
+      return;
+    }
+    if (pinManager.isPinAllocated(pins[0])) {
+      DEBUG_PRINTF("RotaryEncoderBrightnessColor: DT pin %d already in use.\n", pins[0]);
+      pins[0] = pins[1] = pins[2] = -1;
+      enabled = false;
+      return;
+    }
+    if (pinManager.isPinAllocated(pins[1])) {
+      DEBUG_PRINTF("RotaryEncoderBrightnessColor: CLK pin %d already in use.\n", pins[1]);
+      pins[0] = pins[1] = pins[2] = -1;
+      enabled = false;
+      return;
+    }
+    if (pins[2] >= 0) {
+      if (!pinManager.isPinOk(pins[2], false) || pinManager.isPinAllocated(pins[2])) {
+        DEBUG_PRINTLN(F("RotaryEncoderBrightnessColor: SW pin invalid or in use, disabling button."));
+        pins[2] = -1;
+      }
+    }
+    // Allocate pins
+    PinManagerPinType pinsToAllocate[3] = {
+      { pins[0], false },
+      { pins[1], false },
+      { pins[2], false }
+    };
+    if (!pinManager.allocateMultiplePins(pinsToAllocate, 3, PinOwner::UM_RotaryEncoderUI)) {
+      DEBUG_PRINTLN(F("RotaryEncoderBrightnessColor: Failed to allocate pins."));
+      pins[0] = pins[1] = pins[2] = -1;
+      enabled = false;
+      return;
+    }
     pinMode(pins[0], INPUT_PULLUP);
     pinMode(pins[1], INPUT_PULLUP);
     if(pins[2] >= 0) pinMode(pins[2], INPUT_PULLUP);
@@ -56,6 +98,7 @@ public:
    */
   void loop()
   {
+    if (!enabled || pins[0] < 0 || pins[1] < 0) return;
     currentTime = millis(); // get the current elapsed time
 
     if (currentTime >= (loopTime + 2)) // 2ms since last check of encoder = 500Hz
@@ -183,6 +226,11 @@ public:
     configComplete &= getJsonValue(top["pin"][0], pins[0]);
     configComplete &= getJsonValue(top["pin"][1], pins[1]);
     configComplete &= getJsonValue(top["pin"][2], pins[2]);
+
+    // Early validation - reject obviously invalid pins
+    if (pins[0] >= 0 && !pinManager.isPinOk(pins[0], false)) pins[0] = -1;
+    if (pins[1] >= 0 && !pinManager.isPinOk(pins[1], false)) pins[1] = -1;
+    if (pins[2] >= 0 && !pinManager.isPinOk(pins[2], false)) pins[2] = -1;
 
     return configComplete;
   }

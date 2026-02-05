@@ -479,6 +479,17 @@ void MultiRelay::setup() {
   } else {
     for (int i=0; i<MULTI_RELAY_MAX_RELAYS; i++) {
       if (_relay[i].pin<0) continue;
+      // Validate pin before attempting allocation to prevent conflicts with Ethernet, etc.
+      if (!pinManager.isPinOk(_relay[i].pin, true)) {
+        DEBUG_PRINTF("MultiRelay: relay %d pin %d not valid for this board.\n", i, _relay[i].pin);
+        _relay[i].pin = -1;
+        continue;
+      }
+      if (pinManager.isPinAllocated(_relay[i].pin)) {
+        DEBUG_PRINTF("MultiRelay: relay %d pin %d already in use.\n", i, _relay[i].pin);
+        _relay[i].pin = -1;
+        continue;
+      }
       if (!pinManager.allocatePin(_relay[i].pin,true, PinOwner::UM_MultiRelay)) {
         _relay[i].pin = -1;  // allocation failed
       } else {
@@ -774,6 +785,10 @@ bool MultiRelay::readFromConfig(JsonObject &root) {
     _relay[i].delay    = top[parName+FPSTR(_delay_str)]  | _relay[i].delay;
     // end compatibility
     _relay[i].delay    = min(600,max(0,abs((int)_relay[i].delay))); // bounds checking max 10min
+    // Early validation - reject obviously invalid pins
+    if (_relay[i].pin >= 0 && !pinManager.isPinOk(_relay[i].pin, true)) {
+      _relay[i].pin = -1;
+    }
   }
 
   DEBUG_PRINT(FPSTR(_name));
@@ -788,7 +803,9 @@ bool MultiRelay::readFromConfig(JsonObject &root) {
       }
     // allocate new pins
     for (int i=0; i<MULTI_RELAY_MAX_RELAYS; i++) {
-      if (_relay[i].pin>=0 && pinManager.allocatePin(_relay[i].pin, true, PinOwner::UM_MultiRelay)) {
+      if (_relay[i].pin>=0 && pinManager.isPinOk(_relay[i].pin, true) &&
+          !pinManager.isPinAllocated(_relay[i].pin) &&
+          pinManager.allocatePin(_relay[i].pin, true, PinOwner::UM_MultiRelay)) {
         if (!_relay[i].external) {
           _relay[i].state = !offMode;
           switchRelay(i, _relay[i].state);

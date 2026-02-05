@@ -2,8 +2,15 @@
   #include <ESP8266WiFi.h>
 #else // ESP32
   #include <WiFi.h>
-  #include <ETH.h>
+  #if defined(CONFIG_ETH_SPI_ETHERNET_W5500)
+    #include "ETHClass2.h"
+    extern ETHClass2 ETH;
+  #else
+   #include <ETH.h>
+  #endif
 #endif
+
+
 
 #ifndef Network_h
 #define Network_h

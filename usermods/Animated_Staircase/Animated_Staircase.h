@@ -331,6 +331,23 @@ class Animated_Staircase : public Usermod {
       if (topEchoPin            < 0) topEchoPin            = -1;
       if (bottomPIRorTriggerPin < 0) bottomPIRorTriggerPin = -1;
       if (bottomEchoPin         < 0) bottomEchoPin         = -1;
+      // Validate pins before attempting allocation to prevent conflicts with Ethernet, etc.
+      if (topPIRorTriggerPin >= 0 && (!pinManager.isPinOk(topPIRorTriggerPin, useUSSensorTop) || pinManager.isPinAllocated(topPIRorTriggerPin))) {
+        DEBUG_PRINTLN(F("Animated Staircase: top trigger pin invalid or in use."));
+        topPIRorTriggerPin = -1;
+      }
+      if (topEchoPin >= 0 && (!pinManager.isPinOk(topEchoPin, false) || pinManager.isPinAllocated(topEchoPin))) {
+        DEBUG_PRINTLN(F("Animated Staircase: top echo pin invalid or in use."));
+        topEchoPin = -1;
+      }
+      if (bottomPIRorTriggerPin >= 0 && (!pinManager.isPinOk(bottomPIRorTriggerPin, useUSSensorBottom) || pinManager.isPinAllocated(bottomPIRorTriggerPin))) {
+        DEBUG_PRINTLN(F("Animated Staircase: bottom trigger pin invalid or in use."));
+        bottomPIRorTriggerPin = -1;
+      }
+      if (bottomEchoPin >= 0 && (!pinManager.isPinOk(bottomEchoPin, false) || pinManager.isPinAllocated(bottomEchoPin))) {
+        DEBUG_PRINTLN(F("Animated Staircase: bottom echo pin invalid or in use."));
+        bottomEchoPin = -1;
+      }
       // allocate pins
       PinManagerPinType pins[4] = {
         { topPIRorTriggerPin, useUSSensorTop },

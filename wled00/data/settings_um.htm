@@ -343,6 +343,13 @@
 				addField("if:MOSI", "pin", -1, false);
 				addField("if:MISO", "pin", -1, false);
 				addField("if:SCLK", "pin", -1, false);
+				// W5500-specific fields - only show if server supports W5500 (detected by checking if spi-use object exists)
+				if (json.hw?.if?.["spi-use"]) {
+					addField("if:CS",   "pin", -1, false);
+					addField("if:INT",  "pin", -1, false);
+					addField("if:RST",  "pin", -1, false);
+					addField("if:use_for_w5500", "use", json.hw.if["spi-use"]["use-for-w5500"] ?? false);
+				}
 			}
 			if (isO(umCfg)) {
                 //WLEDMM: read url parameter. e.g. um=AudioReactive and if set only add the usermod with the same name
