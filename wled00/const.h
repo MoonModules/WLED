@@ -544,7 +544,11 @@
   #define PSRAM_THRESHOLD (2*1024) // S2 does not have a lot of RAM. C3 and ESP8266 do not support PSRAM: the value is not used
 #endif
 
-// Web server limits
+// Web server limits (8k for AsyncWebServer)
+#if !defined(MIN_HEAP_SIZE)
+#define MIN_HEAP_SIZE 8192
+#endif
+
 #ifdef ESP8266
 // Minimum heap to consider handling a request
 #define WLED_REQUEST_MIN_HEAP (8*1024)
@@ -560,11 +564,6 @@
 // Maximum number of requests in queue; absolute cap on web server resource usage.
 // Websockets do not count against this limit.
 #define WLED_REQUEST_MAX_QUEUE 6
-
-//#define MIN_HEAP_SIZE (8k for AsyncWebServer)
-#if !defined(MIN_HEAP_SIZE)
-#define MIN_HEAP_SIZE 8192
-#endif
 
 // Maximum size of node map (list of other WLED instances)
 #ifdef ESP8266

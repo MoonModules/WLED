@@ -497,23 +497,12 @@ extern "C" {
   void *d_malloc(size_t);
   void *d_calloc(size_t, size_t);
   void *d_realloc_malloc(void *ptr, size_t size);
-  #ifndef ESP8266
-  inline void d_free(void *ptr) { heap_caps_free(ptr); }
-  #else
-  inline void d_free(void *ptr) { free(ptr); }
-  #endif
-  #if defined(BOARD_HAS_PSRAM)
+  void d_free(void *ptr);
   // prefer PSRAM in p_xalloc functions, DRAM as fallback
   void *p_malloc(size_t);
   void *p_calloc(size_t, size_t);
   void *p_realloc_malloc(void *ptr, size_t size);
-  inline void p_free(void *ptr) { heap_caps_free(ptr); }
-  #else
-  #define p_malloc d_malloc
-  #define p_calloc d_calloc
-  #define p_realloc_malloc d_realloc_malloc
-  #define p_free d_free
-  #endif
+  void p_free(void *ptr);
 }
 #ifndef ESP8266
 inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
