@@ -794,10 +794,10 @@ void *d_malloc(size_t size) {
 }
 
 void *d_calloc(size_t count, size_t size) {
-  // similar to d_malloc bus uses heap_caps_calloc
+  // similar to d_malloc but uses heap_caps_calloc
   void *buffer = nullptr;
   #if !defined(CONFIG_IDF_TARGET_ESP32)
-  if (size <= RTC_RAM_THRESHOLD || getContiguousFreeHeap() < 2*MIN_HEAP_SIZE + size)
+  if ((size * count) <= RTC_RAM_THRESHOLD || getContiguousFreeHeap() < 2*MIN_HEAP_SIZE + (size * count))
     buffer = heap_caps_calloc_prefer(count, size, 2, MALLOC_CAP_RTCRAM, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   if (buffer == nullptr) // no RTC RAM allocation: use DRAM
     buffer = heap_caps_calloc(count, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // allocate in any available heap memory
@@ -839,7 +839,7 @@ void *p_malloc(size_t size) {
 }
 
 void *p_calloc(size_t count, size_t size) {
-  // similar to p_malloc bus uses heap_caps_calloc
+  // similar to p_malloc but uses heap_caps_calloc
   if (!psramFound()) return d_calloc(count, size);
   void *buffer = heap_caps_calloc_prefer(count, size, 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
   return validateFreeHeap(buffer);
