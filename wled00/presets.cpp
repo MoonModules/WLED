@@ -293,7 +293,7 @@ void handlePresets()
   #if defined(ARDUINO_ARCH_ESP32)
   //Aircoookie recommended not to delete buffer
   if (tmpPreset==255 && tmpRAMbuffer!=nullptr) {
-    free(tmpRAMbuffer);
+    p_free(tmpRAMbuffer);
     tmpRAMbuffer = nullptr;
   }
   #endif

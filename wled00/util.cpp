@@ -767,7 +767,7 @@ static void *validateFreeHeap(void *buffer) {
 #ifdef BOARD_HAS_PSRAM
 #define RTC_RAM_THRESHOLD 1024 // use RTC RAM for allocations smaller than this size
 #else
-#define RTC_RAM_THRESHOLD (psramFound() ? 65535 : 1024) // without PSRAM, allow any size into RTC RAM (useful especially on S2 without PSRAM)
+#define RTC_RAM_THRESHOLD (psramFound() ? 1024 : 65535) // without PSRAM, allow any size into RTC RAM (useful especially on S2 without PSRAM)
 #endif
 
 void *d_malloc(size_t size) {
