@@ -833,19 +833,21 @@ void p_free(void *ptr) { heap_caps_free(ptr); }
 #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 0)  // V4 can auto-detect PSRAM
 // p_xalloc: prefer PSRAM, use DRAM as fallback
 void *p_malloc(size_t size) {
+  if (!psramFound()) return d_malloc(size);
   void *buffer = heap_caps_malloc_prefer(size, 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
   return validateFreeHeap(buffer);
 }
 
 void *p_calloc(size_t count, size_t size) {
   // similar to p_malloc bus uses heap_caps_calloc
+  if (!psramFound()) return d_calloc(count, size);
   void *buffer = heap_caps_calloc_prefer(count, size, 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
   return validateFreeHeap(buffer);
-  return buffer;
 }
 
 // realloc with malloc fallback, original buffer is freed if realloc fails but not copied!
 void *p_realloc_malloc(void *ptr, size_t size) {
+  if (!psramFound()) return d_realloc_malloc(ptr, size);
   void *buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
   if (buffer) return buffer; // realloc successful
   p_free(ptr); // free old buffer if realloc failed
