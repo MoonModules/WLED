@@ -366,6 +366,17 @@ void WLED::loop()
     DEBUG_PRINTF("%s min free stack %d\n", pcTaskGetTaskName(NULL), uxTaskGetStackHighWaterMark(NULL)); //WLEDMM
 	#endif
     #if defined(ARDUINO_ARCH_ESP32)
+    #if defined(CONFIG_IDF_TARGET_ESP32)
+      // 32-bit DRAM (not byte accessible, only available on ESP32)
+      size_t dram32_free = heap_caps_get_free_size(MALLOC_CAP_32BIT | MALLOC_CAP_INTERNAL) - dram_free; // returns all 32bit DRAM, subtract 8bit DRAM
+      //size_t dram32_largest = heap_caps_get_largest_free_block(MALLOC_CAP_32BIT | MALLOC_CAP_INTERNAL); // returns largest DRAM block -> not useful
+      DEBUG_PRINTF_P(PSTR("DRAM 32-bit:  Free: %7u bytes | Largest block: N/A\n"), dram32_free);
+    #else
+      // Fast RTC Memory (not available on ESP32)
+      size_t rtcram_free = heap_caps_get_free_size(MALLOC_CAP_RTCRAM);
+      size_t rtcram_largest = heap_caps_get_largest_free_block(MALLOC_CAP_RTCRAM);
+      DEBUG_PRINTF_P(PSTR("RTC RAM:      Free: %7u bytes | Largest block: %7u bytes\n"), rtcram_free, rtcram_largest);
+    #endif
     #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3) // V4 can auto-detect PSRAM
     if (psramFound()) {
       //DEBUG_PRINT(F("Total PSRAM: "));    DEBUG_PRINT(ESP.getPsramSize()/1024); DEBUG_PRINTLN("kB");
