@@ -80,7 +80,7 @@ def wledmm_print_build_info(env):
 
     found = False
     for item in all_flags:
-        if 'WLED_' in item or 'WLED_' in item[0] or 'MAX_LED' in item[0]:
+        if 'WLED_' in item or 'WLED_' in item[0] or 'MAX_LED' in item[0] or 'JSON_' in item[0] or '_SEGMENT' in item[0]:
             if not 'WLED_RELEASE_NAME' in item[0] and not 'WLED_VERSION' in item[0] and not 'WLED_WATCHDOG_TIMEOUT' in item[0] and not 'WLED_DISABLE' in item and not 'WLED_USE_MY_CONFIG' in item and not 'ARDUINO_PARTITION' in item:
                 if first: print("\nUsermods and Features:")
                 print_my_item(item)
@@ -100,7 +100,7 @@ def wledmm_print_build_info(env):
 
     first = True
     for item in all_flags:
-        if  'PIN' in item[0] or 'PIN' in item or 'DMTYPE' in item[0] or 'STATUSLED'  in item[0]:
+        if  'PIN' in item[0] or 'PIN' in item or 'DMTYPE' in item[0] or 'STATUSLED' in item[0]:
             if first: print("Default PINs:")
             print_my_item(item)
             first = False
