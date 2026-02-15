@@ -460,7 +460,7 @@ static const uint8_t *getPresetCache(size_t &size) {
 
   if ((presetsModifiedTime != presetsCachedTime) || (presetsCachedValidate != cacheInvalidate)) {
     if (presetsCached) {
-      free(presetsCached);
+      p_free(presetsCached);
       presetsCached = nullptr;
     }
   }
@@ -475,7 +475,7 @@ static const uint8_t *getPresetCache(size_t &size) {
       presetsCachedTime = presetsModifiedTime;
       presetsCachedValidate = cacheInvalidate;
       presetsCachedSize = 0;
-      presetsCached = (uint8_t*)ps_malloc(file.size() + 1);
+      presetsCached = (uint8_t*)p_malloc(file.size() + 1);
       if (presetsCached) {
         presetsCachedSize = file.size();
         file.read(presetsCached, presetsCachedSize);
@@ -506,14 +506,16 @@ void invalidateFileNameCache() { // reset "file not found" cache
   haveICOFile = true;
   haveCpalFile = true;
 
-  #if defined(BOARD_HAS_PSRAM) && (defined(WLED_USE_PSRAM) || defined(WLED_USE_PSRAM_JSON))
+  #if (defined(BOARD_HAS_PSRAM) || ESP_IDF_VERSION_MAJOR > 3) && (defined(WLED_USE_PSRAM) || defined(WLED_USE_PSRAM_JSON))
   // WLEDMM hack to clear presets.json cache
-  size_t dummy;
-  unsigned long realpresetsTime = presetsModifiedTime;
-  presetsModifiedTime = toki.second();   // pretend we have changes
-  (void) getPresetCache(dummy);          // clear presets.json cache
-  presetsModifiedTime = realpresetsTime; // restore correct value
-#endif
+  if (psramFound()) {
+    size_t dummy;
+    unsigned long realpresetsTime = presetsModifiedTime;
+    presetsModifiedTime = toki.second();   // pretend we have changes
+    (void) getPresetCache(dummy);          // clear presets.json cache
+    presetsModifiedTime = realpresetsTime; // restore correct value
+  }
+  #endif
   //USER_PRINTLN("WS FileRead cache cleared");
 }
 

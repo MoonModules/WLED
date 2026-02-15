@@ -111,7 +111,7 @@ void Segment::allocLeds() {
     DEBUG_PRINTF("allocLeds warning: size == %u !!\n", size);
     if (ledsrgb && (ledsrgbSize == 0)) {
       USER_PRINTLN("allocLeds warning: ledsrgbSize == 0 but ledsrgb!=NULL");
-      free(ledsrgb); ledsrgb=nullptr;
+      d_free(ledsrgb); ledsrgb=nullptr;
     } // softhack007 clean up buffer
   }
   if ((size > 0) && (!ledsrgb || size > ledsrgbSize)) {    //softhack dont allocate zero bytes
@@ -124,8 +124,8 @@ void Segment::allocLeds() {
     ledsrgb = nullptr;
     portEXIT_CRITICAL(&ledsrgb_mux);
 
-    if (oldLedsRgb) free(oldLedsRgb);   // we need a bigger buffer, so free the old one first
-    CRGB* newLedsRgb = (CRGB*)calloc(size, 1);   // WLEDMM This is an OS call, so we should not wrap it in portEnterCRITICAL
+    if (oldLedsRgb) d_free(oldLedsRgb);   // we need a bigger buffer, so free the old one first
+    CRGB* newLedsRgb = (CRGB*)d_calloc(size, 1);   // WLEDMM This is an OS call, so we should not wrap it in portEnterCRITICAL
 
     portENTER_CRITICAL(&ledsrgb_mux);
     ledsrgb = newLedsRgb;
@@ -175,7 +175,7 @@ Segment& Segment::operator= (const Segment &orig) {
     if (_t)   delete _t;
     CRGB* oldLeds = ledsrgb;
     size_t oldLedsSize = ledsrgbSize;
-    if (ledsrgb && !Segment::_globalLeds) free(ledsrgb);
+    if (ledsrgb && !Segment::_globalLeds) d_free(ledsrgb);
     deallocateData();
     // copy source
     memcpy((void*)this, (void*)&orig, sizeof(Segment));
@@ -212,7 +212,7 @@ Segment& Segment::operator= (Segment &&orig) noexcept {
     if (name) { delete[] name; name = nullptr; } // free old name
     deallocateData(); // free old runtime data
     if (_t) { delete _t; _t = nullptr; }
-    if (ledsrgb && !Segment::_globalLeds) free(ledsrgb); //WLEDMM: not needed anymore as we will use leds from copy. no need to nullify ledsrgb as it gets new value in memcpy
+    if (ledsrgb && !Segment::_globalLeds) d_free(ledsrgb); //WLEDMM: not needed anymore as we will use leds from copy. no need to nullify ledsrgb as it gets new value in memcpy
 
     // WLEDMM temporarily prevent any fast draw calls to old and new segment
     orig._isSimpleSegment = false;
@@ -265,7 +265,7 @@ bool Segment::allocateData(size_t len, bool allowOverdraft) {  // WLEDMM allowOv
   //  data = (byte*) ps_malloc(len);
   //else
   //#endif
-    data = (byte*) malloc(len);
+    data = (byte*) d_malloc(len);
   if (!data) {
       _dataLen = 0; // WLEDMM reset dataLen
       if ((errorFlag != ERR_LOW_MEM) && (errorFlag != ERR_LOW_SEG_MEM)) { // spam filter
@@ -292,7 +292,7 @@ void Segment::deallocateData() {
     _dataLen = 0;
     return;
   }  // WLEDMM reset dataLen
-  free(data);
+  d_free(data);
   data = nullptr;
   DEBUG_PRINTF("Segment::deallocateData: free'd   %d bytes.\n", _dataLen);
   Segment::addUsedSegmentData(-_dataLen);
@@ -308,7 +308,7 @@ void Segment::deallocateData() {
   */
 void Segment::resetIfRequired() {
   if (reset) {
-    if (ledsrgb && !Segment::_globalLeds) { free(ledsrgb); ledsrgb = nullptr; ledsrgbSize=0;} // WLEDMM segment has changed, so we need a fresh buffer.
+    if (ledsrgb && !Segment::_globalLeds) { d_free(ledsrgb); ledsrgb = nullptr; ledsrgbSize=0;} // WLEDMM segment has changed, so we need a fresh buffer.
     if (transitional && _t) { transitional = false; delete _t; _t = nullptr; }
     deallocateData();
     next_time = 0; step = 0; call = 0; aux0 = 0; aux1 = 0;
@@ -1866,7 +1866,7 @@ void WS2812FX::finalizeInit(void)
     portENTER_CRITICAL(&ledsrgb_mux);
     Segment::_globalLeds = nullptr;
     portEXIT_CRITICAL(&ledsrgb_mux);
-    free(oldGLeds);
+    d_free(oldGLeds);
     purgeSegments(true);   // WLEDMM moved here, because it seems to improve stability.
   }
   if (useLedsArray && getLengthTotal()>0) { // WLEDMM avoid malloc(0)
@@ -1877,7 +1877,7 @@ void WS2812FX::finalizeInit(void)
     //  Segment::_globalLeds = (CRGB*) ps_malloc(arrSize);
     //else
     //#endif
-      if (arrSize > 0) Segment::_globalLeds = (CRGB*) malloc(arrSize); // WLEDMM avoid malloc(0)
+      if (arrSize > 0) Segment::_globalLeds = (CRGB*) d_malloc(arrSize); // WLEDMM avoid malloc(0)
     if ((Segment::_globalLeds != nullptr) && (arrSize > 0)) memset(Segment::_globalLeds, 0, arrSize); // WLEDMM avoid dereferencing nullptr
     if ((Segment::_globalLeds == nullptr) && (arrSize > 0)) errorFlag = ERR_NORAM_PX; // WLEDMM raise errorflag
   }
@@ -2703,11 +2703,12 @@ bool WS2812FX::deserializeMap(uint8_t n) {
 
     // don't use new / delete
     if ((size > 0) && (customMappingTable != nullptr)) {
-      customMappingTable = (uint16_t*) reallocf(customMappingTable, sizeof(uint16_t) * size);  // reallocf will free memory if it cannot resize
+      //customMappingTable = (uint16_t*) reallocf(customMappingTable, sizeof(uint16_t) * size);  // reallocf will free memory if it cannot resize
+      customMappingTable = (uint16_t*) d_realloc_malloc(customMappingTable, sizeof(uint16_t) * size);  // reallocf will free memory if it cannot resize
     }
     if ((size > 0) && (customMappingTable == nullptr)) { // second try
       DEBUG_PRINTLN("deserializeMap: trying to get fresh memory block.");
-      customMappingTable = (uint16_t*) calloc(size, sizeof(uint16_t));
+      customMappingTable = (uint16_t*) d_calloc(size, sizeof(uint16_t));
       if (customMappingTable == nullptr) { 
         DEBUG_PRINTLN("deserializeMap: alloc failed!");
         errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag

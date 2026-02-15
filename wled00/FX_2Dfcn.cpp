@@ -76,11 +76,12 @@ void WS2812FX::setUpMatrix() {
 
       // don't use new / delete
       if ((size > 0) && (customMappingTable != nullptr)) {  // resize
-        customMappingTable = (uint16_t*) reallocf(customMappingTable, sizeof(uint16_t) * size); // reallocf will free memory if it cannot resize
+        //customMappingTable = (uint16_t*) reallocf(customMappingTable, sizeof(uint16_t) * size); // reallocf will free memory if it cannot resize
+        customMappingTable = (uint16_t*) d_realloc_malloc(customMappingTable, sizeof(uint16_t) * size); // will free memory if it cannot resize
       }
       if ((size > 0) && (customMappingTable == nullptr)) { // second try
         DEBUG_PRINTLN("setUpMatrix: trying to get fresh memory block.");
-        customMappingTable = (uint16_t*) calloc(size, sizeof(uint16_t));
+        customMappingTable = (uint16_t*) d_calloc(size, sizeof(uint16_t));
         if (customMappingTable == nullptr) { 
           USER_PRINTLN("setUpMatrix: alloc failed");
           errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
@@ -122,7 +123,7 @@ void WS2812FX::setUpMatrix() {
           JsonArray map = doc.as<JsonArray>();
           gapSize = map.size();
           if (!map.isNull() && (gapSize > 0) && gapSize >= customMappingSize) { // not an empty map //softhack also check gapSize>0 
-            gapTable = new(std::nothrow) int8_t[gapSize];
+            gapTable = static_cast<int8_t*>(p_malloc(gapSize));
             if (gapTable) for (size_t i = 0; i < gapSize; i++) {
               gapTable[i] = constrain(map[i], -1, 1);
             }
@@ -152,7 +153,7 @@ void WS2812FX::setUpMatrix() {
       }
 
       // delete gap array as we no longer need it
-      if (gapTable) {delete[] gapTable; gapTable=nullptr;}   // softhack prevent dangling pointer
+      if (gapTable) {p_free(gapTable); gapTable=nullptr;}   // softhack prevent dangling pointer
 
       #ifdef WLED_DEBUG_MAPS
       DEBUG_PRINTF("Matrix ledmap: \n");
@@ -185,7 +186,7 @@ void WS2812FX::setUpMatrix() {
       if (customMappingTable[i] != (uint16_t)i ) isIdentity = false;
     }
     if (isIdentity) {
-      free(customMappingTable); customMappingTable = nullptr;      
+      d_free(customMappingTable); customMappingTable = nullptr;      
       USER_PRINTF("!setupmatrix: customMappingTable is not needed. Dropping %d bytes.\n", customMappingTableSize * sizeof(uint16_t));
       customMappingTableSize = 0;
       customMappingSize = 0;

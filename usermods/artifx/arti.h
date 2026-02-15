@@ -2565,7 +2565,7 @@ public:
     uint16_t programFileSize;
     #if ARTI_PLATFORM == ARTI_ARDUINO
       programFileSize = programFile.size();
-      programText = (char *)malloc(programFileSize+1);
+      programText = (char *)d_malloc(programFileSize+1);
       programFile.read((byte *)programText, programFileSize);
       programText[programFileSize] = '\0';
     #else
@@ -2607,7 +2607,7 @@ public:
     #endif
 
     if (stages < 1) {
-      if (nullptr != programText) free(programText);  // softhack007 prevent memory leak
+      if (nullptr != programText) d_free(programText);  // softhack007 prevent memory leak
       close(); 
       return true;
     }
@@ -2666,7 +2666,7 @@ public:
       #endif
     }
     #if ARTI_PLATFORM == ARTI_ARDUINO //not on windows as cause crash???
-      free(programText);
+      d_free(programText);
     #endif
 
     if (stages >= 3)

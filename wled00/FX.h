@@ -609,7 +609,7 @@ typedef struct Segment {
       endImagePlayback(this);
       #endif
 
-      if ((Segment::_globalLeds == nullptr) && !strip_uses_global_leds() && (ledsrgb != nullptr)) {free(ledsrgb); ledsrgb = nullptr;}  // WLEDMM we need "!strip_uses_global_leds()" to avoid crashes (#104)
+      if ((Segment::_globalLeds == nullptr) && !strip_uses_global_leds() && (ledsrgb != nullptr)) {d_free(ledsrgb); ledsrgb = nullptr;}  // WLEDMM we need "!strip_uses_global_leds()" to avoid crashes (#104)
       if (name) { delete[] name; name = nullptr; }
       if (_t)   { transitional = false; delete _t; _t = nullptr; }
       deallocateData();
@@ -1009,7 +1009,7 @@ class WS2812FX {  // 96 bytes
       #ifdef WLED_DEBUG
       if (Serial) Serial.println(F("~WS2812FX destroying strip.")); // WLEDMM can't use DEBUG_PRINTLN here
       #endif
-      if (customMappingTable) delete[] customMappingTable;
+      if (customMappingTable) d_free(customMappingTable); customMappingTable = nullptr;
       _mode.clear();
       _modeData.clear();
       _segments.clear();
@@ -1017,7 +1017,7 @@ class WS2812FX {  // 96 bytes
       panel.clear();
 #endif
       customPalettes.clear();
-      if (useLedsArray && Segment::_globalLeds) free(Segment::_globalLeds);
+      if (useLedsArray && Segment::_globalLeds) d_free(Segment::_globalLeds);
     }
 
     static WS2812FX* getInstance(void) { return instance; }

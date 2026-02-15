@@ -59,27 +59,18 @@ uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, byte 
 
 //util.cpp
 // memory allocation wrappers
+// forward declaration: memory functions (util.cpp)
 extern "C" {
-  // prefer DRAM over PSRAM (if available) in d_ alloc functions
+  // prefer DRAM in d_xalloc functions, PSRAM as fallback
   void *d_malloc(size_t);
   void *d_calloc(size_t, size_t);
   void *d_realloc_malloc(void *ptr, size_t size);
-  #ifndef ESP8266
-  inline void d_free(void *ptr) { heap_caps_free(ptr); }
-  #else
-  inline void d_free(void *ptr) { free(ptr); }
-  #endif
-  #if defined(BOARD_HAS_PSRAM)
-  // prefer PSRAM over DRAM in p_ alloc functions
+  void d_free(void *ptr);
+  // prefer PSRAM in p_xalloc functions, DRAM as fallback
   void *p_malloc(size_t);
   void *p_calloc(size_t, size_t);
   void *p_realloc_malloc(void *ptr, size_t size);
-  inline void p_free(void *ptr) { heap_caps_free(ptr); }
-  #else
-  #define p_malloc d_malloc
-  #define p_calloc d_calloc
-  #define p_free d_free
-  #endif
+  void p_free(void *ptr);
 }
 
 #ifdef WLED_DEBUG

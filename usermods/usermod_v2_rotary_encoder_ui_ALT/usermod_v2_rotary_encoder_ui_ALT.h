@@ -352,7 +352,7 @@ void RotaryEncoderUIUsermod::sortModesAndPalettes() {
 }
 
 byte *RotaryEncoderUIUsermod::re_initIndexArray(int numModes) {
-  byte *indexes = (byte *)malloc(sizeof(byte) * numModes);
+  byte *indexes = (byte *)d_calloc(numModes, sizeof(byte));
   for (byte i = 0; i < numModes; i++) {
     indexes[i] = i;
   }
@@ -364,7 +364,7 @@ byte *RotaryEncoderUIUsermod::re_initIndexArray(int numModes) {
  * They don't end in '\0', they end in '"'. 
  */
 const char **RotaryEncoderUIUsermod::re_findModeStrings(const char json[], int numModes) {
-  const char **modeStrings = (const char **)malloc(sizeof(const char *) * numModes);
+  const char **modeStrings = (const char **)d_calloc(numModes, sizeof(const char *));
   uint8_t modeIndex = 0;
   bool insideQuotes = false;
   // advance past the mark for markLineNum that may exist.
@@ -380,7 +380,7 @@ const char **RotaryEncoderUIUsermod::re_findModeStrings(const char json[], int n
         insideQuotes = !insideQuotes;
         if (insideQuotes) {
           // We have a new mode or palette
-          modeStrings[modeIndex] = (char *)(json + i + 1);
+          if (modeIndex < numModes) modeStrings[modeIndex] = (char *)(json + i + 1); //WLEDMM prevent array bounds violation
         }
         break;
       case '[':
