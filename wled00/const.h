@@ -529,10 +529,12 @@
 #endif
 
 // minimum heap size required to process web requests: try to keep free heap above this value
+#if !defined(MIN_HEAP_SIZE)
 #ifdef ESP8266
   #define MIN_HEAP_SIZE (9*1024)
 #else
   #define MIN_HEAP_SIZE (15*1024) // WLED allocation functions (util.cpp) try to keep this much contiguous heap free for other tasks
+#endif
 #endif
 // threshold for PSRAM use: if heap is running low, requests to allocate_buffer(prefer DRAM) above PSRAM_THRESHOLD may be put in PSRAM
 // if heap is depleted, PSRAM will be used regardless of threshold
@@ -545,9 +547,9 @@
 #endif
 
 // Web server limits (8k for AsyncWebServer)
-#if !defined(MIN_HEAP_SIZE)
-#define MIN_HEAP_SIZE 8192
-#endif
+//#if !defined(MIN_HEAP_SIZE)
+//#define MIN_HEAP_SIZE 8192
+//#endif
 
 #ifdef ESP8266
 // Minimum heap to consider handling a request

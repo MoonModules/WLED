@@ -2704,7 +2704,7 @@ bool WS2812FX::deserializeMap(uint8_t n) {
     // don't use new / delete
     if ((size > 0) && (customMappingTable != nullptr)) {
       //customMappingTable = (uint16_t*) reallocf(customMappingTable, sizeof(uint16_t) * size);  // reallocf will free memory if it cannot resize
-      customMappingTable = (uint16_t*) d_realloc_malloc(customMappingTable, sizeof(uint16_t) * size);  // reallocf will free memory if it cannot resize
+      customMappingTable = (uint16_t*) d_realloc_malloc(customMappingTable, sizeof(uint16_t) * size);  // will free memory if it cannot resize
     }
     if ((size > 0) && (customMappingTable == nullptr)) { // second try
       DEBUG_PRINTLN("deserializeMap: trying to get fresh memory block.");
