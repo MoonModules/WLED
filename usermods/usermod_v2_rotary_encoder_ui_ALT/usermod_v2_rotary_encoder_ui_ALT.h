@@ -352,7 +352,8 @@ void RotaryEncoderUIUsermod::sortModesAndPalettes() {
 }
 
 byte *RotaryEncoderUIUsermod::re_initIndexArray(int numModes) {
-  byte *indexes = (byte *)d_calloc(numModes, sizeof(byte));
+  byte* indexes = (byte *)p_calloc(numModes, sizeof(byte));
+  if (!indexes) return nullptr; // avoid OOM crash
   for (byte i = 0; i < numModes; i++) {
     indexes[i] = i;
   }
@@ -364,7 +365,9 @@ byte *RotaryEncoderUIUsermod::re_initIndexArray(int numModes) {
  * They don't end in '\0', they end in '"'. 
  */
 const char **RotaryEncoderUIUsermod::re_findModeStrings(const char json[], int numModes) {
-  const char **modeStrings = (const char **)d_calloc(numModes, sizeof(const char *));
+  const char** modeStrings = (const char **)p_calloc(numModes, sizeof(const char *));
+  if (!modeStrings) return nullptr; // avoid OOM crash
+
   uint8_t modeIndex = 0;
   bool insideQuotes = false;
   // advance past the mark for markLineNum that may exist.
