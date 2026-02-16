@@ -480,7 +480,7 @@ static void destroyFFTBuffers(void) {
   if (vImag) d_free(vImag); vImag = nullptr;
   if (vReal) d_free(vReal); vReal = nullptr;
   #ifdef SR_DEBUG
-    USER_PRINTLN("\ndesroyFFTBuffers() completed successfully.");
+    USER_PRINTLN("\ndestroyFFTBuffers() completed successfully.");
     USER_PRINT(F("Free heap: ")); USER_PRINTLN(ESP.getFreeHeap());
     USER_FLUSH();
   #endif
