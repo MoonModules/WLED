@@ -684,7 +684,7 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
   MatrixPanel_I2S_DMA* display = nullptr;
   VirtualMatrixPanel*  fourScanPanel = nullptr;
   HUB75_I2S_CFG mxconfig;
-  size_t lastHeap = ESP.getFreeHeap();
+  size_t lastHeap = getFreeHeapSize();
 
   _valid = false;
   _len = 0;
@@ -951,7 +951,7 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
   USER_PRINTF("\tLAT = %2d,  OE = %2d, CLK = %2d\n\n", mxconfig.gpio.lat, mxconfig.gpio.oe, mxconfig.gpio.clk);
   USER_FLUSH();
 
-  DEBUG_PRINT(F("Free heap: ")); DEBUG_PRINTLN(ESP.getFreeHeap()); lastHeap = ESP.getFreeHeap();
+  DEBUG_PRINT(F("Free heap: ")); DEBUG_PRINTLN(getFreeHeapSize()); lastHeap = getFreeHeapSize();
 
   // check if we can re-use the existing display driver
   if (activeDisplay) {
@@ -996,7 +996,7 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
       USER_PRINTLN("****** MatrixPanel_I2S_DMA !KABOOM! driver allocation failed ***********");
       activeDisplay = nullptr;
       activeFourScanPanel = nullptr;
-      USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - ESP.getFreeHeap()));
+      USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - getFreeHeapSize()));
       return;
   }
 
@@ -1027,11 +1027,11 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
   _bri = (last_bri > 0) ? last_bri : 25;  // try to restore persistent brightness value
 
   delay(24); // experimental
-  DEBUG_PRINT(F("heap usage: ")); DEBUG_PRINTLN(int(lastHeap - ESP.getFreeHeap()));
+  DEBUG_PRINT(F("heap usage: ")); DEBUG_PRINTLN(int(lastHeap - getFreeHeapSize()));
   // Allocate memory and start DMA display
   if (newDisplay && (display->begin() == false)) {
       USER_PRINTLN("****** MatrixPanel_I2S_DMA !KABOOM! I2S memory allocation failed ***********");
-      USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - ESP.getFreeHeap()));
+      USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - getFreeHeapSize()));
       _valid = false;
       return;
   }
@@ -1039,7 +1039,7 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
     if (newDisplay) { USER_PRINTLN("MatrixPanel_I2S_DMA begin, started ok"); }
     else { USER_PRINTLN("MatrixPanel_I2S_DMA begin, using existing display."); }
     
-    USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - ESP.getFreeHeap()));
+    USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - getFreeHeapSize()));
     delay(18);   // experiment - give the driver a moment (~ one full frame @ 60hz) to settle
     _valid = true;
     display->setBrightness8(_bri);    // range is 0-255, 0 - 0%, 255 - 100% //  [setBrightness()] Tried to set output brightness before begin()
@@ -1069,7 +1069,7 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
       USER_PRINTLN(F("MatrixPanel_I2S_DMA not started - not enough memory for leds buffer!"));
       cleanup();  // free buffers, and deallocate pins
       _valid = false;
-      USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - ESP.getFreeHeap()));
+      USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - getFreeHeapSize()));
       return;  //  fail
   }
   
@@ -1130,7 +1130,7 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
 #endif
 
   instanceCount++;
-  USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - ESP.getFreeHeap()));
+  USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - getFreeHeapSize()));
 }
 
 void __attribute__((hot)) IRAM_ATTR BusHub75Matrix::setPixelColor(uint16_t pix, uint32_t c) {

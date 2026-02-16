@@ -752,6 +752,30 @@ void *p_realloc_malloc(void *ptr, size_t size) { return d_realloc_malloc(ptr, si
 void p_free(void *ptr) { free(ptr); }
 
 #else
+
+static size_t lastHeap = 65535;
+static size_t lastMinHeap = 65535;
+inline static void d_measureHeap(void) {
+#ifdef WLEDMM_FILEWAIT  // only when we don't use the RMTHI driver
+  if (!strip.isUpdating())  // skip measurement while sending out LEDs - prevents flickering
+#endif
+  {
+    lastHeap    = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    lastMinHeap = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  }
+}
+
+size_t d_measureContiguousFreeHeap(void) { 
+  d_measureHeap();
+  return lastMinHeap;
+} // returns largest contiguous free block // WLEDMM may glitch, too
+
+size_t d_measureFreeHeap(void) {
+  d_measureHeap();
+  return lastHeap;
+} // returns free heap (ESP.getFreeHeap() can include other memory types) // WLEDMM can cause LED glitches
+
+
 static void *validateFreeHeap(void *buffer) {
   // make sure there is enough free heap left if buffer was allocated in DRAM region, free it if not
   // TODO: between allocate and free, heap can run low (async web access), only IDF V5 allows for a pre-allocation-check of all free blocks

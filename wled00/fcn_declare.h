@@ -505,8 +505,14 @@ extern "C" {
   void p_free(void *ptr);
 }
 #ifndef ESP8266
-inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types) // WLEDMM can cause LED glitches
-inline size_t getContiguousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest contiguous free block // WLEDMM may glitch, too
+//inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types) // WLEDMM can cause LED glitches
+//inline size_t getContiguousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest contiguous free block // WLEDMM may glitch, too
+
+extern size_t d_measureFreeHeap(void);
+extern size_t d_measureContiguousFreeHeap(void);
+inline size_t getFreeHeapSize() { return d_measureFreeHeap();}  // total free heap - with flicker protection
+inline size_t getContiguousFreeHeap() { return d_measureContiguousFreeHeap();}  // largest free block - with flicker protection
+
 #else
 inline size_t getFreeHeapSize() { return ESP.getFreeHeap(); } // returns free heap
 inline size_t getContiguousFreeHeap() { return ESP.getMaxFreeBlockSize(); } // returns largest contiguous free block

@@ -358,8 +358,7 @@ void WLED::loop()
     DEBUG_PRINT(F("Name: "));       DEBUG_PRINTLN(serverDescription);
     DEBUG_PRINT(F("Runtime: "));       DEBUG_PRINTLN(millis());
     DEBUG_PRINT(F("Unix time: "));     toki.printTime(toki.getTime());
-    DEBUG_PRINT(F("Free heap : "));     DEBUG_PRINTLN(ESP.getFreeHeap());
-    DEBUG_PRINT(F("Free heap: "));     DEBUG_PRINTLN(ESP.getFreeHeap());
+    DEBUG_PRINT(F("Free heap: "));     DEBUG_PRINTLN(getFreeHeapSize());
   //WLEDMM
 	#ifdef ARDUINO_ARCH_ESP32
     DEBUG_PRINT(F("Avail heap: "));     DEBUG_PRINTLN(ESP.getMaxAllocHeap());
@@ -660,7 +659,7 @@ void WLED::setup()
   DEBUG_PRINT(F("esp8266 "));
   DEBUG_PRINTLN(ESP.getCoreVersion());
 #endif
-  DEBUG_PRINT(F("heap ")); DEBUG_PRINTLN(ESP.getFreeHeap());
+  DEBUG_PRINT(F("heap ")); DEBUG_PRINTLN(getFreeHeapSize());
 #ifdef ARDUINO_ARCH_ESP32
   #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)  // unfortunately not available in older framework versions
   DEBUG_PRINT(F("\nArduino  max stack  ")); DEBUG_PRINTLN(getArduinoLoopTaskStackSize());
@@ -763,7 +762,7 @@ void WLED::setup()
   DEBUG_PRINTLN(F("Registering usermods ..."));
   registerUsermods();
 
-  DEBUG_PRINT(F("heap ")); DEBUG_PRINTLN(ESP.getFreeHeap());
+  DEBUG_PRINT(F("heap ")); DEBUG_PRINTLN(getFreeHeapSize());
   #ifdef ARDUINO_ARCH_ESP32
     DEBUG_PRINTF("%s min free stack %d\n", pcTaskGetTaskName(NULL), uxTaskGetStackHighWaterMark(NULL)); //WLEDMM
   #endif
@@ -813,12 +812,12 @@ void WLED::setup()
 
   DEBUG_PRINTLN(F("Initializing strip"));
   beginStrip();
-  DEBUG_PRINT(F("heap ")); DEBUG_PRINTLN(ESP.getFreeHeap());
+  DEBUG_PRINT(F("heap ")); DEBUG_PRINTLN(getFreeHeapSize());
 
   USER_PRINTLN(F("\nUsermods setup ..."));
   userSetup();
   usermods.setup();
-  DEBUG_PRINT(F("heap ")); DEBUG_PRINTLN(ESP.getFreeHeap());
+  DEBUG_PRINT(F("heap ")); DEBUG_PRINTLN(getFreeHeapSize());
 
   if (strcmp(clientSSID, DEFAULT_CLIENT_SSID) == 0)
     showWelcomePage = true;
@@ -882,7 +881,7 @@ void WLED::setup()
   // HTTP server page init
   DEBUG_PRINTLN(F("initServer"));
   initServer();
-  DEBUG_PRINT(F("heap ")); DEBUG_PRINTLN(ESP.getFreeHeap());
+  DEBUG_PRINT(F("heap ")); DEBUG_PRINTLN(getFreeHeapSize());
   #ifdef ARDUINO_ARCH_ESP32
   DEBUG_PRINT(pcTaskGetTaskName(NULL)); DEBUG_PRINT(F(" free stack ")); DEBUG_PRINTLN(uxTaskGetStackHighWaterMark(NULL));
   #endif
@@ -967,7 +966,7 @@ void WLED::setup()
   USER_PRINTLN(F("\n"));
 #endif
 
-  USER_PRINT(F("Free heap ")); USER_PRINTLN(ESP.getFreeHeap());USER_PRINTLN();
+  USER_PRINT(F("Free heap ")); USER_PRINTLN(getFreeHeapSize());USER_PRINTLN();
 
   // WLEDMM force initial calculation of gamma correction LUT
   if ((gammaCorrectVal < 0.999f) || (gammaCorrectVal > 3.0f)) calcGammaTable(1.0f); // no gamma => create linear LUT
@@ -1346,13 +1345,22 @@ void WLED::handleConnection()
   }
 
   static unsigned retryCount = 0;  // WLEDMM
-  #ifdef ARDUINO_ARCH_ESP32 
+  #ifdef ARDUINO_ARCH_ESP32
   // reconnect WiFi to clear stale allocations if heap gets too low
-  if ((!strip.isUpdating()) && (now - heapTime > 5000)) { // WLEDMM: updated with better logic for small heap available by block, not total. // WLEDMM trying to use a moment when the strip is idle
-#if defined(ARDUINO_ARCH_ESP32S2) || defined(WLED_ENABLE_HUB75MATRIX)
-    uint32_t heap = ESP.getFreeHeap(); // WLEDMM works better on -S2
+  if ((now - heapTime > 5000) && !strip.isUpdating()) { // WLEDMM: updated with better logic for small heap available by block, not total. // WLEDMM trying to use a moment when the strip is idle
+    #ifdef WLEDMM_FILEWAIT  // only when we don't use the RMTHI driver
+      // calling getContiguousFreeHeap() during led update causes glitches on C3
+      // this can (probably) be removed once RMT driver for C3 is fixed
+      unsigned t0 = millis();
+      while (strip.isUpdating() && (millis() - t0 < 15)) delay(1);    // be nice, but not too nice. Waits up to 15ms
+    #endif
+
+#if defined(ARDUINO_ARCH_ESP32S2) /*|| defined(WLED_ENABLE_HUB75MATRIX)*/
+    //uint32_t heap = ESP.getFreeHeap(); // WLEDMM works better on -S2
+    uint32_t heap = getFreeHeapSize(); // WLEDMM works better on -S2
 #else
-    uint32_t heap = heap_caps_get_largest_free_block(0x1800); // WLEDMM: This is a better metric for free heap.
+    //uint32_t heap = heap_caps_get_largest_free_block(0x1800); // WLEDMM: This is a better metric for free heap.
+    uint32_t heap = getContiguousFreeHeap(); // WLEDMM: This is a better metric for free heap.
 #endif
     if (heap < MIN_HEAP_SIZE && lastHeap < MIN_HEAP_SIZE) {
       if (retryCount < 5) {  // WLEDMM avoid repeated disconnects

@@ -1128,11 +1128,15 @@ void serializeInfo(JsonObject root)
   #endif
   root[F("getflash")] = ESP.getFlashChipSize(); //WLEDMM and Athom, works for both ESP32 and ESP8266
 
-  root[F("freeheap")] = ESP.getFreeHeap();
+  //root[F("freeheap")] = ESP.getFreeHeap();
+  root[F("freeheap")] = getFreeHeapSize();
   //WLEDMM: conditional on esp32
   #if defined(ARDUINO_ARCH_ESP32)
     root[F("freestack")] = uxTaskGetStackHighWaterMark(NULL); //WLEDMM
-    root[F("minfreeheap")] = ESP.getMinFreeHeap();
+    //root[F("minfreeheap")] = ESP.getMinFreeHeap();
+    auto maxFreeBlock = getContiguousFreeHeap();
+    root[F("minfreeheap")] = maxFreeBlock;
+    root[F("maxalloc")] = maxFreeBlock;  // for upstream WLED compatibility
   #endif
   #if defined(ARDUINO_ARCH_ESP32)
   #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3) // V4 can auto-detect PSRAM
