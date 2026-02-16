@@ -505,12 +505,13 @@ extern "C" {
   void p_free(void *ptr);
 }
 #ifndef ESP8266
-inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
-inline size_t getContiguousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest contiguous free block
+inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types) // WLEDMM can cause LED glitches
+inline size_t getContiguousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest contiguous free block // WLEDMM may glitch, too
 #else
 inline size_t getFreeHeapSize() { return ESP.getFreeHeap(); } // returns free heap
 inline size_t getContiguousFreeHeap() { return ESP.getMaxFreeBlockSize(); } // returns largest contiguous free block
 #endif
+#if 0 // WLEDMM not used yet
 #define BFRALLOC_NOBYTEACCESS    (1 << 0) // ESP32 has 32bit accessible DRAM (usually ~50kB free) that must not be byte-accessed
 #define BFRALLOC_PREFER_DRAM     (1 << 1) // prefer DRAM over PSRAM
 #define BFRALLOC_ENFORCE_DRAM    (1 << 2) // use DRAM only, no PSRAM
@@ -518,6 +519,7 @@ inline size_t getContiguousFreeHeap() { return ESP.getMaxFreeBlockSize(); } // r
 #define BFRALLOC_ENFORCE_PSRAM   (1 << 4) // use PSRAM if available, otherwise uses DRAM
 #define BFRALLOC_CLEAR           (1 << 5) // clear allocated buffer after allocation
 void *allocate_buffer(size_t size, uint32_t type);
+#endif
 
 // RAII guard class for the JSON Buffer lock
 // Modeled after std::lock_guard

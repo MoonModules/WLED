@@ -755,7 +755,7 @@ void p_free(void *ptr) { free(ptr); }
 static void *validateFreeHeap(void *buffer) {
   // make sure there is enough free heap left if buffer was allocated in DRAM region, free it if not
   // TODO: between allocate and free, heap can run low (async web access), only IDF V5 allows for a pre-allocation-check of all free blocks
-#if 0  // WLEDMM disabled -> TODO need to think about this
+#if 1  // WLEDMM TODO need to think about this
   if ((uintptr_t)buffer > SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && getContiguousFreeHeap() < MIN_HEAP_SIZE) {
     free(buffer);
     return nullptr;
@@ -830,7 +830,7 @@ void *d_realloc_malloc(void *ptr, size_t size) {
 void d_free(void *ptr) { heap_caps_free(ptr); }
 void p_free(void *ptr) { heap_caps_free(ptr); }
 
-#if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 0)  // V4 can auto-detect PSRAM
+#if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3)  // V4 can auto-detect PSRAM
 // p_xalloc: prefer PSRAM, use DRAM as fallback
 void *p_malloc(size_t size) {
   if (!psramFound()) return d_malloc(size);
