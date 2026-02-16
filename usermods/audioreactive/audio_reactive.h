@@ -511,13 +511,20 @@ void FFTcode(void * parameter)
   static float* oldSamples = nullptr; // previous 50% of samples
   static bool haveOldSamples = false; // for sliding window FFT
   bool usingOldSamples = false;
-  if (!oldSamples) oldSamples = (float*) calloc(samplesFFT_2, sizeof(float)); // allocate on first run
-  if (!oldSamples) { disableSoundProcessing = true; return; }                 // no memory -> die
+  if (!oldSamples) oldSamples = (float*) d_calloc(samplesFFT_2, sizeof(float));       // allocate on first run
+  if (!oldSamples) { disableSoundProcessing = true; haveOldSamples = false; return; } // no memory -> die
 #endif
 
   bool success = true;
   if ((vReal == nullptr) || (vImag == nullptr)) success = alocateFFTBuffers(); // allocate sample buffers on first run
-  if (success == false) { disableSoundProcessing = true; return; }             // no memory -> die
+  if (success == false) {
+    // no memory -> clean up heap, then suspend
+    disableSoundProcessing = true;
+    if (pinkFactors) d_free(pinkFactors); pinkFactors = nullptr;
+    if (vImag) d_free(vImag); vImag = nullptr;
+    if (vReal) d_free(vReal); vReal = nullptr;
+    return; 
+  }
 
   // create FFT object - we have to do if after allocating buffers
 #if defined(FFT_LIB_REV) && FFT_LIB_REV > 0x19
@@ -527,7 +534,8 @@ void FFTcode(void * parameter)
   // recommended version optimized by @softhack007 (API version 1.9)
   #if defined(WLED_ENABLE_HUB75MATRIX) && defined(CONFIG_IDF_TARGET_ESP32)
     static float* windowWeighingFactors = nullptr;
-    if (!windowWeighingFactors) windowWeighingFactors = (float*) calloc(samplesFFT, sizeof(float)); // cache for FFT windowing factors - use heap
+    if (!windowWeighingFactors) windowWeighingFactors = (float*) d_calloc(samplesFFT, sizeof(float)); // cache for FFT windowing factors - use heap
+    if (!windowWeighingFactors) { disableSoundProcessing = true; haveOldSamples = false; return; }    // alloc failed
   #else
     static float windowWeighingFactors[samplesFFT] = {0.0f};                                        // cache for FFT windowing factors - use global RAM
   #endif
