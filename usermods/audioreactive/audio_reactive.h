@@ -472,6 +472,21 @@ static bool alocateFFTBuffers(void) {
   return(true); // success
 }
 
+// de-allocate FFT sample buffers from heap
+static void destroyFFTBuffers(void) {
+  #ifdef FFT_MAJORPEAK_HUMAN_EAR
+    if (pinkFactors) p_free(pinkFactors); pinkFactors = nullptr;
+#endif
+  if (vImag) d_free(vImag); vImag = nullptr;
+  if (vReal) d_free(vReal); vReal = nullptr;
+  #ifdef SR_DEBUG
+    USER_PRINTLN("\ndesroyFFTBuffers() completed successfully.");
+    USER_PRINT(F("Free heap: ")); USER_PRINTLN(ESP.getFreeHeap());
+    USER_FLUSH();
+  #endif
+}
+
+
 // High-Pass "DC blocker" filter
 // see https://www.dsprelated.com/freebooks/filters/DC_Blocker.html
 static void runDCBlocker(uint_fast16_t numSamples, float *sampleBuffer) {
@@ -512,7 +527,7 @@ void FFTcode(void * parameter)
   static bool haveOldSamples = false; // for sliding window FFT
   bool usingOldSamples = false;
   if (!oldSamples) oldSamples = (float*) d_calloc(samplesFFT_2, sizeof(float));       // allocate on first run
-  if (!oldSamples) { disableSoundProcessing = true; haveOldSamples = false; return; } // no memory -> die
+  if (!oldSamples) { disableSoundProcessing = true; haveOldSamples = false; destroyFFTBuffers(); return; } // no memory -> die
 #endif
 
   bool success = true;
@@ -520,11 +535,7 @@ void FFTcode(void * parameter)
   if (success == false) {
     // no memory -> clean up heap, then suspend
     disableSoundProcessing = true;
-#ifdef FFT_MAJORPEAK_HUMAN_EAR
-    if (pinkFactors) d_free(pinkFactors); pinkFactors = nullptr;
-#endif
-    if (vImag) d_free(vImag); vImag = nullptr;
-    if (vReal) d_free(vReal); vReal = nullptr;
+    destroyFFTBuffers();
     return; 
   }
 
@@ -537,7 +548,7 @@ void FFTcode(void * parameter)
   #if defined(WLED_ENABLE_HUB75MATRIX) && defined(CONFIG_IDF_TARGET_ESP32)
     static float* windowWeighingFactors = nullptr;
     if (!windowWeighingFactors) windowWeighingFactors = (float*) d_calloc(samplesFFT, sizeof(float)); // cache for FFT windowing factors - use heap
-    if (!windowWeighingFactors) { disableSoundProcessing = true; haveOldSamples = false; return; }    // alloc failed
+    if (!windowWeighingFactors) { disableSoundProcessing = true; haveOldSamples = false;  destroyFFTBuffers(); return; }    // alloc failed
   #else
     static float windowWeighingFactors[samplesFFT] = {0.0f};                                        // cache for FFT windowing factors - use global RAM
   #endif
