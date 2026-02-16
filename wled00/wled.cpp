@@ -1359,8 +1359,8 @@ void WLED::handleConnection()
       while (strip.isUpdating() && (millis() - t0 < 15)) delay(1);    // be nice, but not too nice. Waits up to 15ms
     #endif
 
-#if defined(ARDUINO_ARCH_ESP32S2) /*|| defined(WLED_ENABLE_HUB75MATRIX)*/
-    //uint32_t heap = ESP.getFreeHeap(); // WLEDMM works better on -S2
+#if defined(ARDUINO_ARCH_ESP32S2) || defined(WLED_ENABLE_HUB75MATRIX)
+    //uint32_t heap = ESP.getFreeHeap(); // WLEDMM works better on -S2; also avoid too-early panic on HUB75 builds
     uint32_t heap = getFreeHeapSize(); // WLEDMM works better on -S2
 #else
     //uint32_t heap = heap_caps_get_largest_free_block(0x1800); // WLEDMM: This is a better metric for free heap.
