@@ -775,16 +775,30 @@ size_t d_measureFreeHeap(void) {
   return lastHeap;
 } // returns free heap (ESP.getFreeHeap() can include other memory types) // WLEDMM can cause LED glitches
 
+// early check: reject DRAM request if remaining heap possibly gets too low (avoids heap fragmentation)
+static inline bool isOkForDRAMHeap(size_t amount) {
+#if !defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3)
+  if (!psramFound()) return true; // No PSRAM -> no opther options, so let's try
+  size_t avail = getContiguousFreeHeap();
+  if ((amount < avail) && (avail - amount > MIN_HEAP_SIZE)) return true;
+  else {
+    DEBUG_PRINTF("!isOkForDRAMHeap() rejected allocation (%lu bytes, %lu available).\n", amount, avail);
+    return(false);
+  }
+  #else
+  return true; // No PSRAM -> no opther options
+  #endif
+}
 
 static void *validateFreeHeap(void *buffer) {
   // make sure there is enough free heap left if buffer was allocated in DRAM region, free it if not
   // TODO: between allocate and free, heap can run low (async web access), only IDF V5 allows for a pre-allocation-check of all free blocks
-#if 1  // WLEDMM TODO need to think about this
+  if (buffer == nullptr) return buffer; // early exit, nothing to check
   if ((uintptr_t)buffer > SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && getContiguousFreeHeap() < MIN_HEAP_SIZE) {
     free(buffer);
+    DEBUG_PRINTLN("!validateFreeHeap() rejected allocation.");
     return nullptr;
   }
-#endif
   return buffer;
 }
 
@@ -800,9 +814,12 @@ void *d_malloc(size_t size) {
   // the newer ESP32 variants have byte-accessible fast RTC memory that can be used as heap, access speed is on-par with DRAM
   // the system does prefer normal DRAM until full, since free RTC memory is ~7.5k only, its below the minimum heap threshold and needs to be allocated explicitly
   // use RTC RAM for small allocations or if DRAM is running low to improve fragmentation
-  if (size <= RTC_RAM_THRESHOLD || getContiguousFreeHeap() < 2*MIN_HEAP_SIZE + size)
-    buffer = heap_caps_malloc_prefer(size, 2, MALLOC_CAP_RTCRAM, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  if (buffer == nullptr) // no RTC RAM allocation: use DRAM
+  if (size <= RTC_RAM_THRESHOLD || getContiguousFreeHeap() < 2*MIN_HEAP_SIZE + size) {
+    //buffer = heap_caps_malloc_prefer(size, 2, MALLOC_CAP_RTCRAM, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    buffer = heap_caps_malloc(size, MALLOC_CAP_RTCRAM | MALLOC_CAP_8BIT);
+    DEBUG_PRINTF("d_malloc() trying RTCRAM (%lu bytes) - %s.\n", size, buffer?"success":"fail");
+  }
+  if ((buffer == nullptr) && isOkForDRAMHeap(size)) // no RTC RAM allocation: use DRAM
     buffer = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // allocate in any available heap memory
   #else
   buffer = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // allocate in any available heap memory
@@ -810,9 +827,10 @@ void *d_malloc(size_t size) {
 
   buffer = validateFreeHeap(buffer); // make sure there is enough free heap left
   #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3) // WLEDMM always try PSRAM (auto-detected)
-  if (!buffer && psramFound())
+  if (!buffer && psramFound()) {
+    DEBUG_PRINTF("d_malloc() using PSRAM(%lu bytes).\n", size);
     return heap_caps_malloc_prefer(size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT); // DRAM failed,try PSRAM if available
-  else
+  } else
   #endif
   return buffer;
 }
@@ -821,9 +839,12 @@ void *d_calloc(size_t count, size_t size) {
   // similar to d_malloc but uses heap_caps_calloc
   void *buffer = nullptr;
   #if !defined(CONFIG_IDF_TARGET_ESP32)
-  if ((size * count) <= RTC_RAM_THRESHOLD || getContiguousFreeHeap() < 2*MIN_HEAP_SIZE + (size * count))
-    buffer = heap_caps_calloc_prefer(count, size, 2, MALLOC_CAP_RTCRAM, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  if (buffer == nullptr) // no RTC RAM allocation: use DRAM
+  if ((size * count) <= RTC_RAM_THRESHOLD || getContiguousFreeHeap() < 2*MIN_HEAP_SIZE + (size * count)) {
+    //buffer = heap_caps_calloc_prefer(count, size, 2, MALLOC_CAP_RTCRAM, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    buffer = heap_caps_calloc(count, size, MALLOC_CAP_RTCRAM | MALLOC_CAP_8BIT);
+    DEBUG_PRINTF("d_calloc() trying RTCRAM (%lu bytes) - %s.\n", size*count, buffer?"success":"fail");
+  }
+  if ((buffer == nullptr) && isOkForDRAMHeap(size*count)) // no RTC RAM allocation: use DRAM
     buffer = heap_caps_calloc(count, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // allocate in any available heap memory
   #else
   buffer = heap_caps_calloc(count, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // allocate in any available heap memory
@@ -831,9 +852,10 @@ void *d_calloc(size_t count, size_t size) {
 
   buffer = validateFreeHeap(buffer); // make sure there is enough free heap left
   #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3) // WLEDMM always try PSRAM (auto-detected)
-  if (!buffer && psramFound())
+  if (!buffer && psramFound()) {
+    DEBUG_PRINTF("d_calloc() using PSRAM (%lu bytes).\n", size*count);
     return heap_caps_calloc_prefer(count, size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT); // DRAM failed,try PSRAM if available
-  else
+  } else
   #endif
   return buffer;
 }
