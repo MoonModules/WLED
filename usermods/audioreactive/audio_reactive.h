@@ -520,7 +520,9 @@ void FFTcode(void * parameter)
   if (success == false) {
     // no memory -> clean up heap, then suspend
     disableSoundProcessing = true;
+#ifdef FFT_MAJORPEAK_HUMAN_EAR
     if (pinkFactors) d_free(pinkFactors); pinkFactors = nullptr;
+#endif
     if (vImag) d_free(vImag); vImag = nullptr;
     if (vReal) d_free(vReal); vReal = nullptr;
     return; 
