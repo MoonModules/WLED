@@ -1133,9 +1133,8 @@ void serializeInfo(JsonObject root)
   //WLEDMM: conditional on esp32
   #if defined(ARDUINO_ARCH_ESP32)
     root[F("freestack")] = uxTaskGetStackHighWaterMark(NULL); //WLEDMM
-    //root[F("minfreeheap")] = ESP.getMinFreeHeap();
+    root[F("minfreeheap")] = ESP.getMinFreeHeap();
     auto maxFreeBlock = getContiguousFreeHeap();
-    root[F("minfreeheap")] = maxFreeBlock;
     root[F("maxalloc")] = maxFreeBlock;  // for upstream WLED compatibility
   #endif
   #if defined(ARDUINO_ARCH_ESP32)
