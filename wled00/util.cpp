@@ -890,10 +890,11 @@ void *d_realloc_malloc(void *ptr, size_t size) {
   #else
     void *buffer = heap_caps_realloc(ptr, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   #endif
+  void *bufferNew = buffer;
   buffer = validateFreeHeap(buffer);
-  if (buffer) return buffer; // realloc successful
-  d_free(ptr); // free old buffer if realloc failed (or min heap was exceeded)
-  return d_malloc(size); // fallback to malloc
+  if (buffer) return buffer;   // realloc successful
+  if (!bufferNew) d_free(ptr); // free old buffer if realloc failed; don't double-free an invalid pointer if min heap was exceeded
+  return d_malloc(size);       // fallback to malloc
 }
 
 // realloc without malloc fallback, original buffer not changed if realloc fails
@@ -933,9 +934,10 @@ void *p_calloc(size_t count, size_t size) {
 void *p_realloc_malloc(void *ptr, size_t size) {
   if (!psramFound()) return d_realloc_malloc(ptr, size);
   void *buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+  void *bufferNew = buffer;
   buffer = validateFreeHeap(buffer);
-  if (buffer) return buffer; // realloc successful
-  p_free(ptr); // free old buffer if realloc failed
+  if (buffer) return buffer;   // realloc successful
+  if (!bufferNew) p_free(ptr); // free old buffer if realloc failed; don't double-free an invalid pointer if min heap was exceeded
   return p_malloc(size); // fallback to malloc
 }
 
