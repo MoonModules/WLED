@@ -1,6 +1,8 @@
 #include "wled.h"
 #include "fcn_declare.h"
 #include "const.h"
+#include "util.h"
+
 #ifdef ESP8266
 #include "user_interface.h" // for bootloop detection
 #include <Hash.h>            // for SHA1 on ESP8266

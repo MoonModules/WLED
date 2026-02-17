@@ -205,18 +205,7 @@
 #define ALL_JSON_TO_PSRAM
 
 // global WLED memory functions (util.cpp)
-extern "C" {
-  // prefer DRAM in d_xalloc functions, PSRAM as fallback
-  void *d_malloc(size_t);
-  void *d_calloc(size_t, size_t);
-  void *d_realloc_malloc(void *ptr, size_t size);
-  void d_free(void *ptr);
-  // prefer PSRAM in p_xalloc functions, DRAM as fallback
-  void *p_malloc(size_t);
-  void *p_calloc(size_t, size_t);
-  void *p_realloc_malloc(void *ptr, size_t size);
-  void p_free(void *ptr);
-}
+#include "util.h"
 
 struct PSRAM_Allocator {
   void* allocate(size_t size) {
