@@ -157,7 +157,7 @@ static uint16_t mode_oops(void) {
   strip._colors_t[0] = RED;
   strip._colors_t[1] = BLUE;
   strip._colors_t[2] = GREEN;
-  errorFlag = ERR_NORAM_PX;
+  //errorFlag = ERR_NORAM_PX;
   if (SEGLEN <= 1) return mode_static();
   const uint16_t width  = SEGMENT.is2D() ? SEGMENT.virtualWidth() : SEGMENT.virtualLength();
   const uint16_t height = SEGMENT.virtualHeight();
