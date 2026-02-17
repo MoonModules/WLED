@@ -151,9 +151,9 @@ private:
   unsigned char Enc_A_prev = 0;
 
   bool currentEffectAndPaletteInitialized = false;
-  uint8_t effectCurrentIndex = 0;
+  uint16_t effectCurrentIndex = 0;
   uint8_t effectPaletteIndex = 0;
-  uint8_t knownMode = 0;
+  uint16_t knownMode = 0;
   uint8_t knownPalette = 0;
 
   uint8_t currentCCT = 128;
@@ -339,9 +339,11 @@ void RotaryEncoderUIUsermod::sortModesAndPalettes() {
   //modes_qstrings = re_findModeStrings(JSON_mode_names, strip.getModeCount());
   modes_qstrings = strip.getModeDataSrc();
   modes_alpha_indexes = re_initIndexArray(strip.getModeCount());
+  if (!modes_alpha_indexes) return; // avoid nullptr crash when allocation has failed (OOM)
   re_sortModes(modes_qstrings, modes_alpha_indexes, strip.getModeCount(), MODE_SORT_SKIP_COUNT);
 
   palettes_qstrings = re_findModeStrings(JSON_palette_names, strip.getPaletteCount());
+  if (!palettes_qstrings) return; // avoid nullptr crash when allocation has failed (OOM)
   palettes_alpha_indexes = re_initIndexArray(strip.getPaletteCount());  // only use internal palettes
 
   // How many palette names start with '*' and should not be sorted?
@@ -354,8 +356,8 @@ void RotaryEncoderUIUsermod::sortModesAndPalettes() {
 byte *RotaryEncoderUIUsermod::re_initIndexArray(int numModes) {
   byte* indexes = (byte *)p_calloc(numModes, sizeof(byte));
   if (!indexes) return nullptr; // avoid OOM crash
-  for (byte i = 0; i < numModes; i++) {
-    indexes[i] = i;
+  for (uint16_t i = 0; i < numModes; i++) {
+    indexes[i] = min(i, uint16_t(255));
   }
   return indexes;
 }
@@ -368,7 +370,7 @@ const char **RotaryEncoderUIUsermod::re_findModeStrings(const char json[], int n
   const char** modeStrings = (const char **)p_calloc(numModes, sizeof(const char *));
   if (!modeStrings) return nullptr; // avoid OOM crash
 
-  uint8_t modeIndex = 0;
+  uint16_t modeIndex = 0;
   bool insideQuotes = false;
   // advance past the mark for markLineNum that may exist.
   char singleJsonSymbol;
@@ -633,7 +635,7 @@ void RotaryEncoderUIUsermod::displayNetworkInfo() {
 void RotaryEncoderUIUsermod::findCurrentEffectAndPalette() {
   if (modes_alpha_indexes == nullptr) return; // WLEDMM bugfix
   currentEffectAndPaletteInitialized = true;
-  for (uint8_t i = 0; i < strip.getModeCount(); i++) {
+  for (uint16_t i = 0; i < strip.getModeCount(); i++) {
     if (modes_alpha_indexes[i] == effectCurrent) {
       effectCurrentIndex = i;
       break;
