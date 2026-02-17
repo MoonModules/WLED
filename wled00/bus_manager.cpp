@@ -518,7 +518,7 @@ BusNetwork::BusNetwork(BusConfig &bc, const ColorOrderMap &com) : Bus(bc.type, b
   }
   _UDPchannels = _rgbw ? 4 : 3;
   #ifdef ESP32
-  _data = (byte*) heap_caps_calloc_prefer((bc.count * _UDPchannels)+15, sizeof(byte), 3, MALLOC_CAP_DEFAULT, MALLOC_CAP_SPIRAM);
+  _data = (byte*) heap_caps_calloc_prefer((bc.count * _UDPchannels)+15, sizeof(byte), 3, MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT|MALLOC_CAP_8BIT, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
   #else
   _data = (byte*) calloc((bc.count * _UDPchannels)+15, sizeof(byte));
   #endif
@@ -608,7 +608,11 @@ uint8_t BusNetwork::getPins(uint8_t* pinArray) const {
 void BusNetwork::cleanup() {
   _type = I_NONE;
   _valid = false;
-  if (_data != nullptr) free(_data);
+  #ifdef ESP32
+    if (_data != nullptr) heap_caps_free(_data);
+  #else
+    if (_data != nullptr) free(_data);
+  #endif
   _data = nullptr;
   _len = 0;
 }
@@ -684,7 +688,7 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
   MatrixPanel_I2S_DMA* display = nullptr;
   VirtualMatrixPanel*  fourScanPanel = nullptr;
   HUB75_I2S_CFG mxconfig;
-  size_t lastHeap = getFreeHeapSize();
+  size_t lastHeap = ESP.getFreeHeap();
 
   _valid = false;
   _len = 0;
@@ -951,7 +955,8 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
   USER_PRINTF("\tLAT = %2d,  OE = %2d, CLK = %2d\n\n", mxconfig.gpio.lat, mxconfig.gpio.oe, mxconfig.gpio.clk);
   USER_FLUSH();
 
-  DEBUG_PRINT(F("Free heap: ")); DEBUG_PRINTLN(getFreeHeapSize()); lastHeap = getFreeHeapSize();
+  lastHeap = ESP.getFreeHeap();
+  DEBUG_PRINT(F("Free heap: ")); DEBUG_PRINTLN(lastHeap);
 
   // check if we can re-use the existing display driver
   if (activeDisplay) {
@@ -996,7 +1001,7 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
       USER_PRINTLN("****** MatrixPanel_I2S_DMA !KABOOM! driver allocation failed ***********");
       activeDisplay = nullptr;
       activeFourScanPanel = nullptr;
-      USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - getFreeHeapSize()));
+      USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - ESP.getFreeHeap()));
       return;
   }
 
@@ -1027,11 +1032,11 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
   _bri = (last_bri > 0) ? last_bri : 25;  // try to restore persistent brightness value
 
   delay(24); // experimental
-  DEBUG_PRINT(F("heap usage: ")); DEBUG_PRINTLN(int(lastHeap - getFreeHeapSize()));
+  DEBUG_PRINT(F("heap usage: ")); DEBUG_PRINTLN(int(lastHeap - ESP.getFreeHeap()));
   // Allocate memory and start DMA display
   if (newDisplay && (display->begin() == false)) {
       USER_PRINTLN("****** MatrixPanel_I2S_DMA !KABOOM! I2S memory allocation failed ***********");
-      USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - getFreeHeapSize()));
+      USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - ESP.getFreeHeap()));
       _valid = false;
       return;
   }
@@ -1039,27 +1044,23 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
     if (newDisplay) { USER_PRINTLN("MatrixPanel_I2S_DMA begin, started ok"); }
     else { USER_PRINTLN("MatrixPanel_I2S_DMA begin, using existing display."); }
     
-    USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - getFreeHeapSize()));
+    USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - ESP.getFreeHeap()));
     delay(18);   // experiment - give the driver a moment (~ one full frame @ 60hz) to settle
     _valid = true;
     display->setBrightness8(_bri);    // range is 0-255, 0 - 0%, 255 - 100% //  [setBrightness()] Tried to set output brightness before begin()
     display->clearScreen();   // initially clear the screen buffer
     USER_PRINTLN("MatrixPanel_I2S_DMA clear ok");
 
-    if (_ledBuffer) free(_ledBuffer);                 // should not happen
-    if (_ledsDirty) free(_ledsDirty);                 // should not happen
+    if (_ledBuffer) p_free(_ledBuffer);                 // should not happen
+    if (_ledsDirty) d_free(_ledsDirty);                 // should not happen
 
-    _ledsDirty = (byte*) malloc(getBitArrayBytes(_len));  // create LEDs dirty bits
+    _ledsDirty = (byte*) d_malloc(getBitArrayBytes(_len));  // create LEDs dirty bits
     if (_ledsDirty) setBitArray(_ledsDirty, _len, false); // reset dirty bits
 
-    #if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_SPIRAM_MODE_OCT && defined(BOARD_HAS_PSRAM) && (defined(WLED_USE_PSRAM) || defined(WLED_USE_PSRAM_JSON))
-      if (psramFound()) {
-        _ledBuffer = (CRGB*) ps_calloc(_len, sizeof(CRGB));  // create LEDs buffer (initialized to BLACK)
-      } else {
-        _ledBuffer = (CRGB*) calloc(_len, sizeof(CRGB));  // create LEDs buffer (initialized to BLACK)
-      }
+    #if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_SPIRAM_MODE_OCT && defined(BOARD_HAS_PSRAM)
+      _ledBuffer = (CRGB*) p_calloc(_len, sizeof(CRGB));  // create LEDs buffer (initialized to BLACK)
     #else
-      _ledBuffer = (CRGB*) calloc(_len, sizeof(CRGB));  // create LEDs buffer (initialized to BLACK)
+      _ledBuffer = (CRGB*) d_calloc(_len, sizeof(CRGB));  // create LEDs buffer (initialized to BLACK)
     #endif
   }
 
@@ -1069,7 +1070,7 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
       USER_PRINTLN(F("MatrixPanel_I2S_DMA not started - not enough memory for leds buffer!"));
       cleanup();  // free buffers, and deallocate pins
       _valid = false;
-      USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - getFreeHeapSize()));
+      USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - ESP.getFreeHeap()));
       return;  //  fail
   }
   
@@ -1130,7 +1131,7 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
 #endif
 
   instanceCount++;
-  USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - getFreeHeapSize()));
+  USER_PRINT(F("heap usage: ")); USER_PRINTLN(int(lastHeap - ESP.getFreeHeap()));
 }
 
 void __attribute__((hot)) IRAM_ATTR BusHub75Matrix::setPixelColor(uint16_t pix, uint32_t c) {
@@ -1243,8 +1244,8 @@ void BusHub75Matrix::cleanup() {
 #endif
 
   if (instanceCount > 0) instanceCount--;
-  if (_ledBuffer != nullptr) free(_ledBuffer); _ledBuffer = nullptr;
-  if (_ledsDirty != nullptr) free(_ledsDirty); _ledsDirty = nullptr;      
+  if (_ledBuffer != nullptr) p_free(_ledBuffer); _ledBuffer = nullptr;
+  if (_ledsDirty != nullptr) d_free(_ledsDirty); _ledsDirty = nullptr;      
 }
 
 void BusHub75Matrix::deallocatePins() {
