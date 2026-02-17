@@ -785,12 +785,12 @@ size_t d_measureFreeHeap(void) {
 //   This check is not exact - in case of strong heap fragmentation, there might be multiple chunks of similar sizes.
 //   However it still improves stability in low-heap situations (tested).
 static inline bool isOkForDRAMHeap(size_t amount) {
-#if !defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3)
+#if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3)
   if (!psramFound()) return true; // No PSRAM -> no opther options, so let's try
   size_t avail = d_measureContiguousFreeHeap();
   if ((amount < avail) && (avail - amount > MIN_HEAP_SIZE)) return true;
   else {
-    DEBUG_PRINTF("* isOkForDRAMHeap() rejected allocation (%u bytes, %u available) !\n", amount, avail);
+    DEBUG_PRINTF("* isOkForDRAMHeap() DRAM allocation rejected (%u bytes requested, %u available) !\n", amount, avail);
     return(false);
   }
   #else
