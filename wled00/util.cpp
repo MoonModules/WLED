@@ -514,7 +514,7 @@ um_data_t* simulateSound(uint8_t simulationId)
 
   if (!um_data) {
     //claim storage for arrays
-    fftResult = (uint8_t *)d_malloc(sizeof(uint8_t) * 16); // might potentially fail with nullptr. We don't have a solution ore fallback for this case.
+    fftResult = (uint8_t *)d_malloc(sizeof(uint8_t) * 16); // might potentially fail with nullptr. We don't have a solution or fallback for this case.
 
     // initialize um_data pointer structure
     // NOTE!!!
