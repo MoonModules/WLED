@@ -212,7 +212,7 @@ struct PSRAM_Allocator {
     return p_malloc(size); // use PSRAM if it exists
   }
   void* reallocate(void* ptr, size_t new_size) {
-    return p_realloc_malloc(ptr, new_size); // use PSRAM if it exists
+    return p_realloc_malloc_nofree(ptr, new_size); // use PSRAM if it exists
   }
   void deallocate(void* pointer) {
     p_free(pointer);

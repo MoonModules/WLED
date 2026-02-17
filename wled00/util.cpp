@@ -746,11 +746,19 @@ void *d_realloc_malloc(void *ptr, size_t size) {
   return d_malloc(size);
 }
 
+void *d_realloc_malloc_nofree(void *ptr, size_t size) {
+  void *buffer = realloc(ptr, size);
+  //buffer = validateFreeHeap(buffer); violates contract
+  return buffer; // realloc done
+}
+
+
 void d_free(void *ptr) { free(ptr); }
 
 void *p_malloc(size_t size) { return d_malloc(size); }
 void *p_calloc(size_t count, size_t size) { return d_calloc(count, size); }
 void *p_realloc_malloc(void *ptr, size_t size) { return d_realloc_malloc(ptr, size); }
+void *p_realloc_malloc_nofree(void *ptr, size_t size) { return d_realloc_malloc_nofree(ptr, size); }
 void p_free(void *ptr) { free(ptr); }
 
 #else
@@ -789,6 +797,7 @@ size_t d_measureFreeHeap(void) {
 static inline bool isOkForDRAMHeap(size_t amount) {
 #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3)
   if (!psramFound()) return true; // No PSRAM -> no opther options, so let's try
+  if (amount <= 4) return true;   // tiny size - lets try
   size_t avail = d_measureContiguousFreeHeap();
   if ((amount < avail) && (avail - amount > MIN_HEAP_SIZE)) return true;
   else {
@@ -887,6 +896,21 @@ void *d_realloc_malloc(void *ptr, size_t size) {
   return d_malloc(size); // fallback to malloc
 }
 
+// realloc without malloc fallback, original buffer not changed if realloc fails
+void *d_realloc_malloc_nofree(void *ptr, size_t size) {
+  #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3) // WLEDMM always try PSRAM (auto-detected)
+    void *buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+  #else
+    // toDo: find a way to get the previously allocaated size of ptr, check the size delta with isOkForDRAMHeap(size - oldSize)
+    // size_t oldSize = ...
+    // size_t delta = oldSize <= size? 0 : size - oldSize
+    // if ((delta == 0) || isOkForDRAMHeap(delta)) buffer = heap_caps_realloc...
+    void *buffer = heap_caps_realloc(ptr, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  #endif
+  //buffer = validateFreeHeap(buffer); // violates contract
+  return buffer; // realloc successful
+}
+
 void d_free(void *ptr) { heap_caps_free(ptr); }
 void p_free(void *ptr) { heap_caps_free(ptr); }
 
@@ -915,10 +939,19 @@ void *p_realloc_malloc(void *ptr, size_t size) {
   return p_malloc(size); // fallback to malloc
 }
 
+// realloc without malloc fallback, original buffer not changed if realloc fails
+void *p_realloc_malloc_nofree(void *ptr, size_t size) {
+  if (!psramFound()) return d_realloc_malloc_nofree(ptr, size);
+  void *buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+  //buffer = validateFreeHeap(buffer); // violates contract
+  return buffer; // realloc done
+}
+
 #else // NO PSRAM support -> fall back to DRAM
 void *p_malloc(size_t size) { return d_malloc(size); }
 void *p_calloc(size_t count, size_t size) { return d_calloc(count, size); }
 void *p_realloc_malloc(void *ptr, size_t size) { return d_realloc_malloc(ptr, size); }
+void *p_realloc_malloc_nofree(void *ptr, size_t size) { return d_realloc_malloc_nofree(ptr, size); }
 #endif
 #endif
 

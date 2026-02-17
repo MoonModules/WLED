@@ -91,13 +91,20 @@ extern "C" {
   // prefer DRAM in d_xalloc functions, PSRAM as fallback
   void *d_malloc(size_t);
   void *d_calloc(size_t, size_t);
-  void *d_realloc_malloc(void *ptr, size_t size);
+  void *d_realloc_malloc(void *ptr, size_t size);  // implements reallocf(): realloc with malloc fallback, original pointer is free'd if reallocation fails
   void d_free(void *ptr);
   // prefer PSRAM in p_xalloc functions, DRAM as fallback
   void *p_malloc(size_t);
   void *p_calloc(size_t, size_t);
-  void *p_realloc_malloc(void *ptr, size_t size);
+  void *p_realloc_malloc(void *ptr, size_t size);  // implements reallocf(): realloc with malloc fallback, original pointer is free'd if reallocation fails
   void p_free(void *ptr);
+  // realloc_malloc_nofree() implements the original realloc semantics: 
+  //   function returns a pointer to the newly allocated memory. This may be different from ptr, or NULL if the request fails.
+  //   The contents will be unchanged in the range from the start of the region up to the minimum of the old and new sizes.
+  //   If the new size is larger than the old size, the added memory will not be initialized.
+  //   If realloc() fails the original block is left untouched; it is not freed or moved.
+  void *d_realloc_malloc_nofree(void *ptr, size_t size);
+  void *p_realloc_malloc_nofree(void *ptr, size_t size);
 }
 #ifndef ESP8266
 //inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types) // WLEDMM can cause LED glitches
