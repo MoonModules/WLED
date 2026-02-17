@@ -909,6 +909,7 @@ void *p_calloc(size_t count, size_t size) {
 void *p_realloc_malloc(void *ptr, size_t size) {
   if (!psramFound()) return d_realloc_malloc(ptr, size);
   void *buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+  buffer = validateFreeHeap(buffer);
   if (buffer) return buffer; // realloc successful
   p_free(ptr); // free old buffer if realloc failed
   return p_malloc(size); // fallback to malloc
