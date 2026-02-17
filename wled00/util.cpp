@@ -901,7 +901,7 @@ void *d_realloc_malloc_nofree(void *ptr, size_t size) {
   #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3) // WLEDMM always try PSRAM (auto-detected)
     void *buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
   #else
-    // toDo: find a way to get the previously allocaated size of ptr, check the size delta with isOkForDRAMHeap(size - oldSize)
+    // toDo: find a way to get the previously allocated size of *ptr, check the size delta with isOkForDRAMHeap(size - oldSize)
     // size_t oldSize = ...
     // size_t delta = oldSize <= size? 0 : size - oldSize
     // if ((delta == 0) || isOkForDRAMHeap(delta)) buffer = heap_caps_realloc...
