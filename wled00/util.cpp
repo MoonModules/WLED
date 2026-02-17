@@ -831,13 +831,12 @@ void *d_malloc(size_t size) {
     buffer = heap_caps_malloc(size, MALLOC_CAP_RTCRAM | MALLOC_CAP_8BIT);
     DEBUG_PRINTF("* d_malloc() trying RTCRAM (%u bytes) - %s.\n", size, buffer?"success":"fail");
   }
-  if ((buffer == nullptr) && isOkForDRAMHeap(size)) // no RTC RAM allocation: use DRAM
-    buffer = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // allocate in any available heap memory
-  #else
-  buffer = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // allocate in any available heap memory
   #endif
 
+  if ((buffer == nullptr) && isOkForDRAMHeap(size)) // no RTC RAM allocation: use DRAM
+    buffer = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // allocate in any available heap memory
   buffer = validateFreeHeap(buffer); // make sure there is enough free heap left
+
   #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3) // WLEDMM always try PSRAM (auto-detected)
   if (!buffer && psramFound()) {
     DEBUG_PRINTF("* d_malloc() using PSRAM(%u bytes).\n", size);
@@ -857,13 +856,12 @@ void *d_calloc(size_t count, size_t size) {
     buffer = heap_caps_calloc(count, size, MALLOC_CAP_RTCRAM | MALLOC_CAP_8BIT);
     DEBUG_PRINTF("* d_calloc() trying RTCRAM (%u bytes) - %s.\n", size*count, buffer?"success":"fail");
   }
-  if ((buffer == nullptr) && isOkForDRAMHeap(size*count)) // no RTC RAM allocation: use DRAM
-    buffer = heap_caps_calloc(count, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // allocate in any available heap memory
-  #else
-  buffer = heap_caps_calloc(count, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // allocate in any available heap memory
   #endif
 
+  if ((buffer == nullptr) && isOkForDRAMHeap(size*count)) // no RTC RAM allocation: use DRAM
+    buffer = heap_caps_calloc(count, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // allocate in any available heap memory
   buffer = validateFreeHeap(buffer); // make sure there is enough free heap left
+
   #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3) // WLEDMM always try PSRAM (auto-detected)
   if (!buffer && psramFound()) {
     DEBUG_PRINTF("* d_calloc() using PSRAM (%u bytes).\n", size*count);
