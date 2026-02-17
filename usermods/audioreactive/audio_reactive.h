@@ -455,8 +455,8 @@ static bool alocateFFTBuffers(void) {
     USER_PRINT(F("\nFree heap ")); USER_PRINTLN(ESP.getFreeHeap());
   #endif
 
-  if (vReal) d_free(vReal); // should not happen
-  if (vImag) d_free(vImag); // should not happen
+  if (vReal) d_free(vReal); vReal = nullptr; // should not happen
+  if (vImag) d_free(vImag); vImag = nullptr; // should not happen
   if ((vReal = (float*) d_calloc(samplesFFT, sizeof(float))) == nullptr) return false; // calloc or die
   if ((vImag = (float*) d_calloc(samplesFFT, sizeof(float))) == nullptr) return false;
 #ifdef FFT_MAJORPEAK_HUMAN_EAR
