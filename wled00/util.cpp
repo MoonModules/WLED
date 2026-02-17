@@ -802,10 +802,14 @@ static void *validateFreeHeap(void *buffer) {
   // make sure there is enough free heap left if buffer was allocated in DRAM region, free it if not
   // TODO: between allocate and free, heap can run low (async web access), only IDF V5 allows for a pre-allocation-check of all free blocks
   if (buffer == nullptr) return buffer; // early exit, nothing to check
-  if ((uintptr_t)buffer > SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && d_measureContiguousFreeHeap() < MIN_HEAP_SIZE) {
-    free(buffer);
-    USER_PRINTLN("* validateFreeHeap() rejected allocation !");
-    return nullptr;
+  if ((uintptr_t)buffer > SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH) { 
+    size_t avail = d_measureContiguousFreeHeap();
+    if (avail < MIN_HEAP_SIZE) { 
+      heap_caps_free(buffer);
+      USER_PRINTF("* validateFreeHeap() DRAM allocation rejected - largest remaining chunk too small (%u bytes).\n", avail);
+      d_measureHeap(); // update statistics after free
+      return nullptr;
+    }
   }
   return buffer;
 }
