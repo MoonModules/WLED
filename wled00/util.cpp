@@ -755,13 +755,19 @@ void p_free(void *ptr) { free(ptr); }
 
 static size_t lastHeap = 65535;
 static size_t lastMinHeap = 65535;
+WLED_create_spinlock(heapStatusMux); // to prevent race conditions on lastHeap and lastMinHeap
+
 inline static void d_measureHeap(void) {
 #ifdef WLEDMM_FILEWAIT  // only when we don't use the RMTHI driver
   if (!strip.isUpdating())  // skip measurement while sending out LEDs - prevents flickering
 #endif
   {
-    lastHeap    = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    lastMinHeap = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    size_t newlastHeap    = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    size_t newlastMinHeap = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    portENTER_CRITICAL(&heapStatusMux); // atomic operation
+      lastHeap = newlastHeap;
+      lastMinHeap = newlastMinHeap;
+    portEXIT_CRITICAL(&heapStatusMux);
   }
 }
 
@@ -775,11 +781,13 @@ size_t d_measureFreeHeap(void) {
   return lastHeap;
 } // returns free heap (ESP.getFreeHeap() can include other memory types) // WLEDMM can cause LED glitches
 
-// early check: reject DRAM request if remaining heap possibly gets too low (avoids heap fragmentation)
+// early check to avoid heap fragmentation: when PSRAM is available, we reject DRAM request if remaining heap possibly gets too low.
+//   This check is not exact - in case of strong heap fragmentation, there might be multiple chunks of similar sizes.
+//   However it still improves stability in low-heap situations (tested).
 static inline bool isOkForDRAMHeap(size_t amount) {
 #if !defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3)
   if (!psramFound()) return true; // No PSRAM -> no opther options, so let's try
-  size_t avail = getContiguousFreeHeap();
+  size_t avail = d_measureContiguousFreeHeap();
   if ((amount < avail) && (avail - amount > MIN_HEAP_SIZE)) return true;
   else {
     DEBUG_PRINTF("* isOkForDRAMHeap() rejected allocation (%u bytes, %u available) !\n", amount, avail);
@@ -794,7 +802,7 @@ static void *validateFreeHeap(void *buffer) {
   // make sure there is enough free heap left if buffer was allocated in DRAM region, free it if not
   // TODO: between allocate and free, heap can run low (async web access), only IDF V5 allows for a pre-allocation-check of all free blocks
   if (buffer == nullptr) return buffer; // early exit, nothing to check
-  if ((uintptr_t)buffer > SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && getContiguousFreeHeap() < MIN_HEAP_SIZE) {
+  if ((uintptr_t)buffer > SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && d_measureContiguousFreeHeap() < MIN_HEAP_SIZE) {
     free(buffer);
     USER_PRINTLN("* validateFreeHeap() rejected allocation !");
     return nullptr;
