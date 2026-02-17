@@ -2574,7 +2574,7 @@ public:
       programFile.read((byte *)programText, programFileSize);
       programText[programFileSize] = '\0';
     #else
-      programText = (char *)malloc(programTextSize);
+      programText = (char *)malloc(programTextSize+1);
       if (programText == nullptr) {
         ERROR_ARTI("ARTI-FX: Failed to allocate memory for program file (%u bytes)\n", programTextSize);
         programFile.close();

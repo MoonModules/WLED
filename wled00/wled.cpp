@@ -1352,12 +1352,6 @@ void WLED::handleConnection()
   #ifdef ARDUINO_ARCH_ESP32
   // reconnect WiFi to clear stale allocations if heap gets too low
   if ((now - heapTime > 5000) && !strip.isUpdating()) { // WLEDMM: updated with better logic for small heap available by block, not total. // WLEDMM trying to use a moment when the strip is idle
-    #ifdef WLEDMM_FILEWAIT  // only when we don't use the RMTHI driver
-      // calling getContiguousFreeHeap() during led update causes glitches on C3
-      // this can (probably) be removed once RMT driver for C3 is fixed
-      unsigned t0 = millis();
-      while (strip.isUpdating() && (millis() - t0 < 15)) delay(1);    // be nice, but not too nice. Waits up to 15ms
-    #endif
 
 #if defined(ARDUINO_ARCH_ESP32S2) || defined(WLED_ENABLE_HUB75MATRIX)
     //uint32_t heap = ESP.getFreeHeap(); // WLEDMM works better on -S2; also avoid too-early panic on HUB75 builds
