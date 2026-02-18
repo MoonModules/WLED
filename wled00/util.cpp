@@ -516,7 +516,8 @@ um_data_t* simulateSound(uint8_t simulationId)
 
   if (!um_data) {
     //claim storage for arrays
-    fftResult = (uint8_t *)d_malloc(sizeof(uint8_t) * 16); // might potentially fail with nullptr. We don't have a solution or fallback for this case.
+    fftResult = (uint8_t *)malloc(sizeof(uint8_t) * 16);
+    //fftResult = (uint8_t *)d_malloc(sizeof(uint8_t) * 16); // might potentially fail with nullptr. We don't have a solution or fallback for this case.
 
     // initialize um_data pointer structure
     // NOTE!!!
@@ -797,7 +798,6 @@ size_t d_measureFreeHeap(void) {
 static inline bool isOkForDRAMHeap(size_t amount) {
 #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3)
   if (!psramFound()) return true; // No PSRAM -> no opther options, so let's try
-  if (amount <= 4) return true;   // tiny size - lets try
   size_t avail = d_measureContiguousFreeHeap();
   if ((amount < avail) && (avail - amount > MIN_HEAP_SIZE)) return true;
   else {
@@ -852,7 +852,7 @@ void *d_malloc(size_t size) {
   if (!buffer && psramFound()) {
     DEBUG_PRINTF("* d_malloc() using PSRAM(%u bytes).\n", size);
     return heap_caps_malloc_prefer(size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT); // DRAM failed,try PSRAM if available
-  } else
+  }
   #endif
   if (!buffer) { USER_PRINTF("* d_malloc() failed (%u bytes) !\n", size); }
   return buffer;
@@ -877,7 +877,7 @@ void *d_calloc(size_t count, size_t size) {
   if (!buffer && psramFound()) {
     DEBUG_PRINTF("* d_calloc() using PSRAM (%u bytes).\n", size*count);
     return heap_caps_calloc_prefer(count, size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT); // DRAM failed,try PSRAM if available
-  } else
+  }
   #endif
   if (!buffer) { USER_PRINTF("* d_calloc() failed (%u bytes) !\n", size*count); }
   return buffer;
@@ -894,6 +894,7 @@ void *d_realloc_malloc(void *ptr, size_t size) {
   buffer = validateFreeHeap(buffer);
   if (buffer) return buffer;   // realloc successful
   if (!bufferNew) d_free(ptr); // free old buffer if realloc failed; don't double-free an invalid pointer if min heap was exceeded
+  DEBUG_PRINTF("* d_realloc_malloc(): realloc failed (%u bytes), trying malloc.\n", size);
   return d_malloc(size);       // fallback to malloc
 }
 
