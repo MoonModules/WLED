@@ -10,6 +10,7 @@
 #include "mbedtls/sha1.h"   // for SHA1 on ESP32
 #include "esp_efuse.h"
 #include "esp_adc_cal.h"
+#include "esp_heap_caps.h"
 #endif
 
 //helper to get int value at a position in string
@@ -900,16 +901,24 @@ void *d_realloc_malloc(void *ptr, size_t size) {
 
 // realloc without malloc fallback, original buffer not changed if realloc fails
 void *d_realloc_malloc_nofree(void *ptr, size_t size) {
-  #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3) // WLEDMM always try PSRAM (auto-detected)
-    void *buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+  DEBUG_PRINTF("* d_realloc_malloc_nofree() realloc to %u bytes requested.\n", size);
+  void* buffer = nullptr;
+  #if (ESP_IDF_VERSION_MAJOR > 3)
+    if (!ptr) return ptr; // heap_caps_get_allocated_size crashes on nullptr
+    // only basic sanity checks possible: prefer PSRAM if DRAM is low
+    size_t oldSize = heap_caps_get_allocated_size(ptr);
+    size_t delta = (size > oldSize) ? (size - oldSize) : 0;
+    if ((delta == 0) || isOkForDRAMHeap(delta)) {     // prefer DRAM
+      buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+    } else {                                          // prefer PSRAM
+      buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+    }
   #else
-    // toDo: find a way to get the previously allocated size of *ptr, check the size delta with isOkForDRAMHeap(size - oldSize)
-    // size_t oldSize = ...
-    // size_t delta = oldSize <= size? 0 : size - oldSize
-    // if ((delta == 0) || isOkForDRAMHeap(delta)) buffer = heap_caps_realloc...
-    void *buffer = heap_caps_realloc(ptr, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    // V3 lacks heap_caps_get_allocated_size() -> no sanity check
+    buffer = heap_caps_realloc_prefer(ptr, size, 2, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
   #endif
   //buffer = validateFreeHeap(buffer); // violates contract
+  if (!buffer) { USER_PRINTF("* d_realloc_malloc_nofree() failed (%u bytes) !\n", size); }
   return buffer; // realloc successful
 }
 
