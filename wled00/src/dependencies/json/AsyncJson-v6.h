@@ -168,7 +168,8 @@ public:
     if (_onRequest) {
       _contentLength = total;
       if (total > 0 && request->_tempObject == NULL && (int)total < _maxContentLength) {
-        request->_tempObject = d_malloc(total);
+        //request->_tempObject = d_malloc(total); // seems to cause instabilities on classic esp32 with PSRAM
+        request->_tempObject = malloc(total);
       }
       if (request->_tempObject != NULL) {
         memcpy((uint8_t*)(request->_tempObject) + index, data, len);
