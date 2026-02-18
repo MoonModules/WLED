@@ -904,9 +904,8 @@ void *d_realloc_malloc_nofree(void *ptr, size_t size) {
   DEBUG_PRINTF("* d_realloc_malloc_nofree() realloc to %u bytes requested.\n", size);
   void* buffer = nullptr;
   #if (ESP_IDF_VERSION_MAJOR > 3)
-    if (!ptr) return ptr; // heap_caps_get_allocated_size crashes on nullptr
     // only basic sanity checks possible: prefer PSRAM if DRAM is low
-    size_t oldSize = heap_caps_get_allocated_size(ptr);
+    size_t oldSize = ptr ? heap_caps_get_allocated_size(ptr) : 0; // heap_caps_get_allocated_size crashes on nullptr
     size_t delta = (size > oldSize) ? (size - oldSize) : 0;
     if ((delta == 0) || isOkForDRAMHeap(delta)) {     // prefer DRAM
       buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
