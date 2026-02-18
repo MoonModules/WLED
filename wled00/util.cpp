@@ -918,7 +918,7 @@ void *d_realloc_malloc_nofree(void *ptr, size_t size) {
   #endif
   //buffer = validateFreeHeap(buffer); // violates contract
   if (!buffer) { USER_PRINTF("* d_realloc_malloc_nofree() failed (%u bytes) !\n", size); }
-  return buffer; // realloc successful
+  return buffer;
 }
 
 void d_free(void *ptr) { heap_caps_free(ptr); }
@@ -955,7 +955,7 @@ void *p_realloc_malloc_nofree(void *ptr, size_t size) {
   if (!psramFound()) return d_realloc_malloc_nofree(ptr, size);
   void *buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
   //buffer = validateFreeHeap(buffer); // violates contract
-  return buffer; // realloc done
+  return buffer;
 }
 
 #else // NO PSRAM support -> fall back to DRAM
