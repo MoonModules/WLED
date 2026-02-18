@@ -798,7 +798,7 @@ size_t d_measureFreeHeap(void) {
 //   However it still improves stability in low-heap situations (tested).
 static inline bool isOkForDRAMHeap(size_t amount) {
 #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3)
-  if (!psramFound()) return true; // No PSRAM -> no opther options, so let's try
+  if (!psramFound()) return true; // No PSRAM -> no other options, so let's try
   size_t avail = d_measureContiguousFreeHeap();
   if ((amount < avail) && (avail - amount > MIN_HEAP_SIZE)) return true;
   else {
@@ -806,7 +806,7 @@ static inline bool isOkForDRAMHeap(size_t amount) {
     return(false);
   }
   #else
-  return true; // No PSRAM -> no opther options
+  return true; // No PSRAM -> no other options
   #endif
 }
 
