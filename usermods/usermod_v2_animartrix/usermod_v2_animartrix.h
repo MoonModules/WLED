@@ -1,6 +1,7 @@
 #pragma once
 
 #include "wled.h"
+#include "colors.h" // include CHSV32 class by @dedehai
 
 #ifdef _MoonModules_WLED_
 	// WLEDMM: use faster math approximations - up to 40% faster
