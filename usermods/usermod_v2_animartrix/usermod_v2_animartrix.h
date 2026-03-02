@@ -144,6 +144,16 @@ class ANIMartRIXMod:public ANIMartRIX {
 	  }
 	  use_gamma = SEGENV.check2;
 	  setSpeedFactor(speedFactor);
+		if (cycle_hue) {
+	    unsigned tt = strip.now;
+			if (SEGMENT.intensity > 128)      tt = (tt * (31U + SEGMENT.intensity - 127)) / 32U;  // faster up to 4x
+			else if (SEGMENT.intensity < 127) tt = (tt * 22U) / (21U + 127 - SEGMENT.intensity);  // slower down to 1/6
+			hueshift = (tt << 4) | (tt & 0x0F);
+		} else {
+			hueshift = (128 - SEGMENT.intensity) * 256;
+		}
+	}
+
 	// enhance middle ranges contrast (S-Function)
 	static inline float enhanceContrast(float color) {
 		if (color < 1.0f) return 0.0f; // shortcut for black
@@ -208,6 +218,15 @@ class ANIMartRIXMod:public ANIMartRIX {
 			uint8_t colB = pixel.blue+0.5f;
 			colOut = RGBW32(colR, colG, colB,0U);
 		}
+
+		// experimental: HUE shift
+		if (cycle_hue || (abs(hueshift) > 255)) { // cycle HUE selected, or manual HUE at lest 1 left/right from center of slider
+			CHSV32 cc;
+			rgb2hsv(colOut, cc);
+			cc.h = cc.h + unsigned(hueshift); // works due to 2's complement
+			hsv2rgb(cc, colOut);
+		}
+
 		return use_gamma ? applyGamma24(colOut) : colOut;
 	}
 
