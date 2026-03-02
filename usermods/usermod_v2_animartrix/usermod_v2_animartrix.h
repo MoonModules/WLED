@@ -139,29 +139,37 @@ class ANIMartRIXMod:public ANIMartRIX {
 	  }
 	  use_gamma = SEGENV.check2;
 	  setSpeedFactor(speedFactor);
+	// gamma correction
+	static inline uint32_t applyGamma24(uint32_t colIn) {
+		#ifdef _MoonModules_WLED_   // upstream WLED does not need gamma-correction before setPixelColor
+			uint8_t colR = gamma8(R(colIn)); 
+			uint8_t colG = gamma8(G(colIn)); 
+			uint8_t colB = gamma8(B(colIn));
+			return RGBW32(colR, colG, colB, 0U);
+		#else
+			return colIn;  // do nothing
+		#endif
+	}
+
+	inline uint32_t processColor(rgb pixel) const {
+		uint32_t colOut;
+		// color conversion; +0.5f for rounding
+		uint8_t colR = pixel.red+0.5f;
+		uint8_t colG = pixel.green+0.5f;
+		uint8_t colB = pixel.blue+0.5f;
+		colOut = RGBW32(colR, colG, colB,0U);
+		return use_gamma ? applyGamma24(colOut) : colOut;
 	}
 
 	void setPixelColor(int x, int y, rgb pixel) override {
-		uint8_t colR, colG, colB;
-		if (use_gamma) {
-			colR = gamma8(pixel.red); colG = gamma8(pixel.green); colB = gamma8(pixel.blue);
-		} else {
-			colR = pixel.red; colG = pixel.green; colB = pixel.blue;
-		}
-		SEGMENT.setPixelColorXY(x, y, RGBW32(colR,colG,colB,0));
+		SEGMENT.setPixelColorXY(x, y, processColor(pixel));
 	}
 
 	void setPixelColor(int index, rgb pixel) override {
-		uint8_t colR, colG, colB;
-		if (use_gamma) {
-			colR = gamma8(pixel.red); colG = gamma8(pixel.green); colB = gamma8(pixel.blue);
-		} else {
-			colR = pixel.red; colG = pixel.green; colB = pixel.blue;
-		}
 		// get x and y, so we can us setPixelColorXY() - faster in WLEDMM
 		int x = index % num_x;
 		int y = index / num_x;
-		SEGMENT.setPixelColorXY(x,y, RGBW32(colR,colG,colB,0));
+		SEGMENT.setPixelColorXY(x,y, processColor(pixel));
   	}
 
 	// Add any extra custom effects not part of the ANIMartRIX libary here
