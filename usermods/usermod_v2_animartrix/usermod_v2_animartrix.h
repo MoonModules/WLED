@@ -151,7 +151,7 @@ class ANIMartRIXMod:public ANIMartRIX {
 	  boost_contrast = SEGENV.check3;
 
 		if (cycle_hue) {
-	    unsigned tt = strip.now;
+			unsigned tt = strip.now;
 			if (SEGMENT.intensity > 128)      tt = (tt * (31U + SEGMENT.intensity - 127)) / 32U;  // faster up to 4x
 			else if (SEGMENT.intensity < 127) tt = (tt * 22U) / (21U + 127 - SEGMENT.intensity);  // slower down to 1/6
 			hueshift = (tt << 4) | (tt & 0x0F);
