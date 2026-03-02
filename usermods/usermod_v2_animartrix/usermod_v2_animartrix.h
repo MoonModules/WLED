@@ -125,7 +125,11 @@ static const char _data_FX_mode_Rotating_Blob[] PROGMEM = "YðŸ’¡Rotating_Blob â˜
 
 class ANIMartRIXMod:public ANIMartRIX {
 	private:
+	int hueshift = 0; // static HUE shift (16bit signed); default = neutral
 	bool use_gamma = false;
+	bool cycle_hue = false;
+	bool boost_brightness = false;
+	bool boost_contrast = false;
 	public:
 	void initEffect() {
 	  if ((SEGENV.call == 0) || (SEGMENT.virtualWidth() != num_x) || (SEGMENT.virtualHeight() != num_y)) {
@@ -139,6 +143,37 @@ class ANIMartRIXMod:public ANIMartRIX {
 	  }
 	  use_gamma = SEGENV.check2;
 	  setSpeedFactor(speedFactor);
+	// enhance middle ranges contrast (S-Function)
+	static inline float enhanceContrast(float color) {
+		if (color < 1.0f) return 0.0f; // shortcut for black
+		#if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32P4)
+			// floating point - faster when FPU is present
+			float x = color / 255.0f; // normalize to [0, 1]
+			float y = x * x * (3.0f - 2.0f * x); // smoothstep (S-curve) for contrast
+			float result = y * 255.0f; // scale back to [0, 255]
+			return min(max(result, 0.0f), 255.0f); // clamp to allowed range
+		#else
+			// fixed point with rounding - faster when no FPU
+			unsigned xcol = color;
+			unsigned ycol1 = ((xcol * xcol * 3) +127);                  // first part:  y1 = 255 * (x * x * 3)
+			unsigned ycol2 = ((xcol * xcol * 2 * xcol) +32512) / 255;   // second part: y2 = 255 * (x * x * 2 * x)
+			if (ycol2 > ycol1) return 0.0f; // catch underflow (overflow can't happen)
+			else return min(255.0f, float(ycol1 - ycol2) / 255.0f);     // clamp to allowed range
+		#endif
+	}
+
+	// enhance brightness (sqrt function)
+	static inline uint_fast8_t enhanceBrightness(float color) {
+		// square root - provides gentle and jump-free enhancement of lower brightness pixels
+		if (color < 0.125f) return 0;   // shortcut for black
+		if (color > 255.0f) return 255; // shortcut for max color value
+		// floating point: slow due to sqrtf()
+		//   return roundf(sqrtf(color/255.0f) * 255.0f);
+		// fixed point: faster
+		uint32_t col32 = 0.5f + (255.0f * color); // = ( color / 255 ) * 65535
+		return sqrt32_bw(col32);                  // => equal to sqrt((color / 255) * 255
+	}
+
 	// gamma correction
 	static inline uint32_t applyGamma24(uint32_t colIn) {
 		#ifdef _MoonModules_WLED_   // upstream WLED does not need gamma-correction before setPixelColor
@@ -152,12 +187,26 @@ class ANIMartRIXMod:public ANIMartRIX {
 	}
 
 	inline uint32_t processColor(rgb pixel) const {
+		if (boost_contrast) {
+			// enhance contrast - keep "float" for better color accuracy
+			pixel.red = enhanceContrast(pixel.red);
+			pixel.green = enhanceContrast(pixel.green);
+			pixel.blue = enhanceContrast(pixel.blue);
+		}
 		uint32_t colOut;
-		// color conversion; +0.5f for rounding
-		uint8_t colR = pixel.red+0.5f;
-		uint8_t colG = pixel.green+0.5f;
-		uint8_t colB = pixel.blue+0.5f;
-		colOut = RGBW32(colR, colG, colB,0U);
+		if (boost_brightness) {
+			// enhance brightness, convert colors from float to integer
+			uint8_t colR = enhanceBrightness(pixel.red);
+			uint8_t colG = enhanceBrightness(pixel.green);
+			uint8_t colB = enhanceBrightness(pixel.blue);
+			colOut = RGBW32(colR, colG, colB, 0U);
+		} else {
+			// color conversion only; +0.5f for rounding
+			uint8_t colR = pixel.red+0.5f;
+			uint8_t colG = pixel.green+0.5f;
+			uint8_t colB = pixel.blue+0.5f;
+			colOut = RGBW32(colR, colG, colB,0U);
+		}
 		return use_gamma ? applyGamma24(colOut) : colOut;
 	}
 
