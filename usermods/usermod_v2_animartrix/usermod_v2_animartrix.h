@@ -192,8 +192,8 @@ class ANIMartRIXMod:public ANIMartRIX {
 		// floating point: slow due to sqrtf()
 		//   return roundf(sqrtf(color/255.0f) * 255.0f);
 		// fixed point: faster
-		uint32_t col32 = 0.5f + (255.0f * color); // = ( color / 255 ) * 65535
-		return sqrt32_bw(col32);                  // => equal to sqrt((color / 255) * 255
+		uint32_t col32 = 0.5f + (255.0f * color); // = ( color / 255 ) * 65025 ; 16bit fixed-point representation of color/255
+		return sqrt32_bw(col32);                  // => equal to sqrt((color / 255) * 255; produces [0-255] output
 	}
 
 	// gamma correction
