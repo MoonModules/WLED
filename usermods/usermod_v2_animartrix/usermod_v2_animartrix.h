@@ -157,8 +157,8 @@ class ANIMartRIXMod:public ANIMartRIX {
 				// tt = (uint64_t(tt) * (31 + SEGMENT.intensity - 127)) / 32;    // => faster up to 4x (128/32)
 				hueshift = (uint64_t(tt) * (31 + SEGMENT.intensity - 127)) / 2;  // try to preserve accuracy: time/32 * 16 => time/2
 			} else if (SEGMENT.intensity < 127) {
-				tt = (uint64_t(tt) * 22) / (21 + 127 - SEGMENT.intensity);       // => slower down to 1/7 (22/148)
-				hueshift = (tt << 4) | (tt & 0x0F);
+				//tt = (uint64_t(tt) * 22) / (21 + 127 - SEGMENT.intensity);     // => slower down to 1/7 (22/148)
+				hueshift = (uint64_t(tt) * (22*16)) / (21 + 127 - SEGMENT.intensity); // try to preserve accuracy, by embedding "<<4" (*16) into the main multiplication
 			}
 		} else { // !cycle_hue
 			hueshift = (128 - SEGMENT.intensity) * 256;  // static HUE shift
