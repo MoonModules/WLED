@@ -125,7 +125,7 @@ static const char _data_FX_mode_Chasing_Spirals[] PROGMEM = "Y💡Chasing_Spiral
 static const char _data_FX_mode_Rotating_Blob[] PROGMEM = "Y💡Rotating_Blob ☾@" ANIMARTRIX_UI_CONTROLS;
 
 // global settings - shared between ANIMartRIXMod and AnimartrixUsermod
-static uint8_t animartrix_use_gamma = 1; // default = enabled. Can be disable to get the "legacy" gamma-free look
+static uint8_t animartrix_use_gamma = 1; // default = enabled. Can be disabled to get the "legacy" gamma-free look
 
 class ANIMartRIXMod:public ANIMartRIX {
 	private:
@@ -252,7 +252,7 @@ class ANIMartRIXMod:public ANIMartRIX {
 		}
 
 		// experimental: HUE shift
-		if (cycle_hue || (abs(hueshift) > 255)) { // cycle HUE selected, or manual HUE at lest 1 left/right from center of slider
+		if (cycle_hue || (abs(hueshift) > 255)) { // cycle HUE selected, or manual HUE if at least 1 left/right from center of slider
 			CHSV32 cc;
 			rgb2hsv(colOut, cc);
 			cc.h = cc.h + unsigned(hueshift); // works due to 2's complement
