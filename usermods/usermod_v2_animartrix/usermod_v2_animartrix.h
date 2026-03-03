@@ -132,6 +132,23 @@ class ANIMartRIXMod:public ANIMartRIX {
 	bool cycle_hue = false;
 	bool boost_brightness = false;
 	bool boost_contrast = false;
+
+	void handleAudio() {
+		// ToDo 1: sliders
+		// * for HUE change amount by audio (handling based on cycle_hue: static shift, or speedup/slowdown)
+		// * for AUDIO filtering: instant -> 1s decay -> what else? Maybe accumulate changes but use speed limit?
+
+		// TODO 2
+		// attach to audiosource
+		// filter raw audio input
+		// adjust HUE shift based on audio data
+		// (maybe) allow to adjust brightness
+		// (details) compare to audiorective palettes by @netmindz
+
+		// ToDo 3: user option to configure audio input
+		// none, peak detection, zcr(major frequency), pressure, volumeSmth, High freqs (fftbin[7-10]), mid freqs (fftbin[4-8]), low freqs (fftbin[0-4])
+	}
+
 	public:
 	void initEffect() {
 	  if ((SEGENV.call == 0) || (SEGMENT.virtualWidth() != num_x) || (SEGMENT.virtualHeight() != num_y)) {
@@ -164,6 +181,8 @@ class ANIMartRIXMod:public ANIMartRIX {
 		} else { // !cycle_hue
 			hueshift = (128 - SEGMENT.intensity) * 256;  // static HUE shift
 		}
+
+		handleAudio(); // Adjust HUE shift (and intensity?) based on audio
 	}
 
 	// enhance middle ranges contrast (S-Function)
