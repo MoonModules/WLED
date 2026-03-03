@@ -151,12 +151,17 @@ class ANIMartRIXMod:public ANIMartRIX {
 	  boost_contrast = SEGENV.check3;
 
 		if (cycle_hue) {
-			unsigned tt = strip.now;
-			if (SEGMENT.intensity > 128)      tt = (uint64_t(tt) * (31U + SEGMENT.intensity - 127)) / 32U;  // faster up to 4x
-			else if (SEGMENT.intensity < 127) tt = (uint64_t(tt) * 22U) / (21U + 127 - SEGMENT.intensity);  // slower down to 1/6
-			hueshift = (tt << 4) | (tt & 0x0F);
-		} else {
-			hueshift = (128 - SEGMENT.intensity) * 256;
+			unsigned tt = strip.now;            // use strip time as timebase - change to millis() if you see jitter or stuttering
+			hueshift = (tt << 4) | (tt & 0x0F); // default shift based on time, without speedup or slowdown => one cycle in 4 seconds
+			if (SEGMENT.intensity > 128) {
+				// tt = (uint64_t(tt) * (31 + SEGMENT.intensity - 127)) / 32;    // => faster up to 4x (128/32)
+				hueshift = (uint64_t(tt) * (31 + SEGMENT.intensity - 127)) / 2;  // try to preserve accuracy: time/32 * 16 => time/2
+			} else if (SEGMENT.intensity < 127) {
+				tt = (uint64_t(tt) * 22) / (21 + 127 - SEGMENT.intensity);       // => slower down to 1/7 (22/148)
+				hueshift = (tt << 4) | (tt & 0x0F);
+			}
+		} else { // !cycle_hue
+			hueshift = (128 - SEGMENT.intensity) * 256;  // static HUE shift
 		}
 	}
 
