@@ -636,6 +636,34 @@ class AnimartrixUsermod : public Usermod {
 
 		// add JSON entries that go to cfg.json
 		void addToConfig(JsonObject& obj) override {
+		  JsonObject top = obj.createNestedObject(FPSTR(_name));                 // WLEDMM: set enabled and _name
+		  top[FPSTR("enabled")] = enabled;
+			top[FPSTR("gamma_correction")] = animartrix_use_gamma;
+		}
+
+		bool readFromConfig(JsonObject& root) override {
+			JsonObject top = root[FPSTR(_name)]; //WLEDMM
+		  bool configComplete = !top.isNull();
+		  // remember previous values
+		  auto oldEnabled = enabled;
+			// read config
+		  configComplete &= getJsonValue(top[FPSTR("enabled")], enabled);
+		 	configComplete &= getJsonValue(top[FPSTR("gamma_correction")], animartrix_use_gamma);
+			if (oldEnabled != enabled) setup();  // re-run setup if enabled status changed
+		  return configComplete;
+		}
+
+		/*
+		 * appendConfigData() is called when user enters usermod settings page
+		 * it may add additional metadata for certain entry fields (adding drop down is possible)
+		 */
+		void appendConfigData() override {
+			// create dropdown for "gamma_correction"
+		  oappend(SET_F("dd=addDropdown('")); oappend(String(FPSTR(_name)).c_str()); oappend(SET_F("','gamma_correction');"));
+		  oappend(SET_F("addOption(dd,'On  (⎌)',1);"));
+		  oappend(SET_F("addOption(dd,'Off',0);"));
+		}
+
     uint16_t getId() override
     {
       return USERMOD_ID_ANIMARTRIX;
