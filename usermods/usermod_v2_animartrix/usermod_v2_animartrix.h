@@ -124,6 +124,8 @@ static const char _data_FX_mode_Waves[] PROGMEM = "Y💡Waves ☾@" ANIMARTRIX_U
 static const char _data_FX_mode_Chasing_Spirals[] PROGMEM = "Y💡Chasing_Spirals ☾@" ANIMARTRIX_UI_CONTROLS;
 static const char _data_FX_mode_Rotating_Blob[] PROGMEM = "Y💡Rotating_Blob ☾@" ANIMARTRIX_UI_CONTROLS;
 
+// global settings - shared between ANIMartRIXMod and AnimartrixUsermod
+static uint8_t animartrix_use_gamma = 1; // default = enabled. Can be disable to get the "legacy" gamma-free look
 
 class ANIMartRIXMod:public ANIMartRIX {
 	private:
@@ -162,9 +164,8 @@ class ANIMartRIXMod:public ANIMartRIX {
 	  }
 	  setSpeedFactor(speedFactor);
 
-	  //use_gamma = SEGENV.check1;
-	  use_gamma = true; // ToDO: move to usermod options
-	  cycle_hue = SEGENV.check1;
+	  use_gamma = animartrix_use_gamma > 0;  // from global usermod options
+	  cycle_hue = SEGENV.check1;             // from segment checkboxes
 	  boost_brightness = SEGENV.check2;
 	  boost_contrast = SEGENV.check3;
 
@@ -548,7 +549,7 @@ class AnimartrixUsermod : public Usermod {
 
     void setup() override {
 		
-		if(!enabled) return;
+      if (initDone || !enabled) return; // WLEDMM don't register effects twice!
 
       strip.addEffect(203, &mode_Module_Experiment10, _data_FX_mode_Module_Experiment10);
       strip.addEffect(204, &mode_Module_Experiment9, _data_FX_mode_Module_Experiment9);
@@ -633,6 +634,8 @@ class AnimartrixUsermod : public Usermod {
       infoArr.add(uiDomString);
 	}
 
+		// add JSON entries that go to cfg.json
+		void addToConfig(JsonObject& obj) override {
     uint16_t getId() override
     {
       return USERMOD_ID_ANIMARTRIX;
