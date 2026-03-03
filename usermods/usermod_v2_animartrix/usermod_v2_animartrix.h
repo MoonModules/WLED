@@ -145,7 +145,7 @@ class ANIMartRIXMod:public ANIMartRIX {
 	  setSpeedFactor(speedFactor);
 
 	  //use_gamma = SEGENV.check1;
-	  use_gamma = false; // ToDO: move to usermod options
+	  use_gamma = true; // ToDO: move to usermod options
 	  cycle_hue = SEGENV.check1;
 	  boost_brightness = SEGENV.check2;
 	  boost_contrast = SEGENV.check3;
