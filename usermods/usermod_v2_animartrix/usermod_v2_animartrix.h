@@ -70,6 +70,9 @@
 #warning WLEDMM usermod: CC BY-NC 3.0 licensed effects by Stefan Petrick, include this usermod only if you accept the terms!
 //========================================================================================================================
 
+#define ANIMARTRIX_UI_MONITOR "Speed(nothing),HUE Change(nothing),Audio Strength,Audio Decay,Audio Detector ID,Amplify,Amplify,;!;1v;c1=255,c2=64,c3=0,o1=0,o2=0,m12=7,si=0"
+static const char _data_FX_mode_AudioMon1D[] PROGMEM = "Y💡AudioMonitor 1D ☾@" ANIMARTRIX_UI_MONITOR;
+
 #define ANIMARTRIX_UI_CONTROLS "Speed,HUE Change,Audio Strength,Audio Decay,,cycle HUE,boost Brightness,boost Contrast;;1;2;c1=0,c2=64,o2=0"
 
 static const char _data_FX_mode_Module_Experiment10[] PROGMEM = "Y💡Module_Experiment10 ☾@" ANIMARTRIX_UI_CONTROLS;
@@ -329,6 +332,19 @@ class ANIMartRIXMod:public ANIMartRIX {
 
 		handleAudioHUE(animartrix_detectorID);
 	}
+
+	// AUDIO DEBUG: simplified variant of initEffect()
+	inline int getAudioHUE() const { return hueshift; }
+	void initMonitor() {
+		#if !defined(WLEDMM_NO_GAMMA)
+			use_gamma = animartrix_use_gamma > 0;  // from global usermod options
+		#else
+			use_gamma = false; // ToDO: move to usermod options
+		#endif
+		cycle_hue = false;
+		boost_brightness = false;
+		boost_contrast = false;
+		hueshift = 0;
 	}
 
 	// enhance middle ranges contrast (S-Function)
@@ -421,6 +437,32 @@ class ANIMartRIXMod:public ANIMartRIX {
 	// Add any extra custom effects not part of the ANIMartRIX libary here
 };
 ANIMartRIXMod anim;
+
+uint16_t mode_AudioMon() {
+	// debug 1D audio monitor (gravimeter syle)
+	anim.initMonitor();
+	SEGMENT.custom3 = min(SEGMENT.custom3, uint8_t(NUM_DETECTORS-1));
+	unsigned detectorID = SEGMENT.custom3 == 0 ? animartrix_detectorID : SEGMENT.custom3;
+
+	anim.handleAudioHUE(detectorID);
+	float volumeSmth = float(uint16_t(anim.getAudioHUE())) / 255.0f;
+
+	if (SEGMENT.check1) volumeSmth *= 1.5f;  // amplify by 1.5 for better visibility
+	if (SEGMENT.check2) volumeSmth *= 1.5f;  // amplify again by 1.5
+	if (SEGENV.call == 0) {
+		SEGMENT.fill(BLACK);
+	}
+	SEGMENT.fade_out(253);
+
+	float mySampleAvg = volumeSmth/255.0f * float(SEGLEN-1); // map to pixels available in current segment
+	unsigned segmentSampleAvg = volumeSmth / 4;
+	int tempsamp = constrain(mySampleAvg,0,SEGLEN-1);       // Keep the sample from overflowing.
+	for (int i=0; i<tempsamp; i++) {
+		uint8_t palIndex = perlin8(i*segmentSampleAvg+millis(), 5000+i*segmentSampleAvg);
+		SEGMENT.setPixelColor(i, SEGMENT.color_from_palette(palIndex, false, true, 0));
+	}
+	return FRAMETIME;
+}
 
 uint16_t mode_Module_Experiment10() {
 	anim.initEffect(); 
@@ -696,6 +738,8 @@ class AnimartrixUsermod : public Usermod {
 		
       if (initDone || !enabled) return; // WLEDMM don't register effects twice!
 
+      strip.addEffect(255, &mode_AudioMon, _data_FX_mode_AudioMon1D); // audio debug
+
       strip.addEffect(203, &mode_Module_Experiment10, _data_FX_mode_Module_Experiment10);
       strip.addEffect(204, &mode_Module_Experiment9, _data_FX_mode_Module_Experiment9);
       strip.addEffect(205, &mode_Module_Experiment8, _data_FX_mode_Module_Experiment8);
@@ -769,7 +813,6 @@ class AnimartrixUsermod : public Usermod {
     void addToJsonInfo(JsonObject& root) override
     {
 	  if(!enabled) return;
-      char myStringBuffer[16]; // buffer for snprintf()
       JsonObject user = root["u"];
       if (user.isNull()) user = root.createNestedObject("u");
 
