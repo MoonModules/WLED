@@ -154,7 +154,16 @@ static inline int32_t map0(uint32_t val, uint32_t in_max, int32_t out_min, int32
 #endif
 
 // global settings - shared between ANIMartRIXMod and AnimartrixUsermod
+//
 static uint8_t animartrix_use_gamma = 1; // default = enabled. Can be disabled to get the "legacy" gamma-free look
+#ifdef USERMOD_AUDIOREACTIVE
+static uint8_t animartrix_detectorID = 5; // default = bass detector
+#else
+static uint8_t animartrix_detectorID = 0; // not AR usermod -> default = no audio
+#endif
+
+// ANIMartRIXMod class
+//
 
 class ANIMartRIXMod:public ANIMartRIX {
 	private:
@@ -164,7 +173,8 @@ class ANIMartRIXMod:public ANIMartRIX {
 	bool boost_brightness = false;
 	bool boost_contrast = false;
 
-	void handleAudio() {
+  // --- audio core ------------------------------------------------------------------------------
+
 		// ToDo 1: sliders
 		// * for HUE change amount by audio (handling based on cycle_hue: static shift, or speedup/slowdown)
 		// * for AUDIO filtering: instant -> 1s decay -> what else? Maybe accumulate changes but use speed limit?
@@ -178,9 +188,81 @@ class ANIMartRIXMod:public ANIMartRIX {
 
 		// ToDo 3: user option to configure audio input
 		// none, peak detection, zcr(major frequency), pressure, volumeSmth, High freqs (fftbin[7-10]), mid freqs (fftbin[4-8]), low freqs (fftbin[0-4])
-	}
+
+		// detection engine
+		#define NUM_DETECTORS 8 // total, including "none"
+		#define DET_NONE     0     // no audio
+		#define DET_VOLUME   1     // AR volumeSmth (relative)
+		#define DET_PRESSURE 2     // AR soundPressure (absolute)
+		#define DET_ZCR      3     // AR ZeroCrossingCount (music "density")
+		#define DET_BASS     5     // AR bass (FFT channel 1+2)
+		#define DET_MID      6     // AR voices & melody (FFT channel 5,7,8,10)
+		#define DET_HIGH     7     // AR high frequencies - high-hats, pipes, high pitch (FFT channel 12,13,15)
+
+		// get audio - either soundSim or audioReactive UM
+		static float getAudio(unsigned detectorID) {
+			constexpr float M_LOG_256 = 5.54517744f;    // log(256) = max value
+			constexpr float M_LOG_3   = 1.098612289f;   // log(3)   = minimal value
+  		um_data_t *um_data   = getAudioDataOrSim();
+  		float   volumeSmth   = *(float*)    um_data->u_data[0];
+  		// int16_t volumeRaw = *(int16_t*)  um_data->u_data[1];
+  		uint8_t *fftResult   = (uint8_t*)   um_data->u_data[2];
+  		float soundPressure  = *(float*)    um_data->u_data[9];
+  		//float agcSensitivity=*(float*)    um_data->u_data[10];
+  		uint16_t zCr         = *(uint16_t*) um_data->u_data[11];
+
+			bool isSilence = volumeSmth < 1.0f;
+			if (isSilence) return 0.0f;
+
+			float audioSample = 0.0f;
+			return (audioSample > 0.8f) ? audioSample : 0.0f;  // clamp silence and underflows
+		}
+
+
+		// filter audio
+		float lastAudioData[NUM_DETECTORS] = {0.0f};
+		unsigned lastAudioTime[NUM_DETECTORS] = {0};
+
+		float processAudio(unsigned detectorID, unsigned decayMS) {
+			constexpr float audioSmooth = 0.88f; // audio smoothing factor - to avoid instant flashes and very hard jumps
+			if (detectorID >= NUM_DETECTORS) detectorID = 0;
+			if (detectorID == 0) return 0.0f;
+
+			unsigned timestamp = millis();
+    	long delta_time = timestamp - lastAudioTime[detectorID];
+    	delta_time = min(max(delta_time , 1L), 1000L);           // clamp to meaningful values
+			if (delta_time < 3) return min(max(0.0f, lastAudioData[detectorID]), 255.0f); // too early, value has not changed since last time
+
+			float newAudio = getAudio(detectorID);
+			float deltaSample = newAudio - lastAudioData[detectorID]; // positive attack, negative during decay
+
+			if ((deltaSample > 0.0f) || (decayMS < 1)) {
+				// fast attack/decay with minimal filtering
+				lastAudioData[detectorID] += 0.9f * audioSmooth * deltaSample;  // 0.9 for damping of jumps
+			} else {
+				// slow decay: time-based linear decay; similar to AR limitSampleDynamics() function
+				constexpr float bigChange = 184; // a large, expected sample value that decays to 0 in decayMS millis
+        float maxDecay = - bigChange * float(delta_time) / float(decayMS); // allowed decay for elapsed time (must be negative!)
+        if (deltaSample < maxDecay) deltaSample = maxDecay; // limit delta if new value is too low
+				lastAudioData[detectorID] += audioSmooth * deltaSample;
+			}
+
+			lastAudioTime[detectorID] = timestamp;
+			return min(max(0.0f, lastAudioData[detectorID]), 255.0f);  // clamp result to 0..255, but keep exact value internally
+		}
+
+  // --- audio core end --------------------------------------------------------------------------
 
 	public:
+		// audio processing, called once per frame per segment
+		void handleAudioHUE(unsigned detectorID) {
+			unsigned audioDecay = map0(SEGMENT.custom2, 255, 3500);              // 0 (instant) up to 4 seconds
+			float audioShift = 255.0f * processAudio(detectorID, audioDecay);    // 0.0 ... 65025 = full "HUE turn"
+			float audioStrength = float(SEGMENT.custom1) / 255.0f;               // multiplier [0...1]
+			audioShift = audioShift * audioStrength;
+			if (SEGMENT.custom1 > 1) hueshift = hueshift + unsigned(audioShift);
+		}
+
 	void initEffect() {
 	  if ((SEGENV.call == 0) || (SEGMENT.virtualWidth() != num_x) || (SEGMENT.virtualHeight() != num_y)) {
 		  init(SEGMENT.virtualWidth(), SEGMENT.virtualHeight(), false);
@@ -212,7 +294,8 @@ class ANIMartRIXMod:public ANIMartRIX {
 			hueshift = (128 - SEGMENT.intensity) * 256;  // static HUE shift
 		}
 
-		handleAudio(); // Adjust HUE shift (and intensity?) based on audio
+		handleAudioHUE(animartrix_detectorID);
+	}
 	}
 
 	// enhance middle ranges contrast (S-Function)
