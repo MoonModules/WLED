@@ -214,7 +214,40 @@ class ANIMartRIXMod:public ANIMartRIX {
 			bool isSilence = volumeSmth < 1.0f;
 			if (isSilence) return 0.0f;
 
+			// extract audio based on selected detection method
 			float audioSample = 0.0f;
+			switch (detectorID) {
+				case DET_VOLUME:     audioSample = volumeSmth;    break;
+				case DET_PRESSURE:   audioSample = soundPressure; break;
+				case DET_ZCR:
+  				// zero crossings count
+  				audioSample = float(zCr);
+  				if (audioSample > 3.0f) 
+						audioSample = 255.0f * (logf(audioSample) - M_LOG_3) / M_LOG_256; // log scaling - amplifies lower frequencies, reduces noise
+  				else audioSample = 0.0f;
+					break;
+				case DET_BASS:
+  				// low freqs RMS
+  				audioSample = 0.6f * sqrtf(float(fftResult[1])*float(fftResult[1])    //   86 - 129 hz
+                                   + float(fftResult[2])*float(fftResult[2]));  //  129 - 216 hz
+					break;
+				case DET_MID:
+					// mid freqs RMS with some boost (voices, chorus, some instruments)
+  				audioSample = sqrtf(float(fftResult[5])*float(fftResult[5])           //  430 -  560 hz
+                            + float(fftResult[7])*float(fftResult[7])           //  818 - 1120 hz
+                            + float(fftResult[8])*float(fftResult[8])           // 1120 - 1421 hz
+                            + float(fftResult[10])*float(fftResult[10])) /2.5f; // 1895 - 2412 hz
+					break;
+				case DET_HIGH:
+				  // high freqs RMS (hats, pipes, high rattle stuff)
+  				audioSample = sqrtf(float(fftResult[12])*float(fftResult[12])          // 3015 - 3704 hz 
+                            + float(fftResult[13])*float(fftResult[13])          // 3704 - 4479 hz
+                            + float(fftResult[15])*float(fftResult[15])) / 2.2f; // 7106 - 9259 hz
+					break;
+				case DET_NONE: 
+					// falls through
+				default: break;
+			}
 			return (audioSample > 0.8f) ? audioSample : 0.0f;  // clamp silence and underflows
 		}
 
@@ -751,6 +784,7 @@ class AnimartrixUsermod : public Usermod {
 		  JsonObject top = obj.createNestedObject(FPSTR(_name));                 // WLEDMM: set enabled and _name
 		  top[FPSTR("enabled")] = enabled;
 			top[FPSTR("gamma_correction")] = animartrix_use_gamma;
+			top[FPSTR("audio_detector")] = animartrix_detectorID;
 		}
 
 		bool readFromConfig(JsonObject& root) override {
@@ -761,6 +795,7 @@ class AnimartrixUsermod : public Usermod {
 			// read config
 		  configComplete &= getJsonValue(top[FPSTR("enabled")], enabled);
 		 	configComplete &= getJsonValue(top[FPSTR("gamma_correction")], animartrix_use_gamma);
+			configComplete &= getJsonValue(top[FPSTR("audio_detector")], animartrix_detectorID);
 			if (oldEnabled != enabled) setup();  // re-run setup if enabled status changed
 		  return configComplete;
 		}
@@ -774,6 +809,15 @@ class AnimartrixUsermod : public Usermod {
 		  oappend(SET_F("dd=addDropdown('")); oappend(String(FPSTR(_name)).c_str()); oappend(SET_F("','gamma_correction');"));
 		  oappend(SET_F("addOption(dd,'On  (⎌)',1);"));
 		  oappend(SET_F("addOption(dd,'Off',0);"));
+
+		  oappend(SET_F("dd1=addDropdown('")); oappend(String(FPSTR(_name)).c_str()); oappend(SET_F("','audio_detector');"));
+		  oappend(SET_F("addOption(dd1,'Sound Level (relative)',1);"));
+		  oappend(SET_F("addOption(dd1,'Sound Pressure (absolute)',2);"));
+		  oappend(SET_F("addOption(dd1,'ZeroCrossings (density)',3);"));
+		  oappend(SET_F("addOption(dd1,'Bass Frequencies (⎌)',5);"));
+		  oappend(SET_F("addOption(dd1,'Mid Frequencies (voices)',6);"));
+		  oappend(SET_F("addOption(dd1,'Very High Frequencies',7);"));
+		  oappend(SET_F("addOption(dd1,'No Audio',0);"));
 		}
 
     uint16_t getId() override
