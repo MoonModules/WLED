@@ -2,6 +2,7 @@
 
 #include "wled.h"
 #include "colors.h" // include CHSV32 class by @dedehai
+#include "fcn_declare.h" // utilities
 
 #ifdef _MoonModules_WLED_
 	// WLEDMM: use faster math approximations - up to 40% faster
@@ -69,7 +70,7 @@
 #warning WLEDMM usermod: CC BY-NC 3.0 licensed effects by Stefan Petrick, include this usermod only if you accept the terms!
 //========================================================================================================================
 
-#define ANIMARTRIX_UI_CONTROLS "Speed,HUE Change,,,,cycle HUE,boost Brightness,boost Contrast;;1;2;o2=0"
+#define ANIMARTRIX_UI_CONTROLS "Speed,HUE Change,Audio Strength,Audio Decay,,cycle HUE,boost Brightness,boost Contrast;;1;2;c1=0,c2=64,o2=0"
 
 static const char _data_FX_mode_Module_Experiment10[] PROGMEM = "Y💡Module_Experiment10 ☾@" ANIMARTRIX_UI_CONTROLS;
 static const char _data_FX_mode_Module_Experiment9[] PROGMEM = "Y💡Module_Experiment9 ☾@" ANIMARTRIX_UI_CONTROLS;
@@ -124,6 +125,34 @@ static const char _data_FX_mode_Waves[] PROGMEM = "Y💡Waves ☾@" ANIMARTRIX_U
 static const char _data_FX_mode_Chasing_Spirals[] PROGMEM = "Y💡Chasing_Spirals ☾@" ANIMARTRIX_UI_CONTROLS;
 static const char _data_FX_mode_Rotating_Blob[] PROGMEM = "Y💡Rotating_Blob ☾@" ANIMARTRIX_UI_CONTROLS;
 
+// local utility functions
+//
+
+// Attach to audiosource, or fall back to simulateSound
+static um_data_t* getAudioDataOrSim() {
+  um_data_t *um_data;
+  if (!usermods.getUMData(&um_data, USERMOD_ID_AUDIOREACTIVE)) {
+    // add support for no audio
+    um_data = simulateSound(SEGMENT.soundSim);
+  }
+  return um_data;
+}
+
+// better "map" that can be used when in_min = out_min = 0. 
+static inline uint32_t map0(uint32_t val, uint32_t in_max, uint32_t out_max) {
+		// Fast and accurate (error always below 0.5)
+   if (in_max == 0) return 0; // avoid division by zero
+   return ( (val*out_max) + (in_max/2) ) / in_max;     // +(in_max/2) for rounding
+}
+#if 0 // not used yet
+// a variant of map0() that handles output ranges not starting at 0 - but still requires val in [0 ... in_max]
+static inline int32_t map0(uint32_t val, uint32_t in_max, int32_t out_min, int32_t out_max) {
+  if (out_min > out_max) std::swap(out_min, out_max); // a hack, just to treat inverted ranges without producing overflows
+  int range = out_max - out_min;
+  return int(map0(val, in_max, unsigned(range))) + out_min;
+}
+#endif
+
 // global settings - shared between ANIMartRIXMod and AnimartrixUsermod
 static uint8_t animartrix_use_gamma = 1; // default = enabled. Can be disabled to get the "legacy" gamma-free look
 
@@ -145,7 +174,7 @@ class ANIMartRIXMod:public ANIMartRIX {
 		// filter raw audio input
 		// adjust HUE shift based on audio data
 		// (maybe) allow to adjust brightness
-		// (details) compare to audiorective palettes by @netmindz
+		// (details) compare to audioreactive palettes by @netmindz
 
 		// ToDo 3: user option to configure audio input
 		// none, peak detection, zcr(major frequency), pressure, volumeSmth, High freqs (fftbin[7-10]), mid freqs (fftbin[4-8]), low freqs (fftbin[0-4])
