@@ -439,14 +439,15 @@ class ANIMartRIXMod:public ANIMartRIX {
 };
 ANIMartRIXMod anim;
 
+ANIMartRIXMod animAudioMon; // second object instance fir monitor, to avoid overlaping of audio processing
 uint16_t mode_AudioMon() {
 	// debug 1D audio monitor (gravimeter syle)
-	anim.initMonitor();
+	animAudioMon.initMonitor();
 	SEGMENT.custom3 = min(SEGMENT.custom3, uint8_t(NUM_DETECTORS-1));
 	unsigned detectorID = SEGMENT.custom3 == 0 ? animartrix_detectorID : SEGMENT.custom3;
 
-	anim.handleAudioHUE(detectorID);
-	float volumeSmth = float(uint16_t(anim.getAudioHUE())) / 255.0f;
+	animAudioMon.handleAudioHUE(detectorID);
+	float volumeSmth = float(uint16_t(animAudioMon.getAudioHUE())) / 255.0f;
 
 	if (SEGMENT.check1) volumeSmth *= 1.5f;  // amplify by 1.5 for better visibility
 	if (SEGMENT.check2) volumeSmth *= 1.5f;  // amplify again by 1.5
