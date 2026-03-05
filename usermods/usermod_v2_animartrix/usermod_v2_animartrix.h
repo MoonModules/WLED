@@ -272,7 +272,7 @@ class ANIMartRIXMod:public ANIMartRIX {
 			float newAudio = getAudio(detectorID);
 			float deltaSample = newAudio - lastAudioData[detectorID]; // positive attack, negative during decay
 
-			if ((deltaSample > 0.0f) || (decayMS < 1)) {
+			if ((deltaSample >= 0.0f) || (decayMS < 1)) {
 				// fast attack/decay with minimal filtering
 				// lastAudioData[detectorID] += 0.9f * audioSmooth * deltaSample;  // experimental - 0.9 for damping of jumps
 				lastAudioData[detectorID] += audioSmooth * deltaSample;
@@ -299,6 +299,10 @@ class ANIMartRIXMod:public ANIMartRIX {
 			audioShift = audioShift * audioStrength;
 			if (SEGMENT.custom1 > 1) hueshift = hueshift + unsigned(audioShift);
 		}
+
+	// copy of UI slider values
+	uint8_t myAudioDecay = 32; // default slider value
+	uint8_t myAudioStrength = 127;
 
 	void initEffect() {
 	  if ((SEGENV.call == 0) || (SEGMENT.virtualWidth() != num_x) || (SEGMENT.virtualHeight() != num_y)) {
@@ -330,7 +334,8 @@ class ANIMartRIXMod:public ANIMartRIX {
 		} else { // !cycle_hue
 			hueshift = (128 - SEGMENT.intensity) * 256;  // static HUE shift
 		}
-
+		myAudioStrength = SEGMENT.custom1;
+		myAudioDecay = SEGMENT.custom2;
 		handleAudioHUE(animartrix_detectorID);
 	}
 
@@ -346,6 +351,8 @@ class ANIMartRIXMod:public ANIMartRIX {
 		boost_brightness = false;
 		boost_contrast = false;
 		hueshift = 0;
+		myAudioStrength = SEGMENT.custom1;
+		myAudioDecay = SEGMENT.custom2;
 	}
 
 	// enhance middle ranges contrast (S-Function)
@@ -439,16 +446,25 @@ class ANIMartRIXMod:public ANIMartRIX {
 };
 ANIMartRIXMod anim;
 
-ANIMartRIXMod animAudioMon; // second object instance fir monitor, to avoid overlaping of audio processing
+ANIMartRIXMod animAudioMon; // second object instance for monitor, to avoid overlaping of audio processing
+ANIMartRIXMod animAudioMon0; // used if custom3 (detector) == 0 (use global)
 uint16_t mode_AudioMon() {
 	// debug 1D audio monitor (gravimeter syle)
-	animAudioMon.initMonitor();
 	SEGMENT.custom3 = min(SEGMENT.custom3, uint8_t(NUM_DETECTORS-1));
 	unsigned detectorID = SEGMENT.custom3 == 0 ? animartrix_detectorID : SEGMENT.custom3;
+	float volumeSmth = 0.0f;
 
-	animAudioMon.handleAudioHUE(detectorID);
-	float volumeSmth = float(uint16_t(animAudioMon.getAudioHUE())) / 255.0f;
-
+	if (SEGMENT.custom3 == 0) {
+		animAudioMon0.initMonitor();
+		SEGMENT.custom2 = anim.myAudioDecay; // steal AudioDecay from main effect
+		SEGMENT.custom1 = anim.myAudioStrength; // steal from main effect
+		animAudioMon0.handleAudioHUE(detectorID);
+		volumeSmth = float(uint16_t(animAudioMon0.getAudioHUE())) / 255.0f;
+	} else {
+		animAudioMon.initMonitor();
+		animAudioMon.handleAudioHUE(detectorID);
+		volumeSmth = float(uint16_t(animAudioMon.getAudioHUE())) / 255.0f;
+	}
 	if (SEGMENT.check1) volumeSmth *= 1.5f;  // amplify by 1.5 for better visibility
 	if (SEGMENT.check2) volumeSmth *= 1.5f;  // amplify again by 1.5
 	if (SEGENV.call == 0) {
@@ -456,9 +472,9 @@ uint16_t mode_AudioMon() {
 	}
 	SEGMENT.fade_out(253);
 
-	float mySampleAvg = volumeSmth/255.0f * float(SEGLEN-1); // map to pixels available in current segment
-	unsigned segmentSampleAvg = volumeSmth / 4;
-	int tempsamp = constrain(mySampleAvg,0,SEGLEN-1);       // Keep the sample from overflowing.
+	float mySampleAvg = volumeSmth * float(SEGLEN-1) /255.0f; // map to pixels available in current segment
+	unsigned segmentSampleAvg = (volumeSmth+2) / 4;
+	int tempsamp = constrain(roundf(mySampleAvg),0,SEGLEN-1);       // Keep the sample from overflowing.
 	for (int i=0; i<tempsamp; i++) {
 		uint8_t palIndex = perlin8(i*segmentSampleAvg+millis(), 5000+i*segmentSampleAvg);
 		SEGMENT.setPixelColor(i, SEGMENT.color_from_palette(palIndex, false, true, 0));
