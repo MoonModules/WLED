@@ -274,7 +274,8 @@ class ANIMartRIXMod:public ANIMartRIX {
 
 			if ((deltaSample > 0.0f) || (decayMS < 1)) {
 				// fast attack/decay with minimal filtering
-				lastAudioData[detectorID] += 0.9f * audioSmooth * deltaSample;  // 0.9 for damping of jumps
+				// lastAudioData[detectorID] += 0.9f * audioSmooth * deltaSample;  // experimental - 0.9 for damping of jumps
+				lastAudioData[detectorID] += audioSmooth * deltaSample;
 			} else {
 				// slow decay: time-based linear decay; similar to AR limitSampleDynamics() function
 				constexpr float bigChange = 184; // a large, expected sample value that decays to 0 in decayMS millis
