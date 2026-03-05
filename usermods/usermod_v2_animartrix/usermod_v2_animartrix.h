@@ -70,10 +70,10 @@
 #warning WLEDMM usermod: CC BY-NC 3.0 licensed effects by Stefan Petrick, include this usermod only if you accept the terms!
 //========================================================================================================================
 
-#define ANIMARTRIX_UI_MONITOR "Speed(nothing),HUE Change(nothing),Audio Strength,Audio Decay,Audio Detector ID,Amplify,Amplify,;!;1v;c1=255,c2=64,c3=0,o1=0,o2=0,m12=7,si=0"
+#define ANIMARTRIX_UI_MONITOR "Speed(nothing),HUE Change(nothing),Audio Strength,Audio Decay,Audio Detector ID,Amplify,Amplify,;!,!;!;1f;c1=255,c2=32,c3=0,o1=0,o2=0"
 static const char _data_FX_mode_AudioMon1D[] PROGMEM = "Y💡AudioMonitor 1D ☾@" ANIMARTRIX_UI_MONITOR;
 
-#define ANIMARTRIX_UI_CONTROLS "Speed,HUE Change,Audio Strength,Audio Decay,,cycle HUE,boost Brightness,boost Contrast;;1;2;c1=0,c2=64,o2=0"
+#define ANIMARTRIX_UI_CONTROLS "Speed,HUE Change,Audio Strength,Audio Decay,,cycle HUE,boost Brightness,boost Contrast;;1;2f;c1=0,c2=32,o2=0"
 
 static const char _data_FX_mode_Module_Experiment10[] PROGMEM = "Y💡Module_Experiment10 ☾@" ANIMARTRIX_UI_CONTROLS;
 static const char _data_FX_mode_Module_Experiment9[] PROGMEM = "Y💡Module_Experiment9 ☾@" ANIMARTRIX_UI_CONTROLS;
