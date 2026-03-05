@@ -845,7 +845,7 @@ class AnimartrixUsermod : public Usermod {
 		  JsonObject top = obj.createNestedObject(FPSTR(_name));                 // WLEDMM: set enabled and _name
 		  top[FPSTR("enabled")] = enabled;
 			top[FPSTR("gamma_correction")] = animartrix_use_gamma;
-			animartrix_detectorID = constrain(animartrix_detectorID, 0, NUM_DETECTORS);
+			animartrix_detectorID = constrain(animartrix_detectorID, 0, NUM_DETECTORS-1);
 			top[FPSTR("audio_detector")] = animartrix_detectorID;
 		}
 
@@ -858,7 +858,7 @@ class AnimartrixUsermod : public Usermod {
 		  configComplete &= getJsonValue(top[FPSTR("enabled")], enabled);
 		 	configComplete &= getJsonValue(top[FPSTR("gamma_correction")], animartrix_use_gamma);
 			configComplete &= getJsonValue(top[FPSTR("audio_detector")], animartrix_detectorID);
-			animartrix_detectorID = constrain(animartrix_detectorID, 0, NUM_DETECTORS);
+			animartrix_detectorID = constrain(animartrix_detectorID, 0, NUM_DETECTORS-1);
 			if (oldEnabled != enabled) setup();  // re-run setup if enabled status changed
 		  return configComplete;
 		}
