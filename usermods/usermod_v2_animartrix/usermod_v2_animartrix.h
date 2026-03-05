@@ -160,7 +160,7 @@ static inline int32_t map0(uint32_t val, uint32_t in_max, int32_t out_min, int32
 //
 static uint8_t animartrix_use_gamma = 1; // default = enabled. Can be disabled to get the "legacy" gamma-free look
 #ifdef USERMOD_AUDIOREACTIVE
-static uint8_t animartrix_detectorID = 5; // default = bass detector
+static uint8_t animartrix_detectorID = 4; // default = bass detector
 #else
 static uint8_t animartrix_detectorID = 0; // not AR usermod -> default = no audio
 #endif
@@ -193,14 +193,14 @@ class ANIMartRIXMod:public ANIMartRIX {
 		// none, peak detection, zcr(major frequency), pressure, volumeSmth, High freqs (fftbin[7-10]), mid freqs (fftbin[4-8]), low freqs (fftbin[0-4])
 
 		// detection engine
-		#define NUM_DETECTORS 8 // total, including "none"
+		#define NUM_DETECTORS 7 // total, including "none"
 		#define DET_NONE     0     // no audio
 		#define DET_VOLUME   1     // AR volumeSmth (relative)
 		#define DET_PRESSURE 2     // AR soundPressure (absolute)
 		#define DET_ZCR      3     // AR ZeroCrossingCount (music "density")
-		#define DET_BASS     5     // AR bass (FFT channel 1+2)
-		#define DET_MID      6     // AR voices & melody (FFT channel 5,7,8,10)
-		#define DET_HIGH     7     // AR high frequencies - high-hats, pipes, high pitch (FFT channel 12,13,15)
+		#define DET_BASS     4     // AR bass (FFT channel 1+2)
+		#define DET_MID      5     // AR voices & melody (FFT channel 5,7,8,10)
+		#define DET_HIGH     6     // AR high frequencies - high-hats, pipes, high pitch (FFT channel 12,13,15)
 
 		// get audio - either soundSim or audioReactive UM
 		static float getAudio(unsigned detectorID) {
@@ -828,6 +828,7 @@ class AnimartrixUsermod : public Usermod {
 		  JsonObject top = obj.createNestedObject(FPSTR(_name));                 // WLEDMM: set enabled and _name
 		  top[FPSTR("enabled")] = enabled;
 			top[FPSTR("gamma_correction")] = animartrix_use_gamma;
+			animartrix_detectorID = constrain(animartrix_detectorID, 0, NUM_DETECTORS);
 			top[FPSTR("audio_detector")] = animartrix_detectorID;
 		}
 
@@ -840,6 +841,7 @@ class AnimartrixUsermod : public Usermod {
 		  configComplete &= getJsonValue(top[FPSTR("enabled")], enabled);
 		 	configComplete &= getJsonValue(top[FPSTR("gamma_correction")], animartrix_use_gamma);
 			configComplete &= getJsonValue(top[FPSTR("audio_detector")], animartrix_detectorID);
+			animartrix_detectorID = constrain(animartrix_detectorID, 0, NUM_DETECTORS);
 			if (oldEnabled != enabled) setup();  // re-run setup if enabled status changed
 		  return configComplete;
 		}
@@ -858,9 +860,9 @@ class AnimartrixUsermod : public Usermod {
 		  oappend(SET_F("addOption(dd1,'Sound Level (relative)',1);"));
 		  oappend(SET_F("addOption(dd1,'Sound Pressure (absolute)',2);"));
 		  oappend(SET_F("addOption(dd1,'ZeroCrossings (density)',3);"));
-		  oappend(SET_F("addOption(dd1,'Bass Frequencies (⎌)',5);"));
-		  oappend(SET_F("addOption(dd1,'Mid Frequencies (voices)',6);"));
-		  oappend(SET_F("addOption(dd1,'Very High Frequencies',7);"));
+		  oappend(SET_F("addOption(dd1,'Bass Frequencies (⎌)',4);"));
+		  oappend(SET_F("addOption(dd1,'Mid Frequencies (voices)',5);"));
+		  oappend(SET_F("addOption(dd1,'Very High Frequencies',6);"));
 		  oappend(SET_F("addOption(dd1,'No Audio',0);"));
 		}
 
