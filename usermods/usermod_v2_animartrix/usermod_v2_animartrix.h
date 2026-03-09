@@ -17,8 +17,8 @@
   	float res = num - tquot * denom;
   	return res;
 	}
-	#undef fmodf
-	#define fmodf(num, denum) my_fmod_t(num, denum)
+	// #undef fmodf  //don't replace fmodf - the integer approximation version leads to effect freak-out (radial osciallator) after a few hours.
+	// #define fmodf(num, denum) my_fmod_t(num, denum)
 	#undef floorf
 	#define floorf(num) my_floor_t(num)
 	#define sinf(angle) sin_approx(angle)

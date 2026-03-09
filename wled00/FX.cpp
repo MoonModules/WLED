@@ -3015,20 +3015,15 @@ uint16_t spots_base(uint16_t threshold)
   if (SEGLEN <= 1) return mode_oops();
   if (!SEGMENT.check2) SEGMENT.fill(SEGCOLOR(1));
 
-  // constants for fixed point scaling
-  constexpr uint8_t  ZONELEN_FP_SHIFT = 3;
-  constexpr uint32_t ZONELEN_FP_SCALE = 1U << ZONELEN_FP_SHIFT;
-
-  unsigned maxZones = max(1, SEGLEN >> 2); // prevents "0 zones"
-  unsigned zones    = 1U + ((uint32_t(SEGMENT.intensity) * maxZones) >> 8);
-  unsigned zoneLen  =  uint32_t(SEGLEN) / zones;
-  unsigned zoneLen8 = (uint32_t(SEGLEN) * ZONELEN_FP_SCALE) / zones; // zoneLength * 8 (fixed‑point) -> avoids gaps at right/left sides
-  unsigned offset   = (uint32_t(SEGLEN) - ((zones * zoneLen8) >> ZONELEN_FP_SHIFT)) >> 1;
+  unsigned maxZones = max(1, SEGLEN / 4); // prevents "0 zones"
+  int zones         = 1U + ((uint32_t(SEGMENT.intensity) * maxZones + 127) >> 8); // with rounding
+  unsigned zoneLen  = (uint32_t(SEGLEN) + zones-1) / zones;  // round up (ceil)
+  int offset = ((int)SEGLEN - (zones * zoneLen)) / 2; // center the zones on the segment (can not use bit shift on negative number)
 
   for (unsigned z = 0; z < zones; z++)
   {
-    unsigned pos = offset + ((z * zoneLen8) >> ZONELEN_FP_SHIFT);
-    for (unsigned i = 0; i < zoneLen; i++)
+    int pos = offset + (z * zoneLen);
+    for (int i = 0; i < zoneLen; i++)
     {
       unsigned wave = triwave16((i * 0xFFFF) / zoneLen);
       if (wave > threshold) {
@@ -4474,29 +4469,29 @@ static const char _data_FX_MODE_SINEWAVE[] PROGMEM = "Sine";
  */
 uint16_t mode_flow(void)
 {
-  uint16_t counter = 0;
+  unsigned counter = 0;
   if (SEGMENT.speed != 0)
   {
     counter = strip.now * ((SEGMENT.speed >> 2) +1);
     counter = counter >> 8;
   }
 
-  uint16_t maxZones = SEGLEN / 6; //only looks good if each zone has at least 6 LEDs
-  uint16_t zones = (SEGMENT.intensity * maxZones) >> 8;
+  unsigned maxZones = SEGLEN / 6; //only looks good if each zone has at least 6 LEDs
+  int zones = (SEGMENT.intensity * maxZones) >> 8;
   if (zones & 0x01) zones++; //zones must be even
   if (zones < 2) zones = 2;
-  uint16_t zoneLen = SEGLEN / zones;
-  uint16_t offset = (SEGLEN - zones * zoneLen) >> 1;
-
+  int zoneLen = SEGLEN / zones;
+  zones += 2; //add two extra zones to cover beginning and end of segment (compensate integer truncation)
+  int offset = ((int)SEGLEN - (zones * zoneLen)) / 2; // center the zones on the segment (can not use bit shift on negative number)
   SEGMENT.fill(SEGMENT.color_from_palette(-counter, false, true, 255));
 
   for (int z = 0; z < zones; z++)
   {
-    uint16_t pos = offset + z * zoneLen;
+    int pos = offset + z * zoneLen;
     for (int i = 0; i < zoneLen; i++)
     {
       uint8_t colorIndex = (i * 255 / zoneLen) - counter;
-      uint16_t led = (z & 0x01) ? i : (zoneLen -1) -i;
+      int led = (z & 0x01) ? i : (zoneLen -1) -i;
       if (SEGMENT.reverse) led = (zoneLen -1) -led;
       SEGMENT.setPixelColor(pos + led, SEGMENT.color_from_palette(colorIndex, false, true, 255));
     }

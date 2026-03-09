@@ -725,7 +725,7 @@ typedef struct Segment {
     uint8_t get_random_wheel_index(uint8_t pos)  const;
 
     // WLEDMM function moved here (from FX_fcn.cpp) for better optimization by the compiler
-    inline uint32_t __attribute__((hot)) color_from_palette(uint_fast16_t i, bool mapping, bool wrap, uint8_t mcol, uint8_t pbri = 255) const {
+    inline uint32_t __attribute__((hot)) color_from_palette(uint_fast16_t i, bool mapping, bool wrap, uint8_t mcol=0, uint8_t pbri = 255) const {
       uint32_t color = gamma32(currentColor(mcol, colors[mcol]));
       // default palette or no RGB support on segment
       if ((palette == 0 && mcol < NUM_COLORS) || !_isRGB) {

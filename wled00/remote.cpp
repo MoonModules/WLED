@@ -14,6 +14,9 @@
 #define WIZMOTE_BUTTON_TWO         17
 #define WIZMOTE_BUTTON_THREE       18
 #define WIZMOTE_BUTTON_FOUR        19
+#define WIZMOTE_BUTTON_FIVE        20
+#define WIZMOTE_BUTTON_SIX         21
+#define WIZMOTE_BUTTON_SEVEN       22
 #define WIZMOTE_BUTTON_BRIGHT_UP   9
 #define WIZMOTE_BUTTON_BRIGHT_DOWN 8
 
@@ -167,6 +170,9 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     case WIZMOTE_BUTTON_TWO            : presetWithFallback(2, FX_MODE_BREATH,        0); resetNightMode(); break;
     case WIZMOTE_BUTTON_THREE          : presetWithFallback(3, FX_MODE_FIRE_FLICKER,  0); resetNightMode(); break;
     case WIZMOTE_BUTTON_FOUR           : presetWithFallback(4, FX_MODE_RAINBOW,       0); resetNightMode(); break;
+    case WIZMOTE_BUTTON_FIVE           : presetWithFallback(5, FX_MODE_CANDLE,        0); resetNightMode(); break;
+    case WIZMOTE_BUTTON_SIX            : presetWithFallback(6, FX_MODE_RANDOM_COLOR,  0); resetNightMode(); break;
+    case WIZMOTE_BUTTON_SEVEN          : presetWithFallback(7, FX_MODE_FADE,          0); resetNightMode(); break;
     case WIZMOTE_BUTTON_NIGHT          : activateNightMode();                             stateUpdated(CALL_MODE_BUTTON); break;
     case WIZMOTE_BUTTON_BRIGHT_UP      : brightnessUp();                                  stateUpdated(CALL_MODE_BUTTON); break;
     case WIZMOTE_BUTTON_BRIGHT_DOWN    : brightnessDown();                                stateUpdated(CALL_MODE_BUTTON); break;
