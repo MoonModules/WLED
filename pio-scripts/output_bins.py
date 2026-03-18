@@ -150,6 +150,16 @@ def bin_rename_copy(source, target, env):
     if os.path.isfile(source_map):
         print(f"Found linker mapfile {source_map}")
         shutil.copy(source_map, map_file)
+
+    # Copy boot_app0.bin to the build dir if available.
+    # FRAMEWORK_DIR is set by PlatformIO to the exact framework package used for this build.
+    # ESP8266 and old arduino-esp32 1.0.x do not have this file, so the isfile() check handles them gracefully.
+    framework_dir = env.get("FRAMEWORK_DIR", "")
+    if framework_dir:
+        boot_app0_src = os.path.join(str(framework_dir), "tools", "partitions", "boot_app0.bin")
+        if os.path.isfile(boot_app0_src):
+            shutil.copy(boot_app0_src, os.path.join(builddir, "boot_app0.bin"))
+
     # Check if this is a release build (CI sets WLED_RELEASE=True)
     is_release_build = os.environ.get('WLED_RELEASE', '').lower() in ('true', '1', 'yes')
     # show build flags summary for github CI builds

@@ -82,10 +82,9 @@ jobs:
         if [ -f .pio/build/${{ matrix.environment }}/bootloader.bin ]; then
           cp .pio/build/${{ matrix.environment }}/bootloader.bin artifact-${{ matrix.environment }}/bootloader.bin
         fi
-        # boot_app0.bin is a generic file from the arduino-esp32 framework (same for all ESP32 environments)
-        BOOT_APP0=$(find ~/.platformio/packages -name "boot_app0.bin" -path "*/tools/partitions/*" 2>/dev/null | head -1)
-        if [ -n "$BOOT_APP0" ]; then
-          cp "$BOOT_APP0" artifact-${{ matrix.environment }}/boot_app0.bin
+        # boot_app0.bin is copied to the build dir by output_bins.py using FRAMEWORK_DIR (ESP32 only)
+        if [ -f .pio/build/${{ matrix.environment }}/boot_app0.bin ]; then
+          cp .pio/build/${{ matrix.environment }}/boot_app0.bin artifact-${{ matrix.environment }}/boot_app0.bin
         fi
         echo "--- Collected files for ${{ matrix.environment }} ---"
         ls -la artifact-${{ matrix.environment }}/
