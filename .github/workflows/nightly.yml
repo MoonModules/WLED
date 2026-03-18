@@ -20,6 +20,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: firmware-release-*
           merge-multiple: true
       - name: Show Files
         run: ls -la
@@ -44,6 +45,7 @@ jobs:
           files: |
             *.bin
             *.bin.gz
+            *.zip
 #      - name: Repository Dispatch
 #        uses: peter-evans/repository-dispatch@v3
 #        with:

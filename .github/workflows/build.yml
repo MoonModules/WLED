@@ -70,15 +70,36 @@ jobs:
         WLED_RELEASE: True
         WLED_NIGHTLY_BUILD: ${{ inputs.nightly_build && 'true' || 'false' }}
       run: pio run -e ${{ matrix.environment }}
-    - name: Rename Bin
-      run: mv -v .pio/build/${{ matrix.environment }}/firmware.bin firmware-${{ matrix.environment }}.bin
+    - name: Collect firmware files
+      run: |
+        mkdir -p artifact-${{ matrix.environment }}
+        cp .pio/build/${{ matrix.environment }}/firmware.bin artifact-${{ matrix.environment }}/firmware.bin
+        # partitions.bin is only produced by ESP32 builds (not ESP8266)
+        if [ -f .pio/build/${{ matrix.environment }}/partitions.bin ]; then
+          cp .pio/build/${{ matrix.environment }}/partitions.bin artifact-${{ matrix.environment }}/partitions.bin
+        fi
+        # bootloader.bin is only produced by ESP32 builds using arduino-esp32 >= 2.x (not ESP8266, not old 1.0.x)
+        if [ -f .pio/build/${{ matrix.environment }}/bootloader.bin ]; then
+          cp .pio/build/${{ matrix.environment }}/bootloader.bin artifact-${{ matrix.environment }}/bootloader.bin
+        fi
+        # boot_app0.bin is a generic file from the arduino-esp32 framework (same for all ESP32 environments)
+        BOOT_APP0=$(find ~/.platformio/packages -name "boot_app0.bin" -path "*/tools/partitions/*" 2>/dev/null | head -1)
+        if [ -n "$BOOT_APP0" ]; then
+          cp "$BOOT_APP0" artifact-${{ matrix.environment }}/boot_app0.bin
+        fi
+        echo "--- Collected files for ${{ matrix.environment }} ---"
+        ls -la artifact-${{ matrix.environment }}/
+        # Create a zip with all collected files for use as a release asset
+        (cd artifact-${{ matrix.environment }} && zip ../firmware-${{ matrix.environment }}.zip *)
     - uses: actions/upload-artifact@v4
       with:
         name: firmware-${{ matrix.environment }}
-        path: firmware-${{ matrix.environment }}.bin
+        path: artifact-${{ matrix.environment }}/
     - uses: actions/upload-artifact@v4
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') || inputs.nightly_build
       with:
         name: firmware-release-${{ matrix.environment }}
-        path: build_output/release/*.bin
+        path: |
+          build_output/release/*.bin
+          firmware-${{ matrix.environment }}.zip
   
