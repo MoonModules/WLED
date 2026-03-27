@@ -207,6 +207,10 @@
 #include "../usermods/usermod_v2_auto_playlist/usermod_v2_auto_playlist.h"
 #endif
 
+#ifdef USERMOD_MATTER
+#include "../usermods/usermod_v2_matter/usermod_v2_matter.h"
+#endif
+
 void registerUsermods()
 {
   /*
@@ -409,5 +413,8 @@ void registerUsermods()
   usermods.add(new AutoPlaylistUsermod(false));
 #endif
 
+#ifdef USERMOD_MATTER
+  usermods.add(new MatterUsermod("Matter", false));
+#endif
 
 }
