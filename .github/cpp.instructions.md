@@ -57,10 +57,12 @@ void calculateCRC(const uint8_t* data, size_t len) {
 - **Function & feature comments:** Every non-trivial function should have a brief comment above it describing what it does. Include a note about each parameter when the names alone are not self-explanatory:
 
 ```cpp
-// Apply gamma correction to a single color channel.
-// @param value  raw 8-bit channel value (0–255)
-// @param gamma  gamma exponent (typically 2.8)
-// @return       corrected 8-bit value
+/* *****
+ * Apply gamma correction to a single color channel.
+ * @param value  raw 8-bit channel value (0–255)
+ * @param gamma  gamma exponent (typically 2.8)
+ * @return       corrected 8-bit value
+ ***** */
 uint8_t gammaCorrect(uint8_t value, float gamma);
 ```
 
@@ -76,7 +78,7 @@ uint8_t gammaCorrect(uint8_t value, float gamma);
 
 ## Error Handling
 
-- `DEBUG_PRINTF()` / `DEBUG_PRINTLN()` for developer diagnostics (compiled out unless `WLED_DEBUG`)
+- `DEBUG_PRINTF()` / `DEBUG_PRINTLN()` for developer diagnostics (compiled out unless `-D WLED_DEBUG`)
 - `USER_PRINTF()` / `USER_PRINTLN()` for user-visible messages (always compiled in)
 - Don't rely on C++ exceptions — use return codes (`-1` / `false` for errors) and global flags (e.g. `errorFlag = ERR_LOW_MEM`). Some builds don't support C++ exceptions.
 
