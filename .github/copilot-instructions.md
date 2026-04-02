@@ -6,7 +6,7 @@ WLED is a fast, feature-rich ESP32/ESP8266 webserver for controlling NeoPixel (W
 
 - Node.js 20+ (see `.nvmrc`)
 - Install dependencies: `npm ci`
-- PlatformIO for firmware builds: `pip install -r requirements.txt`
+- PlatformIO (required only for firmware compilation): `pip install -r requirements.txt`
 
 ## Build and Test
 
