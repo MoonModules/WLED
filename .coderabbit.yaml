@@ -20,7 +20,7 @@ reviews:
         and the general project guidelines in .github/copilot-instructions.md.
 
         Key rules: 2-space indentation (no tabs), camelCase functions/variables,
-        PascalCase classes, UPPER_CASE macros. Mark WLED-MM–specific changes with
+        PascalCase classes, UPPER_CASE macros. Mark WLED-MM-specific changes with
         `// WLEDMM` comments. No C++ exceptions — use return codes and debug macros.
 
         Hot-path optimization guidelines (attributes, uint_fast types, caching,

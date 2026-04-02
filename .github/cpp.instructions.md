@@ -231,7 +231,7 @@ ESP32 runs multiple FreeRTOS tasks concurrently (e.g. network handling, LED outp
 
 | Macro | Signature | Description |
 |---|---|---|
-| `esp32SemTake(mux, timeout)` | `mux`: `SemaphoreHandle_t`, `timeout`: milliseconds | Acquire a recursive mutex. Returns `pdTRUE` on success. |
+| `esp32SemTake(mux, timeout)` | `mux`: `SemaphoreHandle_t`, `timeout`: milliseconds | Acquire a recursive mutex. Returns `pdTRUE` on success, `pdFALSE` on timeout. |
 | `esp32SemGive(mux)` | `mux`: `SemaphoreHandle_t` | Release a previously acquired recursive mutex. |
 
 Pre-defined mutex handles (declared in `wled.h`):
@@ -254,7 +254,7 @@ if (esp32SemTake(busDrawMux, 200) == pdTRUE) { // wait max 200 ms
 
 Always pair every `esp32SemTake` with a matching `esp32SemGive`. Choose a timeout appropriate for the operation — typically 200 ms for drawing, up to 2500 ms for file I/O.
 
-Not every shared resource needs a mutex. Some synchronization is guaranteed by the overall control flow — for example, `volatile bool` flags like `suspendStripService`, `doInitBusses`, `loadLedmap`, and `OTAisRunning` (declared in `wled.h`) are checked sequentially in the main loop (`wled.cpp`) so they serialize access without requiring a semaphore. Use mutexes when true concurrent access from multiple FreeRTOS tasks is possible; rely on control-flow ordering when operations are sequenced within the same loop iteration.
+Not every shared resource needs a mutex. Some synchronization is guaranteed by the overall control flow. For example, `volatile bool` flags like `suspendStripService`, `doInitBusses`, `loadLedmap`, and `OTAisRunning` (declared in `wled.h`) are checked sequentially in the main loop (`wled.cpp`), so they serialize access without requiring a semaphore. Use mutexes when true concurrent access from multiple FreeRTOS tasks is possible. Rely on control-flow ordering when operations are sequenced within the same loop iteration.
 
 ## General
 
