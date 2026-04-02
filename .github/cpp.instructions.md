@@ -272,7 +272,7 @@ return rb | wg;
 
 ESP32 and ESP32-S3 (Xtensa core) have a fast "integer divide" instruction, so manual shifts rarely help. 
 The compiler already converts power-of-two unsigned divisions to shifts at `-O2`.
-On RISC-V based boards (ESP32-C3, ESP32-C6, ESP32-C5) explicit shifts can be beneficial:
+On RISC-V-based boards (ESP32-C3, ESP32-C6, ESP32-C5) explicit shifts can be beneficial:
 
 Prefer bit shifts for power-of-two operations:
 
