@@ -95,6 +95,64 @@ uint8_t gammaCorrect(uint8_t value, float gamma);
 - Hot-path: some data should stay in DRAM or IRAM for performance reasons
 - Memory efficiency matters, but is less critical on boards with PSRAM
 
+## `const` and `constexpr`
+
+`const` is a promise to the compiler that a value will not change. It enables optimizations and makes intent clear to reviewers.
+
+### `const` locals
+
+Adding `const` to a local variable that is only assigned once is not strictly required — but it **is** required when the variable is passed to a function that takes a `const` parameter (pointer or reference). In hot-path code, `const` on cached locals helps the compiler keep values in registers:
+
+```cpp
+const uint_fast16_t cols = virtualWidth();
+const uint_fast16_t rows = virtualHeight();
+```
+
+### `const` references to avoid copies
+
+Pass and store objects by `const &` (or `&`) instead of copying them implicitly. This avoids constructing temporary objects on every access — especially important in loops:
+
+```cpp
+const auto &m = _mappings[i];          // reference, not a copy (bus_manager.cpp)
+const CRGB& c = ledBuffer[pix];        // alias — avoids creating a temporary CRGB instance
+```
+
+For function parameters that are read-only, prefer `const &`:
+
+```cpp
+BusDigital(BusConfig &bc, uint8_t nr, const ColorOrderMap &com);
+```
+
+### `constexpr` over `#define`
+
+Prefer `constexpr` for compile-time constants. Unlike `#define`, `constexpr` respects scope and type safety, keeping the global namespace clean:
+
+```cpp
+// Prefer:
+constexpr uint32_t TWO_CHANNEL_MASK = 0x00FF00FF;
+constexpr int WLED_MAX_BUSSES = WLED_MAX_DIGITAL_CHANNELS + WLED_MAX_ANALOG_CHANNELS;
+
+// Avoid (when possible):
+#define TWO_CHANNEL_MASK 0x00FF00FF
+```
+
+Note: `#define` is still needed for conditional compilation guards (`#ifdef`), platform macros, and values that must be overridable from build flags.
+
+### `static_assert` over `#error`
+
+Use `static_assert` instead of the C-style `#if … #error` pattern when validating compile-time constants. It provides a clear message and works with `constexpr` values:
+
+```cpp
+// Prefer:
+constexpr int WLED_MAX_BUSSES = WLED_MAX_DIGITAL_CHANNELS + WLED_MAX_ANALOG_CHANNELS;
+static_assert(WLED_MAX_BUSSES <= 32, "WLED_MAX_BUSSES exceeds hard limit");
+
+// Avoid:
+#if (WLED_MAX_BUSSES > 32)
+  #error "WLED_MAX_BUSSES exceeds hard limit"
+#endif
+```
+
 ---
 
 ## Hot-Path Optimization
