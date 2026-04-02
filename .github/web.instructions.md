@@ -6,7 +6,7 @@ applyTo: "wled00/data/**"
 ## Formatting
 
 - Indent **HTML and JavaScript** with **tabs**
-- Indent **CSS** with  **tabs** or **spaces**
+- Indent **CSS** with **tabs** or **spaces**
 
 ## JavaScript Style
 

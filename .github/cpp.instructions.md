@@ -65,7 +65,7 @@ Most headers use `#ifndef` / `#define` guards. Some newer headers add `#pragma o
 ## Memory
 
 - PSRAM-aware allocation: use `d_malloc()` (prefer DRAM), `p_malloc()` (prefer PSRAM) from `util.h`
-- Larger buffers (LED data, JSON documents) should use PSRAM when available and technically feasible 
+- Larger buffers (LED data, JSON documents) should use PSRAM when available and technically feasible
 - Hot-path: some data should stay in DRAM or IRAM for performance reasons
 - Memory efficiency matters, but is less critical on boards with PSRAM
 
@@ -90,7 +90,7 @@ Stack the appropriate attributes on hot-path functions. Defined in `const.h`:
 | `WLED_O3_ATTR` | Force `-O3,fast-math` | Innermost color math (e.g. `color_blend`) |
 | `[[gnu::hot]] inline` | Modern C++ attribute + inline | Header-defined accessors (e.g. `progress()`, `currentBri()`) |
 
-Note: `WLED_O3_ATTR` sometimes causes performance loss compared to `WLED_O2_ATTR`. Chose optimization levels based on test results.
+Note: `WLED_O3_ATTR` sometimes causes performance loss compared to `WLED_O2_ATTR`. Choose optimization levels based on test results.
 
 Example signature:
 
@@ -244,7 +244,7 @@ uint32_t wg = (((c1 >> 8) & TWO_CHANNEL_MASK) * amount) & ~TWO_CHANNEL_MASK;
 return rb | wg;
 ```
 
-### Bit Shifts Over Division (risc-v boards only)
+### Bit Shifts Over Division
 
 Prefer bit shifts for power-of-two operations:
 
@@ -318,5 +318,5 @@ Not every shared resource needs a mutex. Some synchronization is guaranteed by t
 
 - Follow the existing style in the file you are editing
 - If possible, use `static` for local (C-style) variables and functions (keeps the global namespace clean)
-- Avoid unexplained "magic numbers". Prefer named constants (constexpr) or C-style ``#define`` constants for repeated numbers that have the same meaning.
+- Avoid unexplained "magic numbers". Prefer named constants (`constexpr`) or C-style `#define` constants for repeated numbers that have the same meaning.
 - Include `"wled.h"` as the primary project header where needed
