@@ -74,6 +74,7 @@ uint8_t gammaCorrect(uint8_t value, float gamma);
 - Platform differentiation: `ARDUINO_ARCH_ESP32` vs `ESP8266`
 - WLED-MM fork detection: `_MoonModules_WLED_` (defined in `wled.h`)
 - PSRAM availability: `BOARD_HAS_PSRAM`
+- WLEDMM_FASTPATH is the default path; code under `#ifndef WLEDMM_FASTPATH` is deprecated, and will be phase-out in the next release.
 - Flash-saving mode: `WLEDMM_SAVE_FLASH` (disables aggressive inlining)
 
 ## Error Handling
@@ -90,7 +91,8 @@ uint8_t gammaCorrect(uint8_t value, float gamma);
 
 ## Memory
 
-- PSRAM-aware allocation: use `d_malloc()` (prefer DRAM), `p_malloc()` (prefer PSRAM) from `util.h`
+- **Avoid Variable Length Arrays (VLAs)**: ESP32/ESP8266 tasks have limited stack space (typically 2–4 KB). VLAs sized by dynamic parameters can silently overflow the stack. Use fixed-size arrays, heap allocation, or bounded VLAs with an explicit compile-time maximum instead. Always Justify the use of VLA.
+- **PSRAM-aware allocation**: use `d_malloc()` (prefer DRAM), `p_malloc()` (prefer PSRAM) from `util.h`
 - Larger buffers (LED data, JSON documents) should use PSRAM when available and technically feasible
 - Hot-path: some data should stay in DRAM or IRAM for performance reasons
 - Memory efficiency matters, but is less critical on boards with PSRAM
@@ -141,7 +143,7 @@ Note: `#define` is still needed for conditional compilation guards (`#ifdef`), p
 
 ### `static_assert` over `#error`
 
-Use `static_assert` instead of the C-style `#if … #error` pattern when validating compile-time constants. It provides a clear message and works with `constexpr` values:
+Use `static_assert` instead of the C-style `#if … #error … #endif` pattern when validating compile-time constants. It provides a clear message and works with `constexpr` values:
 
 ```cpp
 // Prefer:
@@ -369,7 +371,7 @@ if (lastKelvin != kelvin) {
 - Use `CRGB` (FastLED type) mainly when interfacing with FastLED functions; convert at boundaries
 - Use 16-bit intermediates for channel math to ensure 32-bit (not 64-bit) arithmetic:
   ```cpp
-  uint16_t r1 = R(color1);  // 16-bit ensures 32-bit multiply on ESP32
+  uint16_t r1 = R(color1);  // 16-bit intermediate keeps the multiply result in 32 bits, avoiding 64-bit promotion
   ```
 
 ## Multi-Task Synchronization

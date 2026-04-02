@@ -29,12 +29,14 @@ Use these timeout values when running builds:
 1. Edit files in `wled00/` (but **never** `html_*.h` files)
 2. Ensure web UI is built first: `npm run build`
 3. Build firmware: `pio run -e esp32_4MB_V4_M` (set timeout ≥ 30 min)
+4. Flash to device: `pio run -e [target] --target upload`
 
 ### Combined Web + Firmware Changes
 
 1. Always build web UI first
 2. Test web interface manually
 3. Then build and test firmware
+
 
 ## Before Finishing Work
 
@@ -94,7 +96,7 @@ The GitHub Actions CI workflow will:
 
 **To ensure CI success, always validate locally:**
 - Run `npm test` and ensure it passes
-- Run `pio run -e esp32_4MB_V4_M` (or another common environment from "Hardware Compilation" section) and ensure it completes successfully
+- Run `pio run -e esp32_4MB_V4_M` (or another common Common firmware environment, see next section) and ensure it completes successfully
 - If either fails locally, it WILL fail in CI
 
 Match this workflow in local development to catch failures before pushing.
@@ -103,6 +105,5 @@ Match this workflow in local development to catch failures before pushing.
 
 - **Never edit or commit** `wled00/html_*.h` — auto-generated from `wled00/data/`
 - Web UI rebuild is part of the PlatformIO firmware compilation pipeline
-- PR authors do not need to commit `html_*.h` files; they are generated during firmware builds
 - Common firmware environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S3_8MB_PSRAM_M_qspi`, `esp32_16MB_V4_M_eth`, `esp8266_4MB_S` (deprecated), `esp32dev_compat`
 - List all PlatformIO targets: `pio run --list-targets`

@@ -12,7 +12,7 @@ applyTo: "wled00/data/**"
 
 - **camelCase** for functions and variables: `gId()`, `selectedFx`, `currentPreset`
 - Abbreviated helpers are common: `d` for `document`, `gId()` for `getElementById()`
-- Mark WLED-MM additions with `//WLEDMM` comments
+- Mark WLED-MM additions with `// WLEDMM` comments
 
 ## Key Files
 

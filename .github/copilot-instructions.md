@@ -38,7 +38,7 @@ For detailed build timeouts, development workflows, troubleshooting, and validat
 
 ## Repository Structure
 
-```
+```text
 wled00/                 # Firmware source (C++)
   ├── data/             # Web UI source (HTML, CSS, JS)
   ├── src/              # Core modules, fonts, dependencies
@@ -65,7 +65,6 @@ Main development branch: `mdev`
 - **Never edit or commit** `wled00/html_*.h` — auto-generated from `wled00/data/`.
 - **Repository language is English.** Suggest translations for non-English content.
 - **Use VS Code with PlatformIO extension** for best development experience.
-
 - **When unsure, say so.** Gather more information rather than guessing.
 - **PR reviews:** Authors do not need to commit `html_*.h` files; they are generated during firmware builds.
 - **Provide references** when making analyses or recommendations. Base them on the correct branch or PR.
