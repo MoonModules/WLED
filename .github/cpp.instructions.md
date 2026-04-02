@@ -244,7 +244,9 @@ uint32_t wg = (((c1 >> 8) & TWO_CHANNEL_MASK) * amount) & ~TWO_CHANNEL_MASK;
 return rb | wg;
 ```
 
-### Bit Shifts Over Division
+### Bit Shifts Over Division (RISC-V boards)
+
+On most ESP32 variants (Xtensa core), the compiler already converts power-of-two divisions to shifts at `-O2`, so manual shifts rarely help. On RISC-V based ESP32 boards (ESP32-C3, ESP32-C6, ESP32-H2) the compiler may not do this automatically, so explicit shifts can be beneficial:
 
 Prefer bit shifts for power-of-two operations:
 

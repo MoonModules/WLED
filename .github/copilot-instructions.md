@@ -2,6 +2,15 @@
 
 WLED is a fast, feature-rich ESP32/ESP8266 webserver for controlling NeoPixel (WS2812B, WS2811, SK6812) LEDs and SPI-based chipsets. WLED-MM is a fork focused on higher performance (ESP32, ESP32-S3, PSRAM boards), large installs, and advanced audio analysis.
 
+## Hardware Targets
+
+| Target | Status |
+|---|---|
+| ESP32 (classic Xtensa dual-core) | **Primary target** |
+| ESP32-S3 | **Primary target** — preferred for larger installs and HUB75 matrix |
+| ESP32-S2, ESP32-C3 | Supported |
+| ESP8266 | Deprecated — should still compile, but not actively maintained |
+
 Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.
 
 ## Setup
@@ -21,7 +30,7 @@ Always reference these instructions first and fallback to search or bash command
 
 **Always run `npm run build` before `pio run`.** The web UI build generates `wled00/html_*.h` header files required by firmware compilation.
 
-Common firmware environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S3_8MB_PSRAM_M_qspi`, `esp32_16MB_V4_M_eth`, `esp8266_4MB_S`
+Common firmware environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S3_8MB_PSRAM_M_qspi`, `esp32_16MB_V4_M_eth`, `esp8266_4MB_S` (deprecated)
 
 For detailed build timeouts, development workflows, troubleshooting, and validation steps, see [agent-build-instructions.md](agent-build-instructions.md).
 
