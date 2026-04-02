@@ -92,7 +92,7 @@ uint8_t gammaCorrect(uint8_t value, float gamma);
 ## Memory
 
 - **PSRAM-aware allocation**: use `d_malloc()` (prefer DRAM), `p_malloc()` (prefer PSRAM) from `util.h`
-- *Avoid variable length arrays (VLAs)*: Variable length arrays are a GCC extension, not a standard C++ feature. VLA are allocated on the stack at runtime. On ESP32/ESP8266, FreeRTOS task stacks are typically only 2–8 KB. A VLA whose size depends on a dynamic parameter (pixel counts, etc) can silently overflow the stack (stack smashing). Use a fixed-size array or heap allocation (`d_malloc`/`p_malloc`) instead. **Any VLA must be justified in the source code or in the PR**.
+- **Avoid Variable Length Arrays (VLAs)**: GCC/Clang support VLAs as an extension (they are not part of the C++ standard), so they look like a legitimate feature — but they are allocated on the stack at runtime. On ESP32/ESP8266, FreeRTOS task stacks are typically only 2–8 KB; a VLA whose size depends on a runtime parameter (segment dimensions, pixel counts, etc.) can silently exhaust the stack and cause the program to behave in unexpected ways or crash. Prefer a fixed-size array with a compile-time bound, or heap allocation (`d_malloc` / `p_malloc`) for dynamically sized buffers. **Any VLA must be explicitly justified in the source code or PR.**
 - **Larger buffers** (LED data, JSON documents) should use PSRAM when available and technically feasible
 - **Hot-path**: some data should stay in DRAM or IRAM for performance reasons
 - Memory efficiency matters, but is less critical on boards with PSRAM
