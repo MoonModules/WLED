@@ -96,7 +96,7 @@ The GitHub Actions CI workflow will:
 
 **To ensure CI success, always validate locally:**
 - Run `npm test` and ensure it passes
-- Run `pio run -e esp32_4MB_V4_M` (or another common Common firmware environment, see next section) and ensure it completes successfully
+- Run `pio run -e esp32_4MB_V4_M` (or another common firmware environment, see next section) and ensure it completes successfully
 - If either fails locally, it WILL fail in CI
 
 Match this workflow in local development to catch failures before pushing.
