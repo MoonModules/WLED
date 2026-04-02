@@ -8,7 +8,7 @@ See also: [CONTRIBUTING.md](../CONTRIBUTING.md) for general style guidelines tha
 ## Formatting
 
 - Indent with **2 spaces** (no tabs in C++ files)
-- Opening braces on the same line is preferred (K&R style). Allman style (brace on next line) is acceptable
+- Opening braces on the same line is preferred (K&R style). Brace on a separate line (Allman style) is acceptable
 - Single-statement `if` bodies may omit braces: `if (a == b) doStuff(a);`
 - Space between keyword and parenthesis: `if (...)`, `for (...)`. No space between function name and parenthesis: `doStuff(a)`
 - No enforced line-length limit; wrap when a line exceeds your editor width
