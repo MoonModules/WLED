@@ -97,7 +97,7 @@ uint8_t gammaCorrect(uint8_t value, float gamma);
 
 ## `const` and `constexpr`
 
-`const` is a promise to the compiler that a value will not change - a function declared with a `const char* message` parameter is not allow to modify the content of `message`.
+`const` is a promise to the compiler that a value will not change - a function declared with a `const char* message` parameter is not allowed to modify the content of `message`.
 This pattern enables optimizations and makes intent clear to reviewers.
 
 ### `const` locals
