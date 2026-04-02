@@ -199,6 +199,37 @@ if (lastKelvin != kelvin) {
   uint16_t r1 = R(color1);  // 16-bit ensures 32-bit multiply on ESP32
   ```
 
+## Multi-Task Synchronization
+
+ESP32 runs multiple FreeRTOS tasks concurrently (e.g. network handling, LED output, JSON parsing). Use the WLED-MM mutex macros for synchronization — they expand to FreeRTOS recursive semaphore calls on ESP32 and compile to no-ops on ESP8266:
+
+| Macro | Signature | Description |
+|---|---|---|
+| `esp32SemTake(mux, timeout)` | `mux`: `SemaphoreHandle_t`, `timeout`: milliseconds | Acquire a recursive mutex. Returns `pdTRUE` on success. |
+| `esp32SemGive(mux)` | `mux`: `SemaphoreHandle_t` | Release a previously acquired recursive mutex. |
+
+Pre-defined mutex handles (declared in `wled.h`):
+
+| Mutex | Protects |
+|---|---|
+| `busDrawMux` | Concurrent `strip.show()` and `strip.service()` — acquire before writing pixels from background tasks (DDP, E1.31, Art-Net) |
+| `segmentMux` | Segment array modifications — acquire before adding, removing, or iterating segments |
+| `jsonBufferLockMutex` | Shared JSON document buffer |
+| `presetFileMux` | `presets.json` file reads and writes |
+
+Usage pattern:
+
+```cpp
+if (esp32SemTake(busDrawMux, 200) == pdTRUE) { // wait max 200 ms
+  // ... critical section ...
+  esp32SemGive(busDrawMux);
+}
+```
+
+Always pair every `esp32SemTake` with a matching `esp32SemGive`. Choose a timeout appropriate for the operation — typically 200 ms for drawing, up to 2500 ms for file I/O.
+
+Not every shared resource needs a mutex. Some synchronization is guaranteed by the overall control flow — for example, `volatile bool` flags like `suspendStripService`, `doInitBusses`, `loadLedmap`, and `OTAisRunning` (declared in `wled.h`) are checked sequentially in the main loop (`wled.cpp`) so they serialize access without requiring a semaphore. Use mutexes when true concurrent access from multiple FreeRTOS tasks is possible; rely on control-flow ordering when operations are sequenced within the same loop iteration.
+
 ## General
 
 - Follow the existing style in the file you are editing
