@@ -97,11 +97,12 @@ uint8_t gammaCorrect(uint8_t value, float gamma);
 
 ## `const` and `constexpr`
 
-`const` is a promise to the compiler that a value will not change. It enables optimizations and makes intent clear to reviewers.
+`const` is a promise to the compiler that a value will not change - a function declared with a `const *char message` parameter is not allow to modify the content of `message`.
+This pattern enables optimizations and makes intent clear to reviewers.
 
 ### `const` locals
 
-Adding `const` to a local variable that is only assigned once is not strictly required — but it **is** required when the variable is passed to a function that takes a `const` parameter (pointer or reference). In hot-path code, `const` on cached locals helps the compiler keep values in registers:
+Adding `const` to a local variable that is only assigned once is not necessray — but it **is** required when the variable is passed to a function that takes a `const` parameter (pointer or reference). In hot-path code, `const` on cached locals helps the compiler keep values in registers:
 
 ```cpp
 const uint_fast16_t cols = virtualWidth();
