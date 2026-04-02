@@ -1,6 +1,6 @@
 # Agent-Mode Build & Test Instructions
 
-Detailed build workflow, timeouts, and troubleshooting for AI agents making code changes. Always reference these instructions when running builds or validating changes.
+Detailed build workflow, timeouts, and troubleshooting for making code changes in agent mode. Always reference these instructions when running builds or validating changes.
 
 ## Build Timing and Timeouts
 
