@@ -31,7 +31,7 @@ wled00/                 # Firmware source (C++)
   ├── src/              # Core modules, fonts, dependencies
   ├── html_*.h          # Auto-generated (DO NOT EDIT OR COMMIT)
   └── wled.h            # Main firmware configuration
-usermods/               # Community addons (C++, with library.json)
+usermods/               # Community addons (.h files, included via usermods_list.cpp)
 tools/cdata.js          # Web UI → header build script
 tools/cdata-test.js     # Test suite
 platformio.ini          # Build targets and configuration

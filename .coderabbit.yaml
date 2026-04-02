@@ -43,7 +43,8 @@ reviews:
 
     - path: "usermods/**"
       instructions: >
-        Usermods are community add-ons. Each usermod lives in its own directory
-        under usermods/ and should include a library.json if it needs extra
-        libraries. Follow the same C++ conventions as the core firmware
-        (.github/cpp.instructions.md).
+        Usermods are community add-ons following the upstream WLED 0.15.x style.
+        Each usermod lives in its own directory under usermods/ and is implemented
+        as a .h file that is pulled in by wled00/usermods_list.cpp (guarded by
+        #ifdef). Usermods do not use library.json. Follow the same C++ conventions
+        as the core firmware (.github/cpp.instructions.md).
