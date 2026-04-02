@@ -31,7 +31,7 @@ reviews:
       instructions: >
         Follow the web UI conventions documented in .github/web.instructions.md.
 
-        Key rules: indent HTML and JavaScript with tabs, CSS with spaces.
+        Key rules: indent HTML and JavaScript with tabs, CSS with tabs or spaces.
         Files here are built into wled00/html_*.h by tools/cdata.js — never
         edit those generated headers directly.
 
