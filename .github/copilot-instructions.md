@@ -69,4 +69,4 @@ Main development branch: `mdev`
 - **PR reviews:** Authors do not need to commit `html_*.h` files; they are generated during firmware builds.
 - **Provide references** when making analyses or recommendations. Base them on the correct branch or PR.
 - **C++ formatting available**: `clang-format` is installed but not in CI
-- No automated linting is configured — match existing code style in files you edit. See `cpp.instructions.md` and `web.instructions.md` for language-specific conventions.
+- No automated linting is configured — match existing code style in files you edit. See `cpp.instructions.md` and `web.instructions.md` for language-specific conventions, and `cicd.instructions.md` for GitHub Actions workflows.
