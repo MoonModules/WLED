@@ -91,10 +91,10 @@ uint8_t gammaCorrect(uint8_t value, float gamma);
 
 ## Memory
 
-- **Avoid Variable Length Arrays (VLAs)**: ESP32/ESP8266 tasks have limited stack space (typically 2–4 KB). VLAs sized by dynamic parameters can silently overflow the stack. Use fixed-size arrays, heap allocation, or bounded VLAs with an explicit compile-time maximum instead. Always Justify the use of VLA.
 - **PSRAM-aware allocation**: use `d_malloc()` (prefer DRAM), `p_malloc()` (prefer PSRAM) from `util.h`
-- Larger buffers (LED data, JSON documents) should use PSRAM when available and technically feasible
-- Hot-path: some data should stay in DRAM or IRAM for performance reasons
+- **Avoid Variable Length Arrays (VLAs)**: ESP32/ESP8266 tasks have limited stack space (typically 2–4 KB). VLAs sized by dynamic parameters can silently overflow the stack. Use fixed-size arrays, heap allocation, or bounded VLAs with an explicit compile-time maximum instead. Always justify the use of VLA.
+- **Larger buffers** (LED data, JSON documents) should use PSRAM when available and technically feasible
+- **Hot-path**: some data should stay in DRAM or IRAM for performance reasons
 - Memory efficiency matters, but is less critical on boards with PSRAM
 
 ## `const` and `constexpr`
@@ -250,7 +250,7 @@ uint32_t color_add(uint32_t c1, uint32_t c2, bool fast=false);
 ```
 
 General rules:
-- Keep the per-pixel fast path free of non-inline function calls and multi-way branches or switch-case decisions.
+- Keep the per-pixel fast path free of non-inline function calls, multi-way branches and complex switch-case decisions.
 - Hoist the "which path?" decision out of the inner loop (once per frame or per segment)
 - It is acceptable to duplicate some code between fast and complex variants to keep the fast path lean
 
@@ -398,16 +398,18 @@ Usage pattern:
 if (esp32SemTake(busDrawMux, 200) == pdTRUE) { // wait max 200 ms
   // ... critical section ...
   esp32SemGive(busDrawMux);
+} else {
+  // fallback code or error reporting
 }
 ```
 
 Always pair every `esp32SemTake` with a matching `esp32SemGive`. Choose a timeout appropriate for the operation — typically 200 ms for drawing, up to 2500 ms for file I/O.
 
-Not every shared resource needs a mutex. Some synchronization is guaranteed by the overall control flow. For example, `volatile bool` flags like `suspendStripService`, `doInitBusses`, `loadLedmap`, and `OTAisRunning` (declared in `wled.h`) are checked sequentially in the main loop (`wled.cpp`), so they serialize access without requiring a semaphore. Use mutexes when true concurrent access from multiple FreeRTOS tasks is possible. Rely on control-flow ordering when operations are sequenced within the same loop iteration.
+**Important**: Not every shared resource needs a mutex. Some synchronization is guaranteed by the overall control flow. For example, `volatile bool` flags like `suspendStripService`, `doInitBusses`, `loadLedmap`, and `OTAisRunning` (declared in `wled.h`) are checked sequentially in the main loop (`wled.cpp`), so they serialize access without requiring a semaphore. Use mutexes when true concurrent access from multiple FreeRTOS tasks is possible and race-conditions can lead to unexpected behaviour. Rely on control-flow ordering when operations are sequenced within the same loop iteration.
 
 ## General
 
 - Follow the existing style in the file you are editing
 - If possible, use `static` for local (C-style) variables and functions (keeps the global namespace clean)
-- Avoid unexplained "magic numbers". Prefer named constants (`constexpr`) or C-style `#define` constants for repeated numbers that have the same meaning.
+- Avoid unexplained "magic numbers". Prefer named constants (`constexpr`) or C-style `#define` constants for repeated numbers that have the same meaning
 - Include `"wled.h"` as the primary project header where needed
