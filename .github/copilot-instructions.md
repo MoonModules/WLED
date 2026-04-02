@@ -70,3 +70,8 @@ Main development branch: `mdev`
 - **Provide references** when making analyses or recommendations. Base them on the correct branch or PR.
 - **C++ formatting available**: `clang-format` is installed but not in CI
 - No automated linting is configured — match existing code style in files you edit. See `cpp.instructions.md` and `web.instructions.md` for language-specific conventions, and `cicd.instructions.md` for GitHub Actions workflows.
+
+## Pull Request Expectations
+
+- **No force-push on open PRs.** Once a pull request is open and being reviewed, do not force-push (`git push --force`) to the branch. Force-pushing rewrites history that reviewers may have already commented on, making it impossible to track incremental changes. Use regular commits or `git merge` to incorporate feedback; the branch will be squash-merged when it is accepted.
+- **Document your changes in the PR.** Every pull request should include a clear description of *what* changed and *why*. If the change affects user-visible behavior, describe the expected impact. Link to related issues where applicable.
