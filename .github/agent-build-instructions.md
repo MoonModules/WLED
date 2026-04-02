@@ -93,8 +93,9 @@ The GitHub Actions CI workflow will:
 4. Compile firmware for **all** `default_envs` targets
 
 **To ensure CI success, always validate locally:**
-- `npm test` passes
-- At least one `pio run -e <env>` completes successfully
+- Run `npm test` and ensure it passes
+- Run `pio run -e esp32_4MB_V4_M` (or another common environment from "Hardware Compilation" section) and ensure it completes successfully
+- If either fails locally, it WILL fail in CI
 
 Match this workflow in local development to catch failures before pushing.
 
@@ -103,5 +104,5 @@ Match this workflow in local development to catch failures before pushing.
 - **Never edit or commit** `wled00/html_*.h` — auto-generated from `wled00/data/`
 - Web UI rebuild is part of the PlatformIO firmware compilation pipeline
 - PR authors do not need to commit `html_*.h` files; they are generated during firmware builds
-- Common firmware environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S3_8MB_PSRAM_M_qspi`, `esp32_16MB_V4_M_eth`, `esp8266_4MB_S` (depricated), `esp32dev_compat`
+- Common firmware environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S3_8MB_PSRAM_M_qspi`, `esp32_16MB_V4_M_eth`, `esp8266_4MB_S` (deprecated), `esp32dev_compat`
 - List all PlatformIO targets: `pio run --list-targets`

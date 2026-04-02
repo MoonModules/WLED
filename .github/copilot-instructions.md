@@ -34,10 +34,17 @@ wled00/                 # Firmware source (C++)
   ├── html_*.h          # Auto-generated (DO NOT EDIT OR COMMIT)
   └── wled.h            # Main firmware configuration, and global variables
 usermods/               # Community addons (.h files, included via usermods_list.cpp)
+lib/                    # Project specific custom libraries. PlatformIO will compile them to separate static libraries and link them
+platformio.ini          # Build targets and configuration
+platformio_override.sample.ini # examples for custom build configurations - entries must be copied into platformio_override.ini to use them.
+                               # platformio_override.ini is _not_ stored in the WLED repository!
+
+pio-scripts/            # Build tools (platformio)
+tools/                  # Build tools (Node.js), partition files, and generic utilities
 tools/cdata.js          # Web UI → header build script
 tools/cdata-test.js     # Test suite
-platformio.ini          # Build targets and configuration
 package.json            # Node.js scripts and release ID
+.github/workflows/      # CI/CD pipelines
 ```
 
 Main development branch: `mdev`
