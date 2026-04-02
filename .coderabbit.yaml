@@ -5,6 +5,7 @@
 #   .github/copilot-instructions.md   — project overview & general rules
 #   .github/cpp.instructions.md       — C++ coding conventions
 #   .github/web.instructions.md       — Web UI coding conventions
+#   .github/cicd.instructions.md      — GitHub Actions / CI-CD conventions
 #
 # NOTE: This file must be committed (tracked by git) for CodeRabbit to read
 # it from the repository.  If it is listed in .gitignore, CodeRabbit will
@@ -48,3 +49,14 @@ reviews:
         as a .h file that is pulled in by wled00/usermods_list.cpp (guarded by
         #ifdef). Usermods do not use library.json. Follow the same C++ conventions
         as the core firmware (.github/cpp.instructions.md).
+
+    - path: ".github/workflows/*.{yml,yaml}"
+      instructions: >
+        Follow the CI/CD conventions documented in .github/cicd.instructions.md.
+
+        Key rules: 2-space indentation, descriptive name: on every workflow/job/step.
+        Third-party actions must be pinned to a specific version tag — branch pins
+        such as @main or @master are not allowed. Declare explicit permissions: blocks
+        scoped to least privilege. Never interpolate github.event.* values directly
+        into run: steps — pass them through an env: variable to prevent script
+        injection. Do not use pull_request_target unless fully justified.
