@@ -415,3 +415,11 @@ Always pair every `esp32SemTake` with a matching `esp32SemGive`. Choose a timeou
 - If possible, use `static` for local (C-style) variables and functions (keeps the global namespace clean)
 - Avoid unexplained "magic numbers". Prefer named constants (`constexpr`) or C-style `#define` constants for repeated numbers that have the same meaning
 - Include `"wled.h"` as the primary project header where needed
+- **Float-to-unsigned conversion is undefined behavior when the value is out of range.** Converting a negative (or very large) `float` directly to an unsigned integer type (`uint8_t`, `uint16_t`, …) is UB per the C++ standard — the Xtensa (ESP32) toolchain may silently wrap, but RISC-V (ESP32-C3/C6) can produce wrong results. Cast through a signed integer first:
+  ```cpp
+  // Undefined behavior — avoid:
+  uint8_t angle = 40.74f * atan2f(dy, dx);   // negative float → uint8_t is UB
+  
+  // Correct — cast through int first:
+  uint8_t angle = int(40.74f * atan2f(dy, dx));  // float→int (defined), int→uint8_t (defined)
+  ```
