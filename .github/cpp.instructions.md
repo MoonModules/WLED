@@ -166,7 +166,7 @@ General rules:
 
 ### Function Pointers to Eliminate Repeated Decisions
 
-When the same decision (e.g. "which drawing routine?") would be evaluated for every pixel, assign the chosen variant to a function pointer once and let the inner loop call through the pointer. This removes the branch entirely — the library only ever sees a single function to call.
+When the same decision (e.g. "which drawing routine?") would be evaluated for every pixel, assign the chosen variant to a function pointer once and let the inner loop call through the pointer. This removes the branch entirely — the calling code (e.g. the GIF decoder loop) only ever invokes one function per frame, with no per-pixel decision.
 
 `image_loader.cpp` demonstrates the pattern: `calculateScaling()` picks the best drawing callback once per frame based on segment dimensions and GIF size, then passes it to the decoder via `setDrawPixelCallback()`:
 
@@ -217,7 +217,7 @@ if (!guard) return;  // another task is already sending
 // ... do work — flag auto-clears when guard goes out of scope
 ```
 
-This avoids FreeRTOS semaphore overhead and the risk of forgetting `esp32SemGive`. There are no current examples of this pattern in the codebase, but it is a useful option for new code where mutex contention is a measured bottleneck.
+This avoids FreeRTOS semaphore overhead and the risk of forgetting `esp32SemGive`. There are no current examples of this pattern in the codebase — consult with maintainers before introducing it in new code, to ensure it aligns with the project's synchronization conventions.
 
 ### Pre-Compute Outside Loops
 
