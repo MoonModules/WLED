@@ -1,6 +1,15 @@
 # WLED-MM — ESP32/ESP8266 LED Controller Firmware
 
-WLED is a fast, feature-rich ESP32/ESP8266 webserver for controlling NeoPixel (WS2812B, WS2811, SK6812) LEDs and SPI-based chipsets. WLED-MM is a fork focused on higher performance (ESP32, ESP32-S3, PSRAM boards), large installs, and advanced audio analysis.
+WLED is a fast, feature-rich ESP32/ESP8266 webserver for controlling NeoPixel (WS2812B, WS2811, SK6812) LEDs and SPI-based chipsets. 
+WLED-MM is a fork focused on higher performance (ESP32, ESP32-S3, PSRAM boards), large installs, and advanced audio analysis.
+
+Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.
+
+## Setup
+
+- Node.js 20+ (see `.nvmrc`)
+- Install dependencies: `npm ci`
+- PlatformIO (required only for firmware compilation): `pip install -r requirements.txt`
 
 ## Hardware Targets
 
@@ -10,14 +19,6 @@ WLED is a fast, feature-rich ESP32/ESP8266 webserver for controlling NeoPixel (W
 | ESP32-S3 | **Primary target** — preferred for larger installs and HUB75 matrix |
 | ESP32-S2, ESP32-C3 | Supported |
 | ESP8266 | Deprecated — should still compile, but not actively maintained |
-
-Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.
-
-## Setup
-
-- Node.js 20+ (see `.nvmrc`)
-- Install dependencies: `npm ci`
-- PlatformIO (required only for firmware compilation): `pip install -r requirements.txt`
 
 ## Build and Test
 
