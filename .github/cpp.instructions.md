@@ -341,9 +341,11 @@ Prefer bit shifts for power-of-two operations:
 
 ```cpp
 position >> 3     // instead of position / 8
-(255 - rate) >> 1 // instead of (255 - rate) / 2
+(255U - rate) >> 1 // instead of (255 - rate) / 2
 i & 0x0007        // instead of i % 8
 ```
+
+**Important**: The bit-shifted expression should be unsigned. On some MCUs, "signed right-shift" is implemeted by an "arithmetic shift right" that duplicated the sign bit: ``0b1010 >> 1 = 0x1101``.
 
 ### Static Caching for Expensive Computations
 
