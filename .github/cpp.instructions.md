@@ -345,7 +345,7 @@ position >> 3     // instead of position / 8
 i & 0x0007        // instead of i % 8
 ```
 
-**Important**: The bit-shifted expression should be unsigned. On some MCUs, "signed right-shift" is implemeted by an "arithmetic shift right" that duplicates the sign bit: ``0b1010 >> 1 = 0b1101``.
+**Important**: The bit-shifted expression should be unsigned. On some MCUs, "signed right-shift" is implemented by an "arithmetic shift right" that duplicates the sign bit: ``0b1010 >> 1 = 0b1101``.
 
 ### Static Caching for Expensive Computations
 
