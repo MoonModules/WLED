@@ -138,6 +138,32 @@ if (!isActive()) return;                    // inactive segment
 if (unsigned(i) >= virtualLength()) return; // bounds check (catches negative i too)
 ```
 
+### Avoid Nested Calls — Fast Path / Complex Path
+
+Avoid calling non-inline functions or making complex decisions inside per-pixel hot-path code. When a function has both a common simple case and a rare complex case, split it into two variants and choose once per frame rather than per pixel:
+
+```cpp
+// Decision made once per frame in startFrame(), stored in a bool
+bool simpleSegment = _isSuperSimpleSegment;
+
+// Per-pixel loop — no complex branching inside
+if (simpleSegment)
+  setPixelColorXY_fast(x, y, col, scaled_col, cols, rows);  // inline, no bounds checks
+else
+  setPixelColorXY_slow(x, y, col);  // full validation, grouping, mirroring
+```
+
+The same principle applies to color utilities — `color_add()` accepts a `fast` flag so callers can choose saturating adds (no branches) vs. ratio-preserving adds (with division) without an inner-loop decision:
+
+```cpp
+uint32_t color_add(uint32_t c1, uint32_t c2, bool fast=false);
+```
+
+General rules:
+- Keep the per-pixel fast path free of non-inline function calls and multi-way branches
+- Hoist the "which path?" decision out of the inner loop (once per frame or per segment)
+- It is acceptable to duplicate some code between fast and complex variants to keep the fast path lean
+
 ### Pre-Compute Outside Loops
 
 Move invariant calculations before the loop. Pre-compute reciprocals to replace division with multiplication:
