@@ -92,7 +92,7 @@ permissions:
 **Third-party actions** (anything outside the `actions/` and `github/` namespaces) should be pinned to a specific release tag. Branch pins (`@main`, `@master`) are **not allowed** — they can be updated by the action author at any time without notice:
 
 ```yaml
-# ✅ Acceptable — specific version tag. SHA pinning still recommended for more security, as @v2 is still a mutable tag.
+# ✅ Acceptable — specific version tag. SHA pinning recommended for more security, as @v2 is still a mutable tag.
 uses: softprops/action-gh-release@v2
 
 # ❌ Not acceptable — mutable branch reference
