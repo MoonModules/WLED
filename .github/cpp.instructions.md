@@ -164,6 +164,61 @@ General rules:
 - Hoist the "which path?" decision out of the inner loop (once per frame or per segment)
 - It is acceptable to duplicate some code between fast and complex variants to keep the fast path lean
 
+### Function Pointers to Eliminate Repeated Decisions
+
+When the same decision (e.g. "which drawing routine?") would be evaluated for every pixel, assign the chosen variant to a function pointer once and let the inner loop call through the pointer. This removes the branch entirely — the library only ever sees a single function to call.
+
+`image_loader.cpp` demonstrates the pattern: `calculateScaling()` picks the best drawing callback once per frame based on segment dimensions and GIF size, then passes it to the decoder via `setDrawPixelCallback()`:
+
+```cpp
+// calculateScaling() — called once per frame
+if ((perPixelX < 2) && (perPixelY < 2))
+  decoder.setDrawPixelCallback(drawPixelCallbackDownScale2D);   // downscale-only variant
+else
+  decoder.setDrawPixelCallback(drawPixelCallback2D);            // full-scaling variant
+```
+
+Each callback is a small, single-purpose function with no internal branching — the decoder's per-pixel loop never re-evaluates which strategy to use.
+
+### Template Specialization (Advanced)
+
+Templates can eliminate runtime decisions by generating separate code paths at compile time. For example, a pixel setter could be templated on color order or channel count so the compiler removes dead branches and produces tight, specialized machine code:
+
+```cpp
+template<bool hasWhite>
+void setChannel(uint8_t* out, uint32_t col) {
+  out[0] = R(col); out[1] = G(col); out[2] = B(col);
+  if constexpr (hasWhite) out[3] = W(col);  // compiled out when hasWhite==false
+}
+```
+
+Use sparingly — each instantiation duplicates code in flash. On ESP8266 and small-flash ESP32 boards this can exhaust IRAM/flash. Prefer templates only when the hot path is measurably faster and the number of instantiations is small (2–4).
+
+### RAII Lock-Free Synchronization (Advanced)
+
+Where contention is rare and the critical section is short, consider replacing mutex-based locking with lock-free techniques using `std::atomic` and RAII scoped guards. A scoped guard sets a flag on construction and clears it on destruction, guaranteeing cleanup even on early return:
+
+```cpp
+struct ScopedBusyFlag {
+  std::atomic<bool>& flag;
+  bool acquired;
+  ScopedBusyFlag(std::atomic<bool>& f) : flag(f), acquired(false) {
+    bool expected = false;
+    acquired = flag.compare_exchange_strong(expected, true);
+  }
+  ~ScopedBusyFlag() { if (acquired) flag.store(false); }
+  explicit operator bool() const { return acquired; }
+};
+
+// Usage
+static std::atomic<bool> busySending{false};
+ScopedBusyFlag guard(busySending);
+if (!guard) return;  // another task is already sending
+// ... do work — flag auto-clears when guard goes out of scope
+```
+
+This avoids FreeRTOS semaphore overhead and the risk of forgetting `esp32SemGive`. There are no current examples of this pattern in the codebase, but it is a useful option for new code where mutex contention is a measured bottleneck.
+
 ### Pre-Compute Outside Loops
 
 Move invariant calculations before the loop. Pre-compute reciprocals to replace division with multiplication:
