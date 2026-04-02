@@ -6,7 +6,7 @@ applyTo: "wled00/data/**"
 ## Formatting
 
 - Indent **HTML and JavaScript** with **tabs**
-- Indent **CSS** with **spaces**
+- Indent **CSS** with  **tabs** or **spaces**
 
 ## JavaScript Style
 
@@ -17,6 +17,8 @@ applyTo: "wled00/data/**"
 ## Key Files
 
 - `index.htm` — main interface
+- `index.js` — functions that manage / update the main interface
+- peek.js, liveview*.htm - live preview in main interface
 - `settings*.htm` — configuration pages
 - `*.css` — stylesheets (inlined during build)
 

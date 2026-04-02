@@ -2,6 +2,8 @@
 
 WLED is a fast, feature-rich ESP32/ESP8266 webserver for controlling NeoPixel (WS2812B, WS2811, SK6812) LEDs and SPI-based chipsets. WLED-MM is a fork focused on higher performance (ESP32, ESP32-S3, PSRAM boards), large installs, and advanced audio analysis.
 
+Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.
+
 ## Setup
 
 - Node.js 20+ (see `.nvmrc`)
@@ -30,7 +32,7 @@ wled00/                 # Firmware source (C++)
   ├── data/             # Web UI source (HTML, CSS, JS)
   ├── src/              # Core modules, fonts, dependencies
   ├── html_*.h          # Auto-generated (DO NOT EDIT OR COMMIT)
-  └── wled.h            # Main firmware configuration
+  └── wled.h            # Main firmware configuration, and global variables
 usermods/               # Community addons (.h files, included via usermods_list.cpp)
 tools/cdata.js          # Web UI → header build script
 tools/cdata-test.js     # Test suite
@@ -44,6 +46,8 @@ Main development branch: `mdev`
 
 - **Never edit or commit** `wled00/html_*.h` — auto-generated from `wled00/data/`.
 - **Repository language is English.** Suggest translations for non-English content.
+- **Use VS Code with PlatformIO extension ** for best development experience.
+
 - **When unsure, say so.** Gather more information rather than guessing.
 - **PR reviews:** Authors do not need to commit `html_*.h` files; they are generated during firmware builds.
 - **Provide references** when making analyses or recommendations. Base them on the correct branch or PR.

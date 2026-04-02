@@ -1,6 +1,6 @@
 # Agent-Mode Build & Test Instructions
 
-Detailed build workflow, timeouts, and troubleshooting for making code changes in agent mode. Always reference these instructions when running builds or validating changes.
+Detailed build workflow, timeouts, and troubleshooting for making code changes in agent mode. Always reference these instructions first when running builds or validating changes.
 
 ## Build Timing and Timeouts
 
@@ -103,5 +103,5 @@ Match this workflow in local development to catch failures before pushing.
 - **Never edit or commit** `wled00/html_*.h` — auto-generated from `wled00/data/`
 - Web UI rebuild is part of the PlatformIO firmware compilation pipeline
 - PR authors do not need to commit `html_*.h` files; they are generated during firmware builds
-- Common firmware environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S3_8MB_PSRAM_M_qspi`, `esp32_16MB_V4_M_eth`, `esp8266_4MB_S`
+- Common firmware environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S3_8MB_PSRAM_M_qspi`, `esp32_16MB_V4_M_eth`, `esp8266_4MB_S` (depricated), `esp32dev_compat`
 - List all PlatformIO targets: `pio run --list-targets`

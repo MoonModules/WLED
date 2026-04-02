@@ -47,32 +47,33 @@ Most headers use `#ifndef` / `#define` guards. Some newer headers add `#pragma o
 - Prefer compile-time feature flags (`#ifdef` / `#ifndef`) over runtime checks where possible
 - Platform differentiation: `ARDUINO_ARCH_ESP32` vs `ESP8266`
 - WLED-MM fork detection: `_MoonModules_WLED_` (defined in `wled.h`)
-- PSRAM availability: `BOARD_HAS_PSRAM`, `WLED_USE_PSRAM`
+- PSRAM availability: `BOARD_HAS_PSRAM`
 - Flash-saving mode: `WLEDMM_SAVE_FLASH` (disables aggressive inlining)
 
 ## Error Handling
 
-- No C++ exceptions — use return codes (`-1` / `false` for errors) and global flags (e.g. `errorFlag = ERR_LOW_MEM`)
 - `DEBUG_PRINTF()` / `DEBUG_PRINTLN()` for developer diagnostics (compiled out unless `WLED_DEBUG`)
 - `USER_PRINTF()` / `USER_PRINTLN()` for user-visible messages (always compiled in)
+- Don't rely on C++ exceptions — use return codes (`-1` / `false` for errors) and global flags (e.g. `errorFlag = ERR_LOW_MEM`). Some builds don't support C++ exceptions.
 
 ## Strings
 
-- Use `F("string")` for string constants (stores in PROGMEM, saves RAM)
+- (Optional) Use `F("string")` for string constants (stores in PROGMEM, saves RAM)
 - Use `const char*` for temporary/parsed strings
 - Avoid `String` (Arduino heap-allocated string) in hot paths; acceptable in config/setup code
 
 ## Memory
 
 - PSRAM-aware allocation: use `d_malloc()` (prefer DRAM), `p_malloc()` (prefer PSRAM) from `util.h`
-- Larger buffers (LED data, JSON documents) should use PSRAM when available
+- Larger buffers (LED data, JSON documents) should use PSRAM when available and technically feasible 
+- Hot-path: some data should stay in DRAM or IRAM for performance reasons
 - Memory efficiency matters, but is less critical on boards with PSRAM
 
 ---
 
 ## Hot-Path Optimization
 
-The hot path is the per-frame pixel pipeline: **Segment → Strip → BusManager → BusDigital → PolyBus → LED driver**. Speed is the top priority here. The patterns below are taken from existing hot-path code (`FX_fcn.cpp`, `FX_2Dfcn.cpp`, `bus_manager.cpp`, `colorTools.hpp`) and should be followed when modifying these files.
+The hot path is the per-frame pixel pipeline: **Segment → Strip → BusManager → Bus(Digital,HUB75,Network) or PolyBus → LED driver**. Speed is the top priority here. The patterns below are taken from existing hot-path code (`FX_fcn.cpp`, `FX_2Dfcn.cpp`, `bus_manager.cpp`, `colorTools.hpp`) and should be followed when modifying these files.
 
 Note: `FX.cpp` (effect functions) is written by many contributors and has diverse styles — that is acceptable. The guidelines below apply starting from pixel set/get operations and below.
 
@@ -82,12 +83,14 @@ Stack the appropriate attributes on hot-path functions. Defined in `const.h`:
 
 | Attribute | Meaning | When to use |
 |---|---|---|
-| `__attribute__((hot))` | Branch-prediction hint | All hot-path functions |
+| `__attribute__((hot))` | Branch-prediction hint | hot-path functions with complex logic |
 | `IRAM_ATTR` | Place in fast IRAM (ESP32) | Critical per-pixel functions (e.g. `BusDigital::setPixelColor`) |
 | `IRAM_ATTR_YN` | IRAM on ESP32, no-op on ESP8266 | Hot functions that ESP8266 can't fit in IRAM |
 | `WLED_O2_ATTR` | Force `-O2` optimization | Most hot-path functions |
 | `WLED_O3_ATTR` | Force `-O3,fast-math` | Innermost color math (e.g. `color_blend`) |
 | `[[gnu::hot]] inline` | Modern C++ attribute + inline | Header-defined accessors (e.g. `progress()`, `currentBri()`) |
+
+Note: `WLED_O3_ATTR` sometimes causes performance loss compared to `WLED_O2_ATTR`. Chose optimization levels based on test results.
 
 Example signature:
 
@@ -131,7 +134,7 @@ if ((uint_fast16_t)(pix - bstart) < blen)  // also catches negative pix via unsi
 
 ### Early Returns
 
-Guard every hot-path function with the cheapest checks first:
+Guard every hot-path function with the cheapest necessary checks first:
 
 ```cpp
 if (!isActive()) return;                    // inactive segment
@@ -160,7 +163,7 @@ uint32_t color_add(uint32_t c1, uint32_t c2, bool fast=false);
 ```
 
 General rules:
-- Keep the per-pixel fast path free of non-inline function calls and multi-way branches
+- Keep the per-pixel fast path free of non-inline function calls and multi-way branches or switch-case decisions.
 - Hoist the "which path?" decision out of the inner loop (once per frame or per segment)
 - It is acceptable to duplicate some code between fast and complex variants to keep the fast path lean
 
@@ -241,7 +244,7 @@ uint32_t wg = (((c1 >> 8) & TWO_CHANNEL_MASK) * amount) & ~TWO_CHANNEL_MASK;
 return rb | wg;
 ```
 
-### Bit Shifts Over Division
+### Bit Shifts Over Division (risc-v boards only)
 
 Prefer bit shifts for power-of-two operations:
 
@@ -274,7 +277,7 @@ if (lastKelvin != kelvin) {
 
 - Store and pass colors as `uint32_t` (0xWWRRGGBB)
 - Extract channels with macros: `R(c)`, `G(c)`, `B(c)`, `W(c)`, compose with `RGBW32(r,g,b,w)`
-- Use `CRGB` (FastLED type) only when interfacing with FastLED functions; convert at boundaries
+- Use `CRGB` (FastLED type) mainly when interfacing with FastLED functions; convert at boundaries
 - Use 16-bit intermediates for channel math to ensure 32-bit (not 64-bit) arithmetic:
   ```cpp
   uint16_t r1 = R(color1);  // 16-bit ensures 32-bit multiply on ESP32
@@ -314,4 +317,6 @@ Not every shared resource needs a mutex. Some synchronization is guaranteed by t
 ## General
 
 - Follow the existing style in the file you are editing
+- If possible, use `static` for local (C-style) variables and functions (keeps the global namespace clean)
+- Avoid unexplained "magic numbers". Prefer named constants (constexpr) or C-style ``#define`` constants for repeated numbers that have the same meaning.
 - Include `"wled.h"` as the primary project header where needed
