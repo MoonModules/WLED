@@ -1,187 +1,87 @@
-# WLED - ESP32/ESP8266 LED Controller Firmware
+# WLED-MM — ESP32/ESP8266 LED Controller Firmware
 
-WLED is a fast and feature-rich implementation of an ESP32 and ESP8266 webserver to control NeoPixel (WS2812B, WS2811, SK6812) LEDs and SPI-based chipsets. The project consists of C++ firmware for microcontrollers and a modern web interface. WLED-MM is a fork of WLED that concentrates on higher performance (esp32, esp32-s3, boards with PSRAM), large installs and advanced audio analysis.
+WLED is a fast, feature-rich ESP32/ESP8266 webserver for controlling NeoPixel (WS2812B, WS2811, SK6812) LEDs and SPI-based chipsets. WLED-MM is a fork focused on higher performance (ESP32, ESP32-S3, PSRAM boards), large installs, and advanced audio analysis.
 
-Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.
+## Setup
 
-## Working Effectively
+- Node.js 20+ (see `.nvmrc`)
+- Install dependencies: `npm ci`
+- PlatformIO for firmware builds: `pip install -r requirements.txt`
 
-### Initial Setup
-- Install Node.js 20+ (specified in `.nvmrc`): Check your version with `node --version`
-- Install dependencies: `npm ci` (takes ~5 seconds)
-- Install PlatformIO for hardware builds: `pip install -r requirements.txt` (takes ~60 seconds)
+## Build and Test
 
-### Build and Test Workflow
-- **ALWAYS build web UI first**: `npm run build` -- takes 3 seconds. NEVER CANCEL.
-- **Run tests**: `npm test` -- takes 40 seconds. NEVER CANCEL. Set timeout to 2+ minutes.
-- **Development mode**: `npm run dev` -- monitors file changes and auto-rebuilds web UI
-- **Hardware firmware build**: `pio run -e [environment]` -- takes 15+ minutes. NEVER CANCEL. Set timeout to 30+ minutes.
+| Command | Purpose | Typical Time | Timeout |
+|---|---|---|---|
+| `npm run build` | Build web UI → generates `wled00/html_*.h` headers | ~3 s | 30 s |
+| `npm test` | Run test suite | ~40 s | 2 min |
+| `npm run dev` | Watch mode — auto-rebuilds web UI on file changes | — | — |
+| `pio run -e <env>` | Build firmware for a hardware target | 15–20 min | 30 min |
 
-### Build Process Details
-The build has two main phases:
-1. **Web UI Generation** (`npm run build`):
-   - Processes files in `wled00/data/` (HTML, CSS, JS)
-   - Minifies and compresses web content 
-   - Generates `wled00/html_*.h` files with embedded web content
-   - **CRITICAL**: Must be done before any hardware build
+**Always run `npm run build` before `pio run`.** The web UI build generates `wled00/html_*.h` header files required by firmware compilation. Never cancel long-running builds.
 
-2. **Hardware Compilation** (`pio run`):
-   - Compiles C++ firmware for various ESP32/ESP8266 targets
-   - Common environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S3_8MB_PSRAM_M_qspi`, `esp32_16MB_V4_M_eth`, `esp8266_4MB_S`, `esp32dev_compat`
-   - List all targets: `pio run --list-targets`
+Common firmware environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S3_8MB_PSRAM_M_qspi`, `esp32_16MB_V4_M_eth`, `esp8266_4MB_S`
 
 ## Before Finishing Work
 
-**CRITICAL: You MUST complete ALL of these steps before marking your work as complete:**
+Complete **all** of these before marking work done:
 
-1. **Build at least one hardware environment**: `pio run -e esp32_4MB_V4_M` -- Set timeout to 30+ minutes. NEVER CANCEL.
-   - Choose `esp32_4MB_V4_M` as it's a common, representative environment
-   - See "Hardware Compilation" section above for the full list of common environments
-   - The build MUST complete successfully without errors
-   - If the build fails, fix the issue before proceeding
-   - **DO NOT skip this step** - it validates that firmware compiles with your changes
+1. `npm test` — must pass
+2. `pio run -e esp32_4MB_V4_M` — must succeed (set timeout ≥ 30 min, never cancel)
+3. For web UI changes: manually test the interface
 
-2. **For web UI changes only**: Manually test the interface
-   - See "Manual Testing Scenarios" section below
-   - Verify the UI loads and functions correctly
+If any step fails, fix the issue before proceeding.
 
-**If any of these validation steps fail, you MUST fix the issues before finishing. Do NOT mark work as complete with failing builds or tests.**
+### Manual Web UI Testing
 
-## Validation and Testing
-
-### Web UI Testing
-- **ALWAYS validate web UI changes manually**:
-  - Start local server: `cd wled00/data && python3 -m http.server 8080`
-  - Open `http://localhost:8080/index.htm` in browser
-  - Test basic functionality: color picker, effects, settings pages
-- **Check for JavaScript errors** in browser console
-
-### Code Validation
-- **No automated linting configured** - follow existing code style in files you edit
-- **Code style**: Use tabs for web files (.html/.css/.js), spaces (2 per level) for C++ files
-- **Language**: The repository language is English (british, american, canadian, or australian). If you find other languages, suggest a translation into English.
-- **C++ formatting available**: `clang-format` is installed but not in CI
-- **Always run tests before finishing**: `npm test`
-- **MANDATORY: Always run a hardware build before finishing** (see "Before Finishing Work" section below)
-
-### Manual Testing Scenarios
-After making changes to web UI, always test:
-- **Load main interface**: Verify index.htm loads without errors
-- **Navigation**: Test switching between main page and settings pages
-- **Color controls**: Verify color picker and brightness controls work
-- **Effects**: Test effect selection and parameter changes
-- **Settings**: Test form submission and validation
-
-## Common Tasks
-
-### Project Branch / Release Structure
-```
-mdev                # Main development trunk (daily/nightly) 17.7.2-mdev
+```sh
+cd wled00/data && python3 -m http.server 8080
+# Open http://localhost:8080/index.htm
 ```
 
-### Repository Structure
-```
-wled00/                 # Main firmware source (C++) "WLED core"
-  ├── data/             # Web interface files 
-  │   ├── index.htm     # Main UI
-  │   ├── settings*.htm # Settings pages
-  │   └── *.js/*.css    # Frontend resources
-  ├── *.cpp/*.h         # Firmware source files
-  ├── html_*.h          # Auto-generated embedded web files (DO NOT EDIT, DO NOT COMMIT)
-  ├── src/              # Modules used by the WLED core (C++)
-  │   ├── fonts/        # Font libraries for scrolling text effect
-  └   └── dependencies/ # Utility functions - some of them have their own licensing terms
-lib/                    # Project specific custom libraries. PlatformIO will compile them to separate static libraries and link them
-platformio.ini          # Hardware build configuration
+Verify: page loads without JS errors, navigation works, color picker and brightness controls function, effects and settings forms submit correctly.
 
-platformio_override.sample.ini # examples for custom build configurations - entries must be copied into platformio_override.ini to use them.
-                               # platformio_override.ini is _not_ stored in the WLED repository!
-usermods/              # User-contributed addons to the WLED core, maintained by individual contributors  (C++, with individual library.json)
-package.json           # Node.js dependencies and scripts, release identification
-pio-scripts/           # Build tools (platformio)
-tools/                 # Build tools (Node.js), partition files, and generic utilities
-  ├── cdata.js         # Web UI build script
-  └── cdata-test.js    # Test suite
-.github/workflows/     # CI/CD pipelines
+## Repository Structure
+
+```
+wled00/                 # Firmware source (C++)
+  ├── data/             # Web UI source (HTML, CSS, JS)
+  ├── src/              # Core modules, fonts, dependencies
+  ├── html_*.h          # Auto-generated (DO NOT EDIT OR COMMIT)
+  └── wled.h            # Main firmware configuration
+usermods/               # Community addons (C++, with library.json)
+tools/cdata.js          # Web UI → header build script
+tools/cdata-test.js     # Test suite
+platformio.ini          # Build targets and configuration
+package.json            # Node.js scripts and release ID
 ```
 
-### Key Files and Their Purpose
-- `wled00/data/index.htm` - Main web interface
-- `wled00/data/settings*.htm` - Configuration pages  
-- `tools/cdata.js` - Converts web files to C++ headers
-- `wled00/wled.h` - Main firmware configuration
-- `platformio.ini` - Hardware build targets and settings
+Main development branch: `mdev`
 
-### Development Workflow (applies to agent mode only)
-1. **For web UI changes**:
-   - Edit files in `wled00/data/`
-   - Run `npm run build` to regenerate headers
-   - Test with local HTTP server
-   - Run `npm test` to validate build system
+## CI/CD
 
-2. **For firmware changes**:
-   - Edit files in `wled00/` (but NOT `html_*.h` files)
-   - Ensure web UI is built first (`npm run build`)
-   - Build firmware: `pio run -e [target]`
-   - Flash to device: `pio run -e [target] --target upload`
+On every push and PR, CI will:
+1. Install dependencies (Node.js, Python)
+2. Run `npm test`
+3. Build web UI (automatic via PlatformIO)
+4. Compile firmware for **all** `default_envs` targets
 
-3. **For both web and firmware**:
-   - Always build web UI first
-   - Test web interface manually
-   - Build and test firmware if making firmware changes
-
-## Build Timing and Timeouts
-
-**IMPORTANT: Use these timeout values when running builds:**
-
-- **Web UI build** (`npm run build`): 3 seconds typical - Set timeout to 30 seconds minimum
-- **Test suite** (`npm test`): 40 seconds typical - Set timeout to 120 seconds (2 minutes) minimum  
-- **Hardware builds** (`pio run -e [target]`): 15-20 minutes typical for first build - Set timeout to 1800 seconds (30 minutes) minimum
-  - Subsequent builds are faster due to caching
-  - First builds download toolchains and dependencies which takes significant time
-- **NEVER CANCEL long-running builds** - PlatformIO downloads and compilation require patience
-
-**When validating your changes before finishing, you MUST wait for the hardware build to complete successfully. Set the timeout appropriately and be patient.**
+Ensure `npm test` and at least one `pio run -e <env>` succeed locally before pushing.
 
 ## Troubleshooting
 
-### Common Issues
-- **Build fails with missing html_*.h**: Run `npm run build` first
-- **Web UI looks broken**: Check browser console for JavaScript errors
-- **PlatformIO network errors**: Try again, downloads can be flaky
-- **Node.js version issues**: Ensure Node.js 20+ is installed (check `.nvmrc`)
+- **Missing `html_*.h`:** Run `npm run build`
+- **Broken web UI:** Check browser console for JS errors
+- **PlatformIO network errors:** Retry — downloads can be flaky
+- **Node.js version mismatch:** Ensure Node.js 20+ (check `.nvmrc`)
+- **Force web UI rebuild:** `npm run build -- -f`
+- **Clean PlatformIO cache:** `pio run --target clean`
+- **Reinstall Node deps:** `rm -rf node_modules && npm ci`
 
-### When Things Go Wrong
-- **Clear generated files**: `rm -f wled00/html_*.h` then rebuild
-- **Force web UI rebuild**: `npm run build -- --force` or `npm run build -- -f`
-- **Clean PlatformIO cache**: `pio run --target clean`
-- **Reinstall dependencies**: `rm -rf node_modules && npm install`
+## General Guidelines
 
-## Important Notes
-
-- **Always commit source files**
-- **Web UI re-built is part of the platformio firmware compilation**
-- **do not commit generated html_*.h files**
-- **DO NOT edit `wled00/html_*.h` files** - they are auto-generated. If needed, modify Web UI files in `wled00/data/`.
-- **Test web interface manually after any web UI changes**
-- When reviewing a PR: the PR author does not need to update/commit generated html_*.h files - these files will be auto-generated when building the firmware binary.
-- **If you are not sure about something, just answer that you are not sure.** Gather more information instead of continuing with a wild guess.
-- If asked for an analysis, assessment or web research, **provide relevant references** to justify your conclusions. Ensure your recommendations are based on the correct source code branch or PR.
-- **Use VS Code with PlatformIO extension for best development experience**
-- **Hardware builds require appropriate ESP32/ESP8266 development board**
-
-## CI/CD Pipeline
-
-**The GitHub Actions CI workflow will:**
-1. Installs Node.js and Python dependencies
-2. Runs `npm test` to validate build system
-3. Builds web UI with `npm run build` (automatically run by PlatformIO)
-4. Compiles firmware for ALL hardware targets listed in `default_envs` (MUST succeed for all)
-5. Uploads build artifacts
-
-**To ensure CI success, you MUST locally:**
-- Run `npm test` and ensure it passes
-- Run `pio run -e esp32_4MB_V4_M` (or another common environment from "Hardware Compilation" section) and ensure it completes successfully
-- If either fails locally, it WILL fail in CI
-
-**Match this workflow in your local development to ensure CI success. Do not mark work complete until you have validated builds locally.**
+- **Never edit or commit** `wled00/html_*.h` — auto-generated from `wled00/data/`.
+- **Repository language is English.** Suggest translations for non-English content.
+- **When unsure, say so.** Gather more information rather than guessing.
+- **PR reviews:** Authors do not need to commit `html_*.h` files; they are generated during firmware builds.
+- **Provide references** when making analyses or recommendations. Base them on the correct branch or PR.
+- No automated linting is configured — match existing code style in files you edit. See `cpp.instructions.md` and `web.instructions.md` for language-specific conventions.
