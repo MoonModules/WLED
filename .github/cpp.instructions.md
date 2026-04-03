@@ -464,7 +464,7 @@ On ESP32, `delay(ms)` calls `vTaskDelay(ms / portTICK_PERIOD_MS)`, which **suspe
 Even in stock arduino-esp32, `yield()` calls `vTaskDelay(0)`, which only switches to tasks at equal or higher priority — the IDLE task (priority 0) is never reached. 
 **Do not use `yield()` to pace ESP32 tasks or assume it feeds any watchdog**.
 
-**Custom `xTaskCreate()` tasks must call `delay(1)` in their loop, not `yield()`.** Without a real blocking call, the IDLE task is starved. The IDLE watchdog panic is the first visible symptom — but the damage starts earlier: deleted task memory leaks, software timers stop firing, light sleep is disabled, and Wi-Fi/BT idle hooks don't run. See `esp-idf.instructions.md` for a full explanation of what IDLE does.
+**Custom `xTaskCreate()` tasks must call `delay(1)` in their loop, not `yield()`.** Without a real blocking call, the IDLE task is starved. The IDLE watchdog panic is the first visible symptom — but the damage starts earlier: deleted task memory leaks, software timers stop firing, light sleep is disabled, and Wi-Fi/BT idle hooks don't run. See `esp-idf.instructions.md` for a full explanation of what IDLE does. Structure custom tasks like this:
 
 ```cpp
 // WRONG — IDLE task is never scheduled; yield() does not feed the idle task watchdog.

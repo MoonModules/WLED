@@ -712,7 +712,7 @@ FreeRTOS on ESP32 is **preemptive** — all tasks are scheduled by priority rega
 
 #### Why the IDLE task is not optional
 
-The FreeRTOS IDLE task (one per core on dual-core ESP32/S3) is not idle in the casual sense — it performs essential system housekeeping:
+The FreeRTOS IDLE task (one per core on dual-core ESP32 and ESP32-S3; single instance on single-core chips) is not idle in the casual sense — it performs essential system housekeeping:
 
 - **Frees deleted task memory**: when a task calls `vTaskDelete()`, the IDLE task reclaims its TCB and stack. Without IDLE running, deleted tasks leak memory permanently.
 - **Runs FreeRTOS software timers**: the timer daemon relies on IDLE-priority execution. Many ESP-IDF components (Wi-Fi, BLE, NVS) schedule work via software timers.
