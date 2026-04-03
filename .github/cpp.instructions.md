@@ -453,7 +453,7 @@ Always pair every `esp32SemTake` with a matching `esp32SemGive`. Choose a timeou
 
 On ESP32, `delay(ms)` calls `vTaskDelay(ms / portTICK_PERIOD_MS)`, which **suspends only the calling task**. The FreeRTOS scheduler immediately runs all other ready tasks. This differs from ESP8266, where `delay()` stalled the entire system unless `yield()` was called inside.
 
-**`delay()` in `loopTask` is acceptable.** The Arduino `loop()` function runs inside `loopTask`. Calling `delay()` there does not block the network stack, audio FFT, LED DMA, or any other FreeRTOS task.
+**`delay()` in `loopTask` is allowed.** The Arduino `loop()` function runs inside `loopTask`. Calling `delay()` there does not block the network stack, audio FFT, LED DMA, or any other FreeRTOS task.
 
 **`yield()` is a no-op in WLED-MM on ESP32.** `WLEDMM_FASTPATH` redefines `yield()` to an empty macro:
 
@@ -461,12 +461,13 @@ On ESP32, `delay(ms)` calls `vTaskDelay(ms / portTICK_PERIOD_MS)`, which **suspe
 #define yield() {}  // WLEDMM: yield() is completely unnecessary on ESP32
 ```
 
-Even in stock arduino-esp32, `yield()` calls `vTaskDelay(0)`, which only switches to tasks at equal or higher priority — the IDLE task (priority 0) is never reached. Do not use `yield()` to pace ESP32 tasks or assume it feeds any watchdog.
+Even in stock arduino-esp32, `yield()` calls `vTaskDelay(0)`, which only switches to tasks at equal or higher priority — the IDLE task (priority 0) is never reached. 
+**Do not use `yield()` to pace ESP32 tasks or assume it feeds any watchdog**.
 
 **Custom `xTaskCreate()` tasks must call `delay(1)` in their loop, not `yield()`.** Without a real blocking call, the IDLE task is starved and the IDLE watchdog may panic:
 
 ```cpp
-// WRONG — IDLE task is never scheduled; yield() is a no-op in WLEDMM_FASTPATH
+// WRONG — IDLE task is never scheduled; yield() does not feed the idle task watchdog.
 void myTask(void*) {
   for (;;) {
     doWork();
