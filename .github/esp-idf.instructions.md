@@ -152,15 +152,82 @@ The jump from IDF v4.4 (arduino-esp32 v2.x) to IDF v5.x (arduino-esp32 v3.x) is 
 
 ### Compiler changes
 
-IDF v5 ships GCC 13+ (up from GCC 8/11 in v4.x). Notable differences:
+IDF v5.x ships a much newer GCC toolchain. Key versions:
+
+| ESP-IDF | GCC | C++ default | Notes |
+|---|---|---|---|
+| 4.4.x (current) | **8.4.0** | C++17 (gnu++17) | Xtensa + RISC-V |
+| 5.1–5.3 | **13.2** | C++20 (gnu++2b) | Significant warning changes |
+| 5.4–5.5 | **14.2** | C++23 (gnu++2b) | Latest; stricter diagnostics |
+
+Notable behavioral differences:
 
 | Change | Impact | Action |
 |---|---|---|
 | Stricter `-Werror=enum-conversion` | Implicit int-to-enum casts now error | Use explicit `static_cast<>` or typed enums |
-| C++20 features available | `consteval`, `concepts`, `std::span` | Use judiciously — keep ESP8266 build compatibility |
+| C++20/23 features available | `consteval`, `concepts`, `std::span`, `std::expected` | Use judiciously — ESP8266 builds still require GCC 10.x with C++17 |
 | `-Wdeprecated-declarations` enforced | Deprecated API calls become warnings/errors | Migrate to new APIs (see below) |
-| LTO more aggressive | Unreferenced symbols may be stripped | Mark ISR handlers and callbacks with `IRAM_ATTR` or `__attribute__((used))` |
+| `-Wdangling-reference` (GCC 13+) | Warns when a reference binds to a temporary that will be destroyed | Fix the lifetime issue; do not suppress the warning |
+| `-fno-common` default (GCC 12+) | Duplicate tentative definitions across translation units cause linker errors | Use `extern` declarations in headers, define in exactly one `.cpp` |
 | RISC-V codegen improvements | C3/C6/P4 benefit from better register allocation | No action needed — automatic |
+
+### C++ language features: GCC 8 → GCC 14
+
+The jump from GCC 8.4 to GCC 14.2 spans six major compiler releases. This section lists features that become available and patterns that need updating.
+
+#### Features safe to use after migration
+
+These work in GCC 13+/14+ but **not** in GCC 8.4. Guard with `#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)` if the code must compile on both IDF v4 and v5.
+
+| Feature | Standard | Example | Benefit |
+|---|---|---|---|
+| Designated initializers (C++20) | C++20 | `gpio_config_t cfg = { .mode = GPIO_MODE_OUTPUT };` | Already used as a GNU extension in GCC 8; becomes standard and portable in C++20 |
+| `[[likely]]` / `[[unlikely]]` | C++20 | `if (err != ESP_OK) [[unlikely]] { ... }` | Hints for branch prediction; useful in hot paths |
+| `[[nodiscard("reason")]]` | C++20 | `[[nodiscard("leak if ignored")]] void* allocBuffer();` | Enforces checking return values — helpful for `esp_err_t` wrappers |
+| `std::span<T>` | C++20 | `void process(std::span<uint8_t> buf)` | Safe, non-owning view of contiguous memory — replaces raw pointer + length pairs |
+| `consteval` | C++20 | `consteval uint32_t packColor(...)` | Guarantees compile-time evaluation; useful for color constants |
+| `constinit` | C++20 | `constinit static int counter = 0;` | Prevents static initialization order fiasco |
+| Concepts / `requires` | C++20 | `template<typename T> requires std::integral<T>` | Clearer constraints than SFINAE; improves error messages |
+| Three-way comparison (`<=>`) | C++20 | `auto operator<=>(const Version&) const = default;` | Less boilerplate for comparable types |
+| `std::bit_cast` | C++20 | `float f = std::bit_cast<float>(uint32_val);` | Type-safe reinterpretation — replaces `memcpy` or `union` tricks |
+| `if consteval` | C++23 | `if consteval { /* compile-time */ } else { /* runtime */ }` | Cleaner than `std::is_constant_evaluated()` |
+| `std::expected<T, E>` | C++23 | `std::expected<int, esp_err_t> readSensor()` | Monadic error handling — cleaner than returning error codes |
+| `std::to_underlying` | C++23 | `auto val = std::to_underlying(myEnum);` | Replaces `static_cast<int>(myEnum)` |
+
+#### Features already available in GCC 8 (C++17)
+
+These work on both IDF v4.4 and v5.x — prefer them now:
+
+| Feature | Example | Notes |
+|---|---|---|
+| `if constexpr` | `if constexpr (sizeof(T) == 4) { ... }` | Compile-time branching; already used in WLED-MM (see `cpp.instructions.md`) |
+| `std::optional<T>` | `std::optional<uint8_t> pin;` | Nullable value without sentinel values like `-1` |
+| `std::string_view` | `void log(std::string_view msg)` | Non-owning, non-allocating string reference |
+| Structured bindings | `auto [err, value] = readSensor();` | Useful with `std::pair` / `std::tuple` returns |
+| Fold expressions | `(addSegment(args), ...);` | Variadic template expansion |
+| Inline variables | `inline constexpr int MAX_PINS = 50;` | Avoids ODR issues with header-defined constants |
+| `[[maybe_unused]]` | `[[maybe_unused]] int debug_only = 0;` | Suppresses unused-variable warnings cleanly |
+| `[[fallthrough]]` | `case 1: doA(); [[fallthrough]]; case 2:` | Documents intentional switch fallthrough |
+| Nested namespaces | `namespace wled::audio { }` | Shorter than nested `namespace` blocks |
+
+#### Patterns that break or change behavior
+
+| Pattern | GCC 8 behavior | GCC 14 behavior | Fix |
+|---|---|---|---|
+| `int x; enum E e = x;` | Warning (often ignored) | Error with `-Werror=enum-conversion` | `E e = static_cast<E>(x);` |
+| `int g;` in two `.cpp` files | Both compile, linker merges (tentative definition) | Error: multiple definitions (`-fno-common`) | `extern int g;` in header, `int g;` in one `.cpp` |
+| `const char* ref = std::string(...).c_str();` | Silent dangling pointer | Warning (`-Wdangling-reference`) | Extend lifetime: store the `std::string` in a local variable |
+| `register int x;` | Accepted (ignored) | Warning or error (`register` removed in C++17) | Remove `register` keyword |
+| Narrowing in aggregate init | Warning | Error | Use explicit cast or wider type |
+| Implicit `this` capture in lambdas | Accepted in `[=]` | Deprecated warning; error in C++20 mode | Use `[=, this]` or `[&]` |
+
+#### Recommendations
+
+- **Do not raise the minimum C++ standard yet.** WLED-MM must still build on IDF v4.4 (GCC 8.4, C++17). Use `#if __cplusplus > 201703L` to gate C++20 features.
+- **Prefer `std::optional` over sentinel values** (e.g., `-1` for "no pin") in new code — it works on both compilers.
+- **Use `std::string_view`** for read-only string parameters instead of `const char*` or `const String&` — zero-copy and works on GCC 8+.
+- **Avoid raw `union` type punning** — prefer `memcpy` (GCC 8) or `std::bit_cast` (GCC 13+) for strict-aliasing safety.
+- **Mark intentional fallthrough** with `[[fallthrough]]` — GCC 14 warns on unmarked fallthrough by default.
 
 ### Deprecated and removed APIs
 
@@ -340,9 +407,9 @@ Choose interrupt priority based on coexistence with other drivers:
 
 ```cpp
 #ifdef WLED_ENABLE_HUB75MATRIX
-  .intr_alloc_flags = ESP_INTR_FLAG_IRAM | ESP_INTR_FLAG_LEVEL1,  // lower priority to avoid starving HUB75
+  .intr_alloc_flags = ESP_INTR_FLAG_IRAM | ESP_INTR_FLAG_LEVEL1,  // level 1 (lowest) to avoid starving HUB75
 #else
-  .intr_alloc_flags = ESP_INTR_FLAG_LEVEL2 | ESP_INTR_FLAG_LEVEL3,  // higher priority for audio quality
+  .intr_alloc_flags = ESP_INTR_FLAG_LEVEL2 | ESP_INTR_FLAG_LEVEL3,  // accept level 2 or 3 (allocator picks available)
 #endif
 ```
 
@@ -573,8 +640,15 @@ xTaskCreatePinnedToCore(
 Guidelines:
 - Pin network/protocol tasks to core 0 (where Wi-Fi runs).
 - Pin real-time tasks (audio, LED output) to core 1.
-- On single-core chips (S2, C3, C6), task pinning is ignored — ensure your code works without it.
-- Use `SOC_CPU_CORES_NUM` to conditionally pin tasks.
+- On single-core chips (S2, C3, C6), only core 0 exists — pinning to core 1 will fail. Use `SOC_CPU_CORES_NUM > 1` guards or `tskNO_AFFINITY`.
+- Use `SOC_CPU_CORES_NUM` to conditionally pin tasks:
+  ```cpp
+  #if SOC_CPU_CORES_NUM > 1
+    xTaskCreatePinnedToCore(audioTask, "audio", 4096, nullptr, 5, &handle, 1);
+  #else
+    xTaskCreate(audioTask, "audio", 4096, nullptr, 5, &handle);
+  #endif
+  ```
 
 ### Watchdog management
 
@@ -588,10 +662,12 @@ esp_task_wdt_reset();  // feed the watchdog in long loops
 For tasks that intentionally block for extended periods, consider subscribing/unsubscribing from the TWDT:
 
 ```cpp
-esp_task_wdt_delete(nullptr);  // remove current task from TWDT
+esp_task_wdt_delete(NULL);  // remove current task from TWDT (IDF v4.4)
 // ... long blocking operation ...
-esp_task_wdt_add(nullptr);     // re-register
+esp_task_wdt_add(NULL);     // re-register
 ```
+
+> **IDF v5 note**: In IDF v5, `esp_task_wdt_add()` and `esp_task_wdt_delete()` require an explicit `TaskHandle_t`. Use `xTaskGetCurrentTaskHandle()` instead of `NULL`.
 
 ---
 
