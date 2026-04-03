@@ -60,7 +60,7 @@ WLED validates at compile time that exactly one target is defined and that it is
 | `SOC_I2S_SUPPORTS_ADC` | `bool` | `usermods/audioreactive/audio_source.h` | I2S ADC sampling mode (ESP32 only) |
 | `SOC_I2S_SUPPORTS_APLL` | `bool` | `usermods/audioreactive/audio_source.h` | Audio PLL for precise sample rates |
 | `SOC_I2S_SUPPORTS_PDM_RX` | `bool` | `usermods/audioreactive/audio_source.h` | PDM microphone input |
-| `SOC_ADC_MAX_BITWIDTH` | `int` | `util.cpp` | ADC resolution (12 or 13 bits) |
+| `SOC_ADC_MAX_BITWIDTH` | `int` | `util.cpp` | ADC resolution (12 or 13 bits). Renamed to `CONFIG_SOC_ADC_RTC_MAX_BITWIDTH` in IDF v5 |
 | `SOC_ADC_CHANNEL_NUM(unit)` | `int` | `pin_manager.cpp` | ADC channels per unit |
 | `SOC_UART_NUM` | `int` | `dmx_input.cpp` | Number of UART peripherals |
 | `SOC_DRAM_LOW` / `SOC_DRAM_HIGH` | `addr` | `util.cpp` | DRAM address boundaries for validation |
@@ -588,15 +588,26 @@ ADC is one of the most fragmented APIs across IDF versions:
 
 ### Bit width portability
 
-Not all chips have 12-bit ADC. Use `SOC_ADC_MAX_BITWIDTH` to adapt:
+Not all chips have 12-bit ADC. `SOC_ADC_MAX_BITWIDTH` reports the maximum resolution (12 or 13 bits). Note that in IDF v5, this macro was renamed to `CONFIG_SOC_ADC_RTC_MAX_BITWIDTH`. Write version-aware guards:
 
 ```cpp
-#if SOC_ADC_MAX_BITWIDTH == 13
+// IDF v4: SOC_ADC_MAX_BITWIDTH   IDF v5: CONFIG_SOC_ADC_RTC_MAX_BITWIDTH
+#if defined(CONFIG_SOC_ADC_RTC_MAX_BITWIDTH)   // IDF v5+
+  #define MY_ADC_MAX_BITWIDTH CONFIG_SOC_ADC_RTC_MAX_BITWIDTH
+#elif defined(SOC_ADC_MAX_BITWIDTH)             // IDF v4
+  #define MY_ADC_MAX_BITWIDTH SOC_ADC_MAX_BITWIDTH
+#else
+  #define MY_ADC_MAX_BITWIDTH 12                // safe fallback
+#endif
+
+#if MY_ADC_MAX_BITWIDTH == 13
   adc1_config_width(ADC_WIDTH_BIT_13);  // ESP32-S2
 #else
   adc1_config_width(ADC_WIDTH_BIT_12);  // ESP32, S3, C3, etc.
 #endif
 ```
+
+WLED-MM's `util.cpp` uses the IDF v4 form (`SOC_ADC_MAX_BITWIDTH`) — this will need updating when the codebase migrates to IDF v5.
 
 ---
 
@@ -698,6 +709,17 @@ FreeRTOS on ESP32 is **preemptive** — all tasks are scheduled by priority rega
 **`delay()` in `loopTask` is safe.** Arduino's `loop()` runs inside `loopTask`. Calling `delay()` suspends only `loopTask` — all other FreeRTOS tasks (Wi-Fi stack, audio FFT, LED DMA) continue uninterrupted on either core.
 
 **`yield()` does not yield to IDLE.** Any task that loops with only `yield()` calls will starve the IDLE task, causing the IDLE watchdog to fire. Always use `delay(1)` (or a blocking FreeRTOS call) in tight task loops. Note: WLED-MM redefines `yield()` as an empty macro on ESP32 WLEDMM_FASTPATH builds — see `cpp.instructions.md`.
+
+#### Why the IDLE task is not optional
+
+The FreeRTOS IDLE task (one per core on dual-core ESP32/S3) is not idle in the casual sense — it performs essential system housekeeping:
+
+- **Frees deleted task memory**: when a task calls `vTaskDelete()`, the IDLE task reclaims its TCB and stack. Without IDLE running, deleted tasks leak memory permanently.
+- **Runs FreeRTOS software timers**: the timer daemon relies on IDLE-priority execution. Many ESP-IDF components (Wi-Fi, BLE, NVS) schedule work via software timers.
+- **Implements tickless idle / light sleep**: on battery-powered devices, IDLE is the entry point for low-power sleep. A permanently starved IDLE task disables light sleep entirely.
+- **Runs registered idle hooks**: ESP-IDF components register callbacks via `esp_register_freertos_idle_hook()` (e.g., Wi-Fi background maintenance, Bluetooth housekeeping). These only fire when IDLE runs.
+
+In short: **starving IDLE corrupts memory cleanup, breaks software timers, disables low-power sleep, and prevents Wi-Fi/BT maintenance.** The IDLE watchdog panic is a symptom — the real damage happens before the watchdog fires.
 
 ### Watchdog management
 
