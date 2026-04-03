@@ -385,7 +385,7 @@ WLED-MM provides convenience wrappers with automatic fallback. **Always prefer t
   ```
 - **Fragmentation**: PSRAM allocations fragment less than DRAM because the region is larger. But avoid mixing small and large allocations in PSRAM — small allocations waste the MMU page granularity.
 - **Heap validation**: use `d_measureHeap()` and `d_measureContiguousFreeHeap()` to monitor remaining DRAM. Allocations that would drop free DRAM below `MIN_HEAP_SIZE` should go to PSRAM instead.
-- **Performance**: PSRAM access is 3–10× slower than DRAM on ESP32/S2 (quad-SPI bus). On ESP32-S3 with octal PSRAM (`CONFIG_SPIRAM_MODE_OCT`), the penalty is smaller (~2×) because the 8-line DTR bus runs at up to 120 MHz. On ESP32-P4 with hex PSRAM (`CONFIG_SPIRAM_MODE_HEX`), the 16-line bus runs at 200 MHz, further reducing the gap. Keep hot-path data in DRAM regardless.
+- **Performance**: PSRAM access is 3–10× slower than DRAM on ESP32/S2 (quad-SPI bus). On ESP32-S3 with octal PSRAM (`CONFIG_SPIRAM_MODE_OCT`), the penalty is smaller (~2×) because the 8-line DTR bus runs at up to 80 MHz (120 MHz is possible with CONFIG_SPIRAM_SPEED_120M, which requires enabling experimental ESP-IDF features). On ESP32-P4 with hex PSRAM (`CONFIG_SPIRAM_MODE_HEX`), the 16-line bus runs at 200 MHz, further reducing the gap. Keep hot-path data in DRAM regardless.
 
 ### Pattern: preference-based allocation
 
