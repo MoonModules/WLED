@@ -94,13 +94,36 @@ WLED validates at compile time that exactly one target is defined and that it is
 
 ### PSRAM capability macros
 
-For PSRAM DMA and access patterns:
+For PSRAM presence, mode, and DMA access patterns:
 
 | Macro | Meaning |
 |---|---|
 | `CONFIG_SPIRAM` / `BOARD_HAS_PSRAM` | PSRAM is present in the build configuration |
-| `CONFIG_SOC_PSRAM_DMA_CAPABLE` | PSRAM buffers can be used with DMA (ESP32-S3) |
-| `CONFIG_SOC_MEMSPI_FLASH_PSRAM_INDEPENDENT` | SPI flash and PSRAM on separate buses (no contention) |
+| `CONFIG_SPIRAM_MODE_QUAD` | Quad-SPI PSRAM (standard, used on ESP32 classic and some S2/S3 boards) |
+| `CONFIG_SPIRAM_MODE_OCT` | Octal-SPI PSRAM — 8 data lines, DTR mode. Used on ESP32-S3 with octal PSRAM (e.g. N8R8 / N16R8 modules). Reserves GPIO 33–37 for the PSRAM bus — **do not allocate these pins** when this macro is defined. `wled.cpp` uses this to gate GPIO reservation. |
+| `CONFIG_SPIRAM_MODE_HEX` | Hex-SPI (16-line) PSRAM — future interface on ESP32-P4 running at up to 200 MHz. Used in `json.cpp` to report the PSRAM mode. |
+| `CONFIG_SOC_PSRAM_DMA_CAPABLE` | PSRAM buffers can be used with DMA (ESP32-S3 with octal PSRAM) |
+| `CONFIG_SOC_MEMSPI_FLASH_PSRAM_INDEPENDENT` | SPI flash and PSRAM on separate buses (no speed contention) |
+
+#### Detecting octal/hex flash
+
+On ESP32-S3 modules with OPI flash (e.g. N8R8 modules where the SPI flash itself runs in Octal-PI mode), the build system sets:
+
+| Macro | Meaning |
+|---|---|
+| `CONFIG_ESPTOOLPY_FLASHMODE_OPI` | Octal-PI flash mode. On S3, implies GPIO 33–37 are used by the flash/PSRAM interface — the same GPIO block as octal PSRAM. `wled.cpp` uses `CONFIG_ESPTOOLPY_FLASHMODE_OPI \|\| (CONFIG_SPIRAM_MODE_OCT && BOARD_HAS_PSRAM)` to decide whether to reserve these GPIOs. `json.cpp` uses this to report the flash mode string as `"🚀OPI"`. |
+| `CONFIG_ESPTOOLPY_FLASHMODE_HEX` | Hex flash mode (ESP32-P4). Reported as `"🚀🚀HEX"` in `json.cpp`. |
+
+**Pattern used in WLED-MM** (from `wled.cpp`) to reserve the octal-bus GPIOs on S3:
+```cpp
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+  #if CONFIG_ESPTOOLPY_FLASHMODE_OPI || (CONFIG_SPIRAM_MODE_OCT && defined(BOARD_HAS_PSRAM))
+    // S3: GPIO 33-37 are used by the octal PSRAM/flash bus
+    managed_pin_type pins[] = { {33, true}, {34, true}, {35, true}, {36, true}, {37, true} };
+    pinManager.allocateMultiplePins(pins, sizeof(pins)/sizeof(managed_pin_type), PinOwner::SPI_RAM);
+  #endif
+#endif
+```
 
 ---
 
@@ -355,14 +378,14 @@ WLED-MM provides convenience wrappers with automatic fallback. **Always prefer t
 ### PSRAM guidelines
 
 - **Check availability**: always test `psramFound()` before assuming PSRAM is present.
-- **DMA compatibility**: on ESP32 (classic), PSRAM buffers are **not DMA-capable** — use `d_malloc_only()` to allocate DMA buffers in DRAM only. On ESP32-S3 with octal PSRAM, PSRAM buffers *can* be used with DMA when `CONFIG_SOC_PSRAM_DMA_CAPABLE` is defined.
+- **DMA compatibility**: on ESP32 (classic), PSRAM buffers are **not DMA-capable** — use `d_malloc_only()` to allocate DMA buffers in DRAM only. On ESP32-S3 with octal PSRAM (`CONFIG_SPIRAM_MODE_OCT`), PSRAM buffers *can* be used with DMA when `CONFIG_SOC_PSRAM_DMA_CAPABLE` is defined.
 - **JSON documents**: use the `PSRAMDynamicJsonDocument` allocator (defined in `wled.h`) to put large JSON documents in PSRAM:
   ```cpp
   PSRAMDynamicJsonDocument doc(16384);  // allocated in PSRAM if available
   ```
 - **Fragmentation**: PSRAM allocations fragment less than DRAM because the region is larger. But avoid mixing small and large allocations in PSRAM — small allocations waste the MMU page granularity.
 - **Heap validation**: use `d_measureHeap()` and `d_measureContiguousFreeHeap()` to monitor remaining DRAM. Allocations that would drop free DRAM below `MIN_HEAP_SIZE` should go to PSRAM instead.
-- **Performance**: PSRAM access is 3–10× slower than DRAM on ESP32/S2 (SPI bus). On ESP32-S3 with octal PSRAM, the penalty is smaller (~2×). Keep hot-path data in DRAM.
+- **Performance**: PSRAM access is 3–10× slower than DRAM on ESP32/S2 (quad-SPI bus). On ESP32-S3 with octal PSRAM (`CONFIG_SPIRAM_MODE_OCT`), the penalty is smaller (~2×) because the 8-line DTR bus runs at up to 120 MHz. On ESP32-P4 with hex PSRAM (`CONFIG_SPIRAM_MODE_HEX`), the 16-line bus runs at 200 MHz, further reducing the gap. Keep hot-path data in DRAM regardless.
 
 ### Pattern: preference-based allocation
 
