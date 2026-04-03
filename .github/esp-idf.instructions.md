@@ -682,7 +682,7 @@ Guidelines:
   #endif
   ```
 
-Tip: xTaskCreateUniversal() - from arduino-esp32 - can be used to avoid the conditionsal on `SOC_CPU_CORES_NUM`. It has the same signature as ``xTaskCreatePinnedToCore()`` , but automaticially falls back to xTaskCreate() on sigle-core MCU's.
+**Tip: use xTaskCreateUniversal()** - from arduino-esp32 - to avoid the conditional on `SOC_CPU_CORES_NUM`. This fuction has the same signature as ``xTaskCreatePinnedToCore()`` , but automaticially falls back to ``xTaskCreate()`` on sigle-core MCU's.
 
 ### `delay()`, `yield()`, and the IDLE task
 
