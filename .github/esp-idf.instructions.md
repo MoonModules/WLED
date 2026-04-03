@@ -484,6 +484,7 @@ The driver dynamically reduces color depth for larger displays to stay within DM
 
 | Pixel count | Color depth | Bits per pixel |
 |---|---|---|
+| ≤ `MAX_PIXELS_10BIT` | 10-bit (30-bit color) | High quality (experimental) |
 | ≤ `MAX_PIXELS_8BIT` | 8-bit (24-bit color) | Full quality |
 | ≤ `MAX_PIXELS_6BIT` | 6-bit (18-bit color) | Slight banding |
 | ≤ `MAX_PIXELS_4BIT` | 4-bit (12-bit color) | Visible banding |
@@ -681,6 +682,8 @@ Guidelines:
     xTaskCreate(audioTask, "audio", 4096, nullptr, 5, &handle);
   #endif
   ```
+
+Tip: xTaskCreateUniversal() - from arduino-esp32 - can be used to avoid the conditionsal on `SOC_CPU_CORES_NUM`. It has the same signature as ``xTaskCreatePinnedToCore()`` , but automaticially falls back to xTaskCreate() on sigle-core MCU's.
 
 ### `delay()`, `yield()`, and the IDLE task
 
