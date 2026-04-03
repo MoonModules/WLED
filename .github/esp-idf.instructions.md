@@ -610,7 +610,17 @@ if (err != ESP_OK) {
 
 ### Logging
 
-Use `ESP_LOGx()` macros instead of `Serial.printf()` for ESP-IDF level code. They support log levels and can be filtered at compile time:
+WLED-MM uses its own logging macros — **not** `ESP_LOGx()`. For application-level code, always use the WLED-MM macros defined in `wled.h`:
+
+| Macro family | Defined in | Controlled by | Use for |
+|---|---|---|---|
+| `USER_PRINT` / `USER_PRINTLN` / `USER_PRINTF` | `wled.h` | Always active | Important messages the user should see (startup, errors, status) |
+| `DEBUG_PRINT` / `DEBUG_PRINTLN` / `DEBUG_PRINTF` | `wled.h` | `WLED_DEBUG` build flag | Development/diagnostic output; compiled out in release builds |
+| `DEBUGSR_PRINT` / `DEBUGSR_PRINTLN` / `DEBUGSR_PRINTF` | `audio_reactive.h` | `SR_DEBUG` build flag | Audio-reactive usermod diagnostics |
+
+All of these wrap `Serial` output through the `DEBUGOUT` / `DEBUGOUTLN` / `DEBUGOUTF` macros.
+
+**Exception — low-level driver code**: When writing code that interacts directly with ESP-IDF APIs (e.g., I2S initialization, RMT setup), use `ESP_LOGx()` macros instead. They support tag-based filtering and compile-time log level control:
 
 ```cpp
 static const char* TAG = "my_module";
@@ -618,16 +628,6 @@ ESP_LOGI(TAG, "Initialized with %d buffers", count);
 ESP_LOGW(TAG, "PSRAM not available, falling back to DRAM");
 ESP_LOGE(TAG, "Failed to allocate %u bytes", size);
 ```
-
-> **WLED-MM uses its own logging macros — not `ESP_LOGx()`.** For application-level code, always use the WLED-MM macros defined in `wled.h`:
->
-> | Macro family | Defined in | Controlled by | Use for |
-> |---|---|---|---|
-> | `USER_PRINT` / `USER_PRINTLN` / `USER_PRINTF` | `wled.h` | Always active | Important messages the user should see (startup, errors, status) |
-> | `DEBUG_PRINT` / `DEBUG_PRINTLN` / `DEBUG_PRINTF` | `wled.h` | `WLED_DEBUG` build flag | Development/diagnostic output; compiled out in release builds |
-> | `DEBUGSR_PRINT` / `DEBUGSR_PRINTLN` / `DEBUGSR_PRINTF` | `audio_reactive.h` | `SR_DEBUG` build flag | Audio-reactive usermod diagnostics |
->
-> All of these wrap `Serial` output through the `DEBUGOUT` / `DEBUGOUTLN` / `DEBUGOUTF` macros. Reserve `ESP_LOGx()` for low-level driver code that interacts directly with ESP-IDF APIs (e.g., I2S initialization, RMT setup) where the ESP-IDF tag-based filtering is needed.
 
 ### Task creation and pinning
 
