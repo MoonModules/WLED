@@ -179,7 +179,7 @@ Declare every getter, query, or inspection method `const`. If you need to mark a
 A `static` member function has no implicit `this` pointer. This has two distinct advantages:
 
 1. **Smaller code, faster calls**: no `this` is passed in a register. On Xtensa and RISC-V, this removes one register argument from every call site and prevents the compiler from emitting `this`-preservation code around inlined blocks.
-2. **Better inlining**: GCC can inline a `static` method across translation units more aggressively because it cannot be overridden by a derived class and has no aliasing concern through `this`.
+2. **Better inlining**: GCC can inline a `static` method with more certainty because it cannot be overridden by a derived class (no virtual dispatch ambiguity) and has no aliasing concern through `this`.
 
 Use `static` for any method that does not need access to instance members:
 
