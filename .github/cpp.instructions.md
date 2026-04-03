@@ -74,7 +74,7 @@ uint8_t gammaCorrect(uint8_t value, float gamma);
 - Platform differentiation: `ARDUINO_ARCH_ESP32` vs `ESP8266`
 - WLED-MM fork detection: `_MoonModules_WLED_` (defined in `wled.h`)
 - PSRAM availability: `BOARD_HAS_PSRAM`
-- WLEDMM_FASTPATH is the default path; code under `#ifndef WLEDMM_FASTPATH` is deprecated, and will be phased out in the next release.
+- WLEDMM_FASTPATH is the default path; code under `#ifndef WLEDMM_FASTPATH` is deprecated and will be phased out.
 - Flash-saving mode: `WLEDMM_SAVE_FLASH` (disables aggressive inlining)
 
 ## Error Handling
