@@ -1,0 +1,609 @@
+---
+applyTo: "**/*.cpp,**/*.h,**/*.hpp,**/*.ino"
+---
+# ESP-IDF Coding Guide (within arduino-esp32)
+
+WLED-MM runs on the Arduino-ESP32 framework, which wraps ESP-IDF. Understanding the ESP-IDF layer is essential when writing chip-specific code, managing peripherals, or preparing for the IDF v5.x migration. This guide documents patterns already used in the codebase and best practices derived from Espressif's official examples.
+
+> **Scope**: This file is an optional review guideline. It applies when touching chip-specific code, peripheral drivers, memory allocation, or platform conditionals.
+
+---
+
+## Identifying the Build Target: `CONFIG_IDF_TARGET_*`
+
+Use `CONFIG_IDF_TARGET_*` macros to gate chip-specific code at compile time. These are set by the build system and are mutually exclusive — exactly one is defined per build.
+
+| Macro | Chip | Architecture | Notes |
+|---|---|---|---|
+| `CONFIG_IDF_TARGET_ESP32` | ESP32 (classic) | Xtensa dual-core | Primary target. Has DAC, APLL, I2S ADC mode |
+| `CONFIG_IDF_TARGET_ESP32S2` | ESP32-S2 | Xtensa single-core | Limited peripherals. 13-bit ADC |
+| `CONFIG_IDF_TARGET_ESP32S3` | ESP32-S3 | Xtensa dual-core | Preferred for large installs. Octal PSRAM, USB-OTG |
+| `CONFIG_IDF_TARGET_ESP32C3` | ESP32-C3 | RISC-V single-core | Minimal peripherals. Float-to-uint UB differs |
+| `CONFIG_IDF_TARGET_ESP32C6` | ESP32-C6 | RISC-V single-core | Wi-Fi 6, Thread/Zigbee. Future target |
+| `CONFIG_IDF_TARGET_ESP32P4` | ESP32-P4 | RISC-V dual-core | High performance. Future target |
+
+### Build-time validation
+
+WLED validates at compile time that exactly one target is defined and that it is a supported chip (`wled.cpp` lines 39–61). Follow this pattern when adding new chip-specific branches:
+
+```cpp
+#if defined(CONFIG_IDF_TARGET_ESP32)
+  // classic ESP32 path
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+  // S3-specific path
+#elif defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6)
+  // RISC-V common path
+#else
+  #warning "Untested chip — review peripheral availability"
+#endif
+```
+
+### Guidelines
+
+- **Always test on the actual chip** before claiming support. Simulators and cross-compilation can hide peripheral differences.
+- **Prefer `#elif` chains** over nested `#ifdef` for readability.
+- **Do not use `CONFIG_IDF_TARGET_*` for feature detection.** Use `SOC_*` capability macros instead (see next section). For example, use `SOC_I2S_SUPPORTS_ADC` instead of `CONFIG_IDF_TARGET_ESP32` to check for I2S ADC support.
+- When a feature must be disabled on certain chips, use explicit `#error` or `#warning` directives so the build clearly reports what is missing.
+
+---
+
+## Hardware Capability Detection: `SOC_*` Macros
+
+`SOC_*` macros (from `soc/soc_caps.h`) describe what the current chip supports. They are the correct way to check for peripheral features — they stay accurate when new chips are added, unlike `CONFIG_IDF_TARGET_*` checks.
+
+### Important `SOC_*` macros used in WLED-MM
+
+| Macro | Type | Used in | Purpose |
+|---|---|---|---|
+| `SOC_I2S_NUM` | `int` | `audio_source.h` | Number of I2S peripherals (1 or 2) |
+| `SOC_I2S_SUPPORTS_ADC` | `bool` | `audio_source.h` | I2S ADC sampling mode (ESP32 only) |
+| `SOC_I2S_SUPPORTS_APLL` | `bool` | `audio_source.h` | Audio PLL for precise sample rates |
+| `SOC_I2S_SUPPORTS_PDM_RX` | `bool` | `audio_source.h` | PDM microphone input |
+| `SOC_ADC_MAX_BITWIDTH` | `int` | `util.cpp` | ADC resolution (12 or 13 bits) |
+| `SOC_ADC_CHANNEL_NUM(unit)` | `int` | `pin_manager.cpp` | ADC channels per unit |
+| `SOC_UART_NUM` | `int` | `dmx_input.cpp` | Number of UART peripherals |
+| `SOC_DRAM_LOW` / `SOC_DRAM_HIGH` | `addr` | `util.cpp` | DRAM address boundaries for validation |
+
+### Less commonly used but valuable
+
+| Macro | Purpose |
+|---|---|
+| `SOC_RMT_TX_CANDIDATES_PER_GROUP` | Number of RMT TX channels (varies 2–8 by chip) |
+| `SOC_LEDC_CHANNEL_NUM` | Number of LEDC (PWM) channels |
+| `SOC_GPIO_PIN_COUNT` | Total GPIO pin count |
+| `SOC_DAC_SUPPORTED` | Whether the chip has a DAC (ESP32/S2 only) |
+| `SOC_SPIRAM_SUPPORTED` | Whether PSRAM interface exists |
+| `SOC_CPU_CORES_NUM` | Core count (1 or 2) — useful for task pinning decisions |
+
+### Best practices
+
+```cpp
+// Good: feature-based detection
+#if SOC_I2S_SUPPORTS_PDM_RX
+  _config.mode = i2s_mode_t(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM);
+#else
+  #warning "PDM microphones not supported on this chip"
+#endif
+
+// Avoid: chip-name-based detection
+#if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3)
+  // happens to be correct today, but breaks when a new chip adds PDM support
+#endif
+```
+
+### PSRAM capability macros
+
+For PSRAM DMA and access patterns:
+
+| Macro | Meaning |
+|---|---|
+| `CONFIG_SPIRAM` / `BOARD_HAS_PSRAM` | PSRAM is present in the build configuration |
+| `CONFIG_SOC_PSRAM_DMA_CAPABLE` | PSRAM buffers can be used with DMA (ESP32-S3) |
+| `CONFIG_SOC_MEMSPI_FLASH_PSRAM_INDEPENDENT` | SPI flash and PSRAM on separate buses (no contention) |
+
+---
+
+## ESP-IDF Version Conditionals
+
+### Checking the IDF version
+
+```cpp
+#include <esp_idf_version.h>
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+  // IDF v5+ code path
+#elif ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
+  // IDF v4.4+ code path
+#else
+  // Legacy IDF v3/v4.x path
+#endif
+```
+
+### Key version thresholds in WLED-MM
+
+| Version | What changed |
+|---|---|
+| **4.0.0** | Filesystem API (`SPIFFS`/`LittleFS`), GPIO driver overhaul |
+| **4.2.0** | ADC/GPIO API updates; `esp_adc_cal` introduced |
+| **4.4.0** | I2S driver refactored (legacy API remains); `adc_deprecated.h` headers appear for newer targets |
+| **4.4.4–4.4.8** | Known I2S channel-swap regression on ESP32 (workaround in `audio_source.h`) |
+| **5.0.0** | **Major breaking changes** — RMT, I2S, ADC, SPI flash APIs replaced (see migration section) |
+| **5.1.0** | Matter protocol support; new `esp_flash` API stable |
+| **5.3+** | arduino-esp32 v3.x compatibility; C6/P4 support |
+
+### Guidelines
+
+- When adding a version guard, **always include a comment** explaining *what* changed and *why* the guard is needed.
+- Avoid version ranges that silently break — prefer `>=` over exact version matches.
+- Known regressions should use explicit range guards:
+  ```cpp
+  // IDF 4.4.4–4.4.8 swapped I2S left/right channels (fixed in 4.4.9)
+  #if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 4)) && \
+      (ESP_IDF_VERSION <= ESP_IDF_VERSION_VAL(4, 4, 8))
+    #define I2S_CHANNELS_SWAPPED
+  #endif
+  ```
+
+---
+
+## Migrating from ESP-IDF v4.4.x to v5.x
+
+The jump from IDF v4.4 (arduino-esp32 v2.x) to IDF v5.x (arduino-esp32 v3.x) is the largest API break in ESP-IDF history. This section documents the critical changes and recommended migration patterns based on the upstream WLED `V5-C6` branch.
+
+### Compiler changes
+
+IDF v5 ships GCC 13+ (up from GCC 8/11 in v4.x). Notable differences:
+
+| Change | Impact | Action |
+|---|---|---|
+| Stricter `-Werror=enum-conversion` | Implicit int-to-enum casts now error | Use explicit `static_cast<>` or typed enums |
+| C++20 features available | `consteval`, `concepts`, `std::span` | Use judiciously — keep ESP8266 build compatibility |
+| `-Wdeprecated-declarations` enforced | Deprecated API calls become warnings/errors | Migrate to new APIs (see below) |
+| LTO more aggressive | Unreferenced symbols may be stripped | Mark ISR handlers and callbacks with `IRAM_ATTR` or `__attribute__((used))` |
+| RISC-V codegen improvements | C3/C6/P4 benefit from better register allocation | No action needed — automatic |
+
+### Deprecated and removed APIs
+
+#### RMT (Remote Control Transceiver)
+
+The legacy `rmt_*` functions are removed in IDF v5. The new API is channel-based:
+
+| IDF v4 (legacy) | IDF v5 (new) | Notes |
+|---|---|---|
+| `rmt_config()` + `rmt_driver_install()` | `rmt_new_tx_channel()` / `rmt_new_rx_channel()` | Channels are now objects |
+| `rmt_write_items()` | `rmt_transmit()` with encoder | Requires `rmt_encoder_t` |
+| `rmt_set_idle_level()` | Configure in channel config | Set at creation time |
+| `rmt_item32_t` | `rmt_symbol_word_t` | Different struct layout |
+
+**WLED impact**: NeoPixelBus LED output and IR receiver both use legacy RMT. The upstream `V5-C6` branch adds `-D WLED_USE_SHARED_RMT` and disables IR until the library is ported.
+
+#### I2S (Inter-IC Sound)
+
+Legacy `i2s_driver_install()` + `i2s_read()` API is deprecated. The new API uses channel handles:
+
+| IDF v4 (legacy) | IDF v5 (new) | Notes |
+|---|---|---|
+| `i2s_driver_install()` | `i2s_channel_init_std_mode()` | Separate STD/PDM/TDM modes |
+| `i2s_set_pin()` | Pin config in `i2s_std_gpio_config_t` | Set at init time |
+| `i2s_read()` | `i2s_channel_read()` | Uses channel handle |
+| `i2s_set_clk()` | `i2s_channel_reconfig_std_clk()` | Reconfigure running channel |
+| `i2s_config_t` | `i2s_std_config_t` | Separate config for each mode |
+
+**Migration pattern** (from Espressif examples):
+```cpp
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+  #include "driver/i2s_std.h"
+  i2s_chan_handle_t rx_handle;
+  i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+  i2s_new_channel(&chan_cfg, NULL, &rx_handle);
+
+  i2s_std_config_t std_cfg = {
+    .clk_cfg  = I2S_STD_CLK_DEFAULT_CONFIG(22050),
+    .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_MONO),
+    .gpio_cfg = { .din = GPIO_NUM_32, .mclk = I2S_GPIO_UNUSED, ... },
+  };
+  i2s_channel_init_std_mode(rx_handle, &std_cfg);
+  i2s_channel_enable(rx_handle);
+#else
+  // Legacy i2s_driver_install() path
+#endif
+```
+
+**WLED impact**: The audioreactive usermod (`audio_source.h`) heavily uses legacy I2S. Migration requires rewriting the `I2SSource` class for channel-based API.
+
+#### ADC (Analog-to-Digital Converter)
+
+Legacy `adc1_get_raw()` and `esp_adc_cal_*` are deprecated:
+
+| IDF v4 (legacy) | IDF v5 (new) | Notes |
+|---|---|---|
+| `adc1_config_width()` + `adc1_get_raw()` | `adc_oneshot_new_unit()` + `adc_oneshot_read()` | Object-based API |
+| `esp_adc_cal_characterize()` | `adc_cali_create_scheme_*()` | Calibration is now scheme-based |
+| `adc_continuous_*` (old) | `adc_continuous_*` (restructured) | Config struct changes |
+
+#### SPI Flash
+
+| IDF v4 (legacy) | IDF v5 (new) |
+|---|---|
+| `spi_flash_read()` | `esp_flash_read()` |
+| `spi_flash_write()` | `esp_flash_write()` |
+| `spi_flash_erase_range()` | `esp_flash_erase_region()` |
+
+WLED already has a compatibility shim in `ota_update.cpp` that maps old names to new ones.
+
+#### GPIO
+
+| IDF v4 (legacy) | IDF v5 (recommended) |
+|---|---|
+| `gpio_pad_select_gpio()` | `esp_rom_gpio_pad_select_gpio()` (or use `gpio_config()`) |
+| `gpio_set_direction()` + `gpio_set_pull_mode()` | `gpio_config()` with `gpio_config_t` struct |
+
+### Features disabled in IDF v5 builds
+
+The upstream `V5-C6` branch explicitly disables features with incompatible library dependencies:
+
+```ini
+# platformio.ini [esp32_idf_V5]
+-D WLED_DISABLE_INFRARED       # IR library uses legacy RMT
+-D WLED_DISABLE_MQTT            # AsyncMqttClient incompatible with IDF v5
+-D ESP32_ARDUINO_NO_RGB_BUILTIN # Prevents RMT driver conflict with built-in LED
+-D WLED_USE_SHARED_RMT          # Use new shared RMT driver for NeoPixel output
+```
+
+### Migration checklist for new code
+
+1. **Never use a removed API without a version guard.** Always provide both old and new paths, or disable the feature on IDF v5.
+2. **Test on both IDF v4.4 and v5.x builds** if the code must be backward-compatible.
+3. **Prefer the new API** when writing new code — wrap the old API in an `#else` block.
+4. **Mark migration TODOs** with `// TODO(idf5):` so they are easy to find later.
+
+---
+
+## Memory Management: `heap_caps_*` Best Practices
+
+ESP32 has multiple memory regions with different capabilities. Using the right allocator is critical for performance and stability.
+
+### Memory regions
+
+| Region | Flag | Speed | DMA | Size | Use for |
+|---|---|---|---|---|---|
+| DRAM | `MALLOC_CAP_INTERNAL \| MALLOC_CAP_8BIT` | Fast | Yes (ESP32) | 200–320 KB | Hot-path buffers, task stacks, small allocations |
+| IRAM | `MALLOC_CAP_EXEC` | Fastest | No | 32–128 KB | Code (automatic via `IRAM_ATTR`) |
+| PSRAM (SPIRAM) | `MALLOC_CAP_SPIRAM \| MALLOC_CAP_8BIT` | Slower | Chip-dependent | 2–16 MB | Large buffers, JSON documents, image data |
+| RTC RAM | `MALLOC_CAP_RTCRAM` | Moderate | No | 8 KB | Data surviving deep sleep; small persistent buffers |
+
+### WLED-MM allocation wrappers
+
+WLED-MM provides convenience wrappers with automatic fallback. **Always prefer these over raw `heap_caps_*` calls**:
+
+| Function | Allocation preference | Use case |
+|---|---|---|
+| `d_malloc(size)` | RTC → DRAM → PSRAM | General-purpose; prefers fast memory |
+| `d_calloc(n, size)` | Same as `d_malloc`, zero-initialized | Arrays, structs |
+| `p_malloc(size)` | PSRAM → DRAM | Large buffers; prefers abundant memory |
+| `p_calloc(n, size)` | Same as `p_malloc`, zero-initialized | Large arrays |
+| `d_malloc_only(size)` | RTC → DRAM (no PSRAM fallback) | DMA buffers, time-critical data |
+
+### PSRAM guidelines
+
+- **Check availability**: always test `psramFound()` before assuming PSRAM is present.
+- **DMA compatibility**: on ESP32 (classic), PSRAM buffers are **not DMA-capable**. Use `d_malloc_only()` for DMA buffers. On ESP32-S3 with octal PSRAM, `CONFIG_SOC_PSRAM_DMA_CAPABLE` is defined.
+- **JSON documents**: use the `PSRAMDynamicJsonDocument` allocator (defined in `wled.h`) to put large JSON documents in PSRAM:
+  ```cpp
+  PSRAMDynamicJsonDocument doc(16384);  // allocated in PSRAM if available
+  ```
+- **Fragmentation**: PSRAM allocations fragment less than DRAM because the region is larger. But avoid mixing small and large allocations in PSRAM — small allocations waste the MMU page granularity.
+- **Heap validation**: use `d_measureHeap()` and `d_measureContiguousFreeHeap()` to monitor remaining DRAM. Allocations that would drop free DRAM below `MIN_HEAP_SIZE` should go to PSRAM instead.
+- **Performance**: PSRAM access is 3–10× slower than DRAM on ESP32/S2 (SPI bus). On ESP32-S3 with octal PSRAM, the penalty is smaller (~2×). Keep hot-path data in DRAM.
+
+### Pattern: preference-based allocation
+
+When you need a buffer that works on boards with or without PSRAM:
+
+```cpp
+// Prefer PSRAM for large buffers, fall back to DRAM
+uint8_t* buf = (uint8_t*)heap_caps_malloc_prefer(bufSize, 2,
+    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT,   // first choice: PSRAM
+    MALLOC_CAP_DEFAULT);                    // fallback: any available
+// Or simply:
+uint8_t* buf = (uint8_t*)p_malloc(bufSize);
+```
+
+---
+
+## I2S Audio: Best Practices
+
+The audioreactive usermod uses I2S for microphone input. Key patterns:
+
+### Port selection
+
+```cpp
+constexpr i2s_port_t AR_I2S_PORT = I2S_NUM_0;
+// I2S_NUM_1 has limitations: no MCLK routing, no ADC support, no PDM support
+```
+
+Always use `I2S_NUM_0` unless you have a specific reason and have verified support on all target chips.
+
+### DMA buffer tuning
+
+DMA buffer size controls latency vs. reliability:
+
+| Scenario | `dma_buf_count` | `dma_buf_len` | Latency | Notes |
+|---|---|---|---|---|
+| With HUB75 matrix | 18 | 128 | ~100 ms | Higher count prevents I2S starvation during matrix DMA |
+| Without PSRAM | 24 | 128 | ~140 ms | More buffers compensate for slower interrupt response |
+| Default | 8 | 128 | ~46 ms | Acceptable for most setups |
+
+### Interrupt priority
+
+Choose interrupt priority based on coexistence with other drivers:
+
+```cpp
+#ifdef WLED_ENABLE_HUB75MATRIX
+  .intr_alloc_flags = ESP_INTR_FLAG_IRAM | ESP_INTR_FLAG_LEVEL1,  // lower priority to avoid starving HUB75
+#else
+  .intr_alloc_flags = ESP_INTR_FLAG_LEVEL2 | ESP_INTR_FLAG_LEVEL3,  // higher priority for audio quality
+#endif
+```
+
+### APLL (Audio PLL) usage
+
+The ESP32 has an audio PLL for precise sample rates. Rules:
+
+- Enable APLL when an MCLK pin is provided and precision matters.
+- **Disable APLL** when Ethernet or HUB75 is active — they also use the APLL.
+- APLL is broken on ESP32 revision 0 silicon.
+- Not all chips have APLL — gate with `SOC_I2S_SUPPORTS_APLL`.
+
+```cpp
+#if !defined(SOC_I2S_SUPPORTS_APLL)
+  _config.use_apll = false;
+#elif defined(WLED_USE_ETHERNET) || defined(WLED_ENABLE_HUB75MATRIX)
+  _config.use_apll = false;  // APLL conflict
+#endif
+```
+
+### PDM microphone caveats
+
+- Not supported on ESP32-C3 (`SOC_I2S_SUPPORTS_PDM_RX` not defined).
+- ESP32-S3 PDM has known issues: sample rate at 50% of expected, very low amplitude.
+- No clock pin (`I2S_CKPIN = -1`) triggers PDM mode in WLED-MM.
+
+---
+
+## HUB75 LED Matrix: Best Practices
+
+WLED-MM uses the `ESP32-HUB75-MatrixPanel-I2S-DMA` library for HUB75 matrix output.
+
+### Chip-specific panel limits
+
+```cpp
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)
+  maxChainLength = 6;   // S3 + PSRAM: up to 6 panels (DMA-capable PSRAM)
+#elif defined(CONFIG_IDF_TARGET_ESP32S2)
+  maxChainLength = 2;   // S2: limited DMA channels
+#else
+  maxChainLength = 4;   // Classic ESP32: default
+#endif
+```
+
+### Color depth vs. pixel count
+
+The driver dynamically reduces color depth for larger displays to stay within DMA buffer limits:
+
+| Pixel count | Color depth | Bits per pixel |
+|---|---|---|
+| ≤ `MAX_PIXELS_8BIT` | 8-bit (24-bit color) | Full quality |
+| ≤ `MAX_PIXELS_6BIT` | 6-bit (18-bit color) | Slight banding |
+| ≤ `MAX_PIXELS_4BIT` | 4-bit (12-bit color) | Visible banding |
+| larger | 3-bit (9-bit color) | Minimal color range |
+
+### Resource conflicts
+
+- **APLL**: HUB75 I2S DMA uses the APLL. Disable APLL in the audio I2S driver when HUB75 is active.
+- **I2S peripheral**: HUB75 uses `I2S_NUM_1` (or `I2S_NUM_0` on single-I2S chips). Audio must use the other port.
+- **Pin count**: HUB75 requires 13–14 GPIO pins. On ESP32-S2 this severely limits remaining GPIO.
+- **Reboot required**: on ESP32-S3, changing HUB75 driver options requires a full reboot — the I2S DMA cannot be reconfigured at runtime.
+
+---
+
+## GPIO Best Practices
+
+### Prefer `gpio_config()` over individual calls
+
+```cpp
+// Preferred: single struct-based configuration
+gpio_config_t io_conf = {
+  .pin_bit_mask = (1ULL << pin),
+  .mode         = GPIO_MODE_OUTPUT,
+  .pull_up_en   = GPIO_PULLUP_DISABLE,
+  .pull_down_en = GPIO_PULLDOWN_DISABLE,
+  .intr_type    = GPIO_INTR_DISABLE,
+};
+gpio_config(&io_conf);
+
+// Avoid: multiple separate calls (more error-prone, deprecated in IDF v5)
+gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+gpio_set_pull_mode(pin, GPIO_FLOATING);
+```
+
+### Pin manager integration
+
+Always allocate pins through WLED's `pinManager` before using GPIO APIs:
+
+```cpp
+if (!pinManager.allocatePin(myPin, true, PinOwner::UM_MyUsermod)) {
+  return;  // pin in use by another module
+}
+// Now safe to configure
+```
+
+---
+
+## Timer Best Practices
+
+### Microsecond timing
+
+For high-resolution timing, prefer `esp_timer_get_time()` (microsecond resolution, 64-bit) over `millis()` or `micros()`:
+
+```cpp
+#include <esp_timer.h>
+int64_t now_us = esp_timer_get_time();  // monotonic, not affected by NTP
+```
+
+### Periodic timers
+
+For periodic tasks with sub-millisecond precision, use `esp_timer`:
+
+```cpp
+esp_timer_handle_t timer;
+esp_timer_create_args_t args = {
+  .callback = myCallback,
+  .arg = nullptr,
+  .dispatch_method = ESP_TIMER_TASK,  // run in timer task (not ISR)
+  .name = "my_timer",
+};
+esp_timer_create(&args, &timer);
+esp_timer_start_periodic(timer, 1000);  // 1 ms period
+```
+
+Always prefer `ESP_TIMER_TASK` dispatch over `ESP_TIMER_ISR` unless you need ISR-level latency — ISR callbacks have severe restrictions (no logging, no heap allocation, no FreeRTOS API calls).
+
+---
+
+## ADC Best Practices
+
+### Version-aware ADC code
+
+ADC is one of the most fragmented APIs across IDF versions:
+
+```cpp
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+  // IDF v5: oneshot driver
+  #include "esp_adc/adc_oneshot.h"
+  #include "esp_adc/adc_cali.h"
+  adc_oneshot_unit_handle_t adc_handle;
+  adc_oneshot_unit_init_cfg_t unit_cfg = { .unit_id = ADC_UNIT_1 };
+  adc_oneshot_new_unit(&unit_cfg, &adc_handle);
+#else
+  // IDF v4: legacy driver
+  #include "driver/adc.h"
+  #include "esp_adc_cal.h"
+  adc1_config_width(ADC_WIDTH_BIT_12);
+  int raw = adc1_get_raw(ADC1_CHANNEL_0);
+#endif
+```
+
+### Bit width portability
+
+Not all chips have 12-bit ADC. Use `SOC_ADC_MAX_BITWIDTH` to adapt:
+
+```cpp
+#if SOC_ADC_MAX_BITWIDTH == 13
+  adc1_config_width(ADC_WIDTH_BIT_13);  // ESP32-S2
+#else
+  adc1_config_width(ADC_WIDTH_BIT_12);  // ESP32, S3, C3, etc.
+#endif
+```
+
+---
+
+## RMT Best Practices
+
+### Current usage in WLED
+
+RMT drives NeoPixel LED output (via NeoPixelBus) and IR receiver input. Both use the legacy API that is removed in IDF v5.
+
+### Migration notes
+
+- The upstream `V5-C6` branch uses `-D WLED_USE_SHARED_RMT` to switch to the new RMT driver for NeoPixel output.
+- IR is disabled on IDF v5 until the IR library is ported.
+- New chips (C6, P4) have different RMT channel counts — use `SOC_RMT_TX_CANDIDATES_PER_GROUP` to check availability.
+- The new RMT API requires an "encoder" object (`rmt_encoder_t`) to translate data formats — this is more flexible but requires more setup code.
+
+---
+
+## Espressif Best Practices (from official examples)
+
+### Error handling
+
+Always check `esp_err_t` return values. Use `ESP_ERROR_CHECK()` in initialization code, but handle errors gracefully in runtime code:
+
+```cpp
+// Initialization — crash early on failure
+ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &config, 0, nullptr));
+
+// Runtime — log and recover
+esp_err_t err = i2s_read(I2S_NUM_0, buf, len, &bytes_read, portMAX_DELAY);
+if (err != ESP_OK) {
+  DEBUGSR_PRINTF("I2S read failed: %s\n", esp_err_to_name(err));
+  return;
+}
+```
+
+### Logging
+
+Use `ESP_LOGx()` macros instead of `Serial.printf()` for ESP-IDF level code. They support log levels and can be filtered at compile time:
+
+```cpp
+static const char* TAG = "my_module";
+ESP_LOGI(TAG, "Initialized with %d buffers", count);
+ESP_LOGW(TAG, "PSRAM not available, falling back to DRAM");
+ESP_LOGE(TAG, "Failed to allocate %u bytes", size);
+```
+
+Note: WLED-MM primarily uses its own logging macros (`USER_PRINTLN`, `DEBUGSR_PRINTF`, etc.). Use ESP-IDF logging only in low-level driver code that interacts directly with ESP-IDF APIs.
+
+### Task creation and pinning
+
+On dual-core chips (ESP32, S3, P4), pin latency-sensitive tasks to a specific core:
+
+```cpp
+xTaskCreatePinnedToCore(
+  audioTask,        // function
+  "audio",          // name
+  4096,             // stack size
+  nullptr,          // parameter
+  5,                // priority (higher = more important)
+  &audioTaskHandle, // handle
+  0                 // core ID (0 = protocol core, 1 = app core)
+);
+```
+
+Guidelines:
+- Pin network/protocol tasks to core 0 (where Wi-Fi runs).
+- Pin real-time tasks (audio, LED output) to core 1.
+- On single-core chips (S2, C3, C6), task pinning is ignored — ensure your code works without it.
+- Use `SOC_CPU_CORES_NUM` to conditionally pin tasks.
+
+### Watchdog management
+
+Long-running operations may trigger the task watchdog. Feed it explicitly:
+
+```cpp
+#include <esp_task_wdt.h>
+esp_task_wdt_reset();  // feed the watchdog in long loops
+```
+
+For tasks that intentionally block for extended periods, consider subscribing/unsubscribing from the TWDT:
+
+```cpp
+esp_task_wdt_delete(nullptr);  // remove current task from TWDT
+// ... long blocking operation ...
+esp_task_wdt_add(nullptr);     // re-register
+```
+
+---
+
+## Quick Reference: IDF v4 → v5 API Mapping
+
+| Component | IDF v4 Header | IDF v5 Header | Key Change |
+|---|---|---|---|
+| I2S | `driver/i2s.h` | `driver/i2s_std.h` | Channel-based API |
+| ADC (oneshot) | `driver/adc.h` | `esp_adc/adc_oneshot.h` | Unit/channel handles |
+| ADC (calibration) | `esp_adc_cal.h` | `esp_adc/adc_cali.h` | Scheme-based calibration |
+| RMT | `driver/rmt.h` | `driver/rmt_tx.h` / `rmt_rx.h` | Encoder-based transmit |
+| SPI Flash | `spi_flash.h` | `esp_flash.h` | `esp_flash_*` functions |
+| GPIO | `driver/gpio.h` | `driver/gpio.h` | `gpio_pad_select_gpio()` removed |
+| Timer | `driver/timer.h` | `driver/gptimer.h` | General-purpose timer handles |
+| PCNT | `driver/pcnt.h` | `driver/pulse_cnt.h` | Handle-based API |
