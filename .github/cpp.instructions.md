@@ -156,6 +156,46 @@ static_assert(WLED_MAX_BUSSES <= 32, "WLED_MAX_BUSSES exceeds hard limit");
 #endif
 ```
 
+### `static` and `const` class methods
+
+#### `const` member functions
+
+Marking a member function `const` tells the compiler that it does not modify the object's state:
+
+```cpp
+uint16_t length() const { return _len; }
+bool     isActive() const { return _active; }
+```
+
+Benefits for GCC/Xtensa/RISC-V:
+- The compiler knows the method cannot write to `this`, so it is free to **keep member values in registers** across the call and avoid reload barriers.
+- `const` methods can be called on `const` objects and `const` references — essential when passing large objects as `const &` to avoid copying.
+- `const` allows the compiler to **eliminate redundant loads**: if a caller already has a member value cached, the compiler can prove the `const` call cannot invalidate it.
+
+Declare every getter, query, or inspection method `const`. If you need to mark a member `mutable` to work around this (e.g. for a cache or counter), document the reason.
+
+#### `static` member functions
+
+A `static` member function has no implicit `this` pointer. This has two distinct advantages:
+
+1. **Smaller code, faster calls**: no `this` is passed in a register. On Xtensa and RISC-V, this removes one register argument from every call site and prevents the compiler from emitting `this`-preservation code around inlined blocks.
+2. **Better inlining**: GCC can inline a `static` method across translation units more aggressively because it cannot be overridden by a derived class and has no aliasing concern through `this`.
+
+Use `static` for any method that does not need access to instance members:
+
+```cpp
+// Factory / utility — no instance needed:
+static BusConfig fromJson(JsonObject obj);
+
+// Pure computation helpers:
+static uint8_t  gamma8(uint8_t val);
+static uint32_t colorBalance(uint32_t color, uint8_t r, uint8_t g, uint8_t b);
+```
+
+`static` also communicates intent clearly: a reviewer immediately knows the method is stateless and safe to call without a fully constructed object.
+
+> **Rule of thumb**: if a method does not read or write any member variable, make it `static`. If it only reads member variables, make it `const`. Both together (`static const` is not a thing — just `static`) reduce coupling and improve generated code on all ESP32 targets.
+
 ---
 
 ## Hot-Path Optimization
