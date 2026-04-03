@@ -682,6 +682,21 @@ Guidelines:
   #endif
   ```
 
+### `delay()`, `yield()`, and the IDLE task
+
+FreeRTOS on ESP32 is **preemptive** — all tasks are scheduled by priority regardless of `yield()` calls. This is fundamentally different from ESP8266 cooperative multitasking.
+
+| Call | What it does | Reaches IDLE (priority 0)? |
+|---|---|---|
+| `delay(ms)` / `vTaskDelay(ticks)` | Suspends calling task; scheduler runs all other ready tasks | ✅ Yes |
+| `yield()` / `vTaskDelay(0)` | Hint to switch to tasks at **equal or higher** priority only | ❌ No |
+| `taskYIELD()` | Same as `vTaskDelay(0)` | ❌ No |
+| Blocking API (`xQueueReceive`, `ulTaskNotifyTake`, `vTaskDelayUntil`) | Suspends task until event or timeout; IDLE runs freely | ✅ Yes |
+
+**`delay()` in `loopTask` is safe.** Arduino's `loop()` runs inside `loopTask`. Calling `delay()` suspends only `loopTask` — all other FreeRTOS tasks (Wi-Fi stack, audio FFT, LED DMA) continue uninterrupted on either core.
+
+**`yield()` does not yield to IDLE.** Any task that loops with only `yield()` calls will starve the IDLE task, causing the IDLE watchdog to fire. Always use `delay(1)` (or a blocking FreeRTOS call) in tight task loops. Note: WLED-MM redefines `yield()` as an empty macro on ESP32 WLEDMM_FASTPATH builds — see `cpp.instructions.md`.
+
 ### Watchdog management
 
 Long-running operations may trigger the task watchdog. Feed it explicitly:
