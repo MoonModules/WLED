@@ -66,7 +66,9 @@ Main development branch: `mdev`
 - **Repository language is English.** Suggest translations for non-English content.
 - **Use VS Code with PlatformIO extension** for best development experience.
 - **When unsure, say so.** Gather more information rather than guessing.
+- **Acknowledge good patterns** when you see them.
 - **Provide references** when making analyses or recommendations. Base them on the correct branch or PR.
+- **Look for user-visible "breaking" changes**. Ask for confirmation that these were made intentionally.
 - **C++ formatting available**: `clang-format` is installed but not in CI
 - No automated linting is configured — match existing code style in files you edit. See `cpp.instructions.md` and `web.instructions.md` for language-specific conventions, and `cicd.instructions.md` for GitHub Actions workflows.
 
