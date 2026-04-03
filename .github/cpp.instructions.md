@@ -461,6 +461,6 @@ Always pair every `esp32SemTake` with a matching `esp32SemGive`. Choose a timeou
   uint8_t angle = 40.74f * atan2f(dy, dx);   // negative float → uint8_t is UB
   
   // Correct — cast through int first:
-  // expression result is in range [-128...128], store in unsigned as 2's complement
+  // atan2f returns [-π..+π], scaled ≈ [-128..+128] as int; uint8_t wraps negative ints via 2's complement (e.g. -1 → 255)
   uint8_t angle = int(40.74f * atan2f(dy, dx));  // float→int (defined), int→uint8_t (defined)
   ```
