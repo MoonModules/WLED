@@ -641,7 +641,6 @@ WLED-MM uses its own logging macros — **not** `ESP_LOGx()`. For application-le
 |---|---|---|---|
 | `USER_PRINT` / `USER_PRINTLN` / `USER_PRINTF` | `wled.h` | Always active | Important messages the user should see (startup, errors, status) |
 | `DEBUG_PRINT` / `DEBUG_PRINTLN` / `DEBUG_PRINTF` | `wled.h` | `WLED_DEBUG` build flag | Development/diagnostic output; compiled out in release builds |
-| `DEBUGSR_PRINT` / `DEBUGSR_PRINTLN` / `DEBUGSR_PRINTF` | `audio_reactive.h` | `SR_DEBUG` build flag | Audio-reactive usermod diagnostics |
 
 All of these wrap `Serial` output through the `DEBUGOUT` / `DEBUGOUTLN` / `DEBUGOUTF` macros.
 
