@@ -74,7 +74,7 @@ Test these scenarios after every web UI change:
 
 | Problem | Solution |
 |---|---|
-| Missing `html_*.h` | Run `npm run build` |
+| Missing `html_*.h` | Run `npm ci; npm run build` |
 | Web UI looks broken | Check browser console for JS errors |
 | PlatformIO network errors | Retry — downloads can be flaky |
 | Node.js version mismatch | Ensure Node.js 20+ (check `.nvmrc`) |
