@@ -19,6 +19,7 @@ Use `CONFIG_IDF_TARGET_*` macros to gate chip-specific code at compile time. The
 | `CONFIG_IDF_TARGET_ESP32S2` | ESP32-S2 | Xtensa single-core | Limited peripherals. 13-bit ADC |
 | `CONFIG_IDF_TARGET_ESP32S3` | ESP32-S3 | Xtensa dual-core | Preferred for large installs. Octal PSRAM, USB-OTG |
 | `CONFIG_IDF_TARGET_ESP32C3` | ESP32-C3 | RISC-V single-core | Minimal peripherals. RISC-V clamps out-of-range float→unsigned casts; see `cpp.instructions.md` UB note |
+| `CONFIG_IDF_TARGET_ESP32C5` | ESP32-C5 | RISC-V single-core | Wi-Fi 2.4Ghz + 5Ghz, Thread/Zigbee. Future target |
 | `CONFIG_IDF_TARGET_ESP32C6` | ESP32-C6 | RISC-V single-core | Wi-Fi 6, Thread/Zigbee. Future target |
 | `CONFIG_IDF_TARGET_ESP32P4` | ESP32-P4 | RISC-V dual-core | High performance. Future target |
 
@@ -31,7 +32,7 @@ WLED validates at compile time that exactly one target is defined and that it is
   // classic ESP32 path
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
   // S3-specific path
-#elif defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6)
+#elif defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C6)
   // RISC-V common path
 #else
   #warning "Untested chip — review peripheral availability"
@@ -43,7 +44,7 @@ WLED validates at compile time that exactly one target is defined and that it is
 - **Always test on the actual chip** before claiming support. Simulators and cross-compilation can hide peripheral differences.
 - **Prefer `#elif` chains** over nested `#ifdef` for readability.
 - **Do not use `CONFIG_IDF_TARGET_*` for feature detection.** Use `SOC_*` capability macros instead (see next section). For example, use `SOC_I2S_SUPPORTS_ADC` instead of `CONFIG_IDF_TARGET_ESP32` to check for I2S ADC support.
-- When a feature must be disabled on certain chips, use explicit `#error` or `#warning` directives so the build clearly reports what is missing.
+- When a feature must be disabled on certain chips, use explicit `static_assert()` or `#warning` directives so the build clearly reports what is missing.
 
 ---
 
@@ -119,7 +120,7 @@ For PSRAM DMA and access patterns:
 #endif
 ```
 
-### Key version thresholds in WLED-MM
+### Key ESP-IDF version thresholds for WLED-MM
 
 | Version | What changed |
 |---|---|
@@ -321,7 +322,7 @@ The upstream `V5-C6` branch explicitly disables features with incompatible libra
 
 1. **Never use a removed API without a version guard.** Always provide both old and new paths, or disable the feature on IDF v5.
 2. **Test on both IDF v4.4 and v5.x builds** if the code must be backward-compatible.
-3. **Prefer the new API** when writing new code — wrap the old API in an `#else` block.
+3. **Prefer the newer API** when writing new code — wrap the old API in an `#else` block.
 4. **Mark migration TODOs** with `// TODO(idf5):` so they are easy to find later.
 
 ---
