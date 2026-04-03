@@ -683,7 +683,7 @@ xTaskCreatePinnedToCore(
 Guidelines:
 - Pin network/protocol tasks to core 0 (where Wi-Fi runs).
 - Pin real-time tasks (audio, LED output) to core 1.
-- On single-core chips (S2, C3, C6), only core 0 exists — pinning to core 1 will fail. Use `SOC_CPU_CORES_NUM > 1` guards or `tskNO_AFFINITY`.
+- On single-core chips (S2, C3, C5, C6), only core 0 exists — pinning to core 1 will fail. Use `SOC_CPU_CORES_NUM > 1` guards or `tskNO_AFFINITY`.
 - Use `SOC_CPU_CORES_NUM` to conditionally pin tasks:
   ```cpp
   #if SOC_CPU_CORES_NUM > 1
@@ -719,7 +719,7 @@ The FreeRTOS IDLE task (one per core on dual-core ESP32 and ESP32-S3; single ins
 - **Implements tickless idle / light sleep**: on battery-powered devices, IDLE is the entry point for low-power sleep. A permanently starved IDLE task disables light sleep entirely.
 - **Runs registered idle hooks**: ESP-IDF components register callbacks via `esp_register_freertos_idle_hook()` (e.g., Wi-Fi background maintenance, Bluetooth housekeeping). These only fire when IDLE runs.
 
-In short: **starving IDLE corrupts memory cleanup, breaks software timers, disables low-power sleep, and prevents Wi-Fi/BT maintenance.** The IDLE watchdog panic is a symptom — the real damage happens before the watchdog fires.
+In short: **starving IDLE corrupts memory cleanup, breaks background activities, disables low-power sleep, and prevents Wi-Fi/BT maintenance.** The IDLE watchdog panic is a symptom — the real damage happens before the watchdog fires.
 
 ### Watchdog management
 
