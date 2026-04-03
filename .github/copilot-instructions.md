@@ -32,7 +32,7 @@ Always reference these instructions first and fallback to search or bash command
 
 **Always run `npm ci; npm run build` before `pio run`.** The web UI build generates `wled00/html_*.h` header files required by firmware compilation.
 
-Common firmware environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S3_8MB_PSRAM_M_qspi`, `esp32_16MB_V4_M_eth`,`esp32dev_compat`, `esp8266_4MB_S` (deprecated)
+Common firmware environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S3_8MB_PSRAM_M_qspi`, `esp32_16MB_V4_M_eth`, `esp32dev_compat`, `esp8266_4MB_S` (deprecated)
 
 For detailed build timeouts, development workflows, troubleshooting, and validation steps, see [agent-build-instructions.md](agent-build-instructions.md).
 
