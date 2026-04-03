@@ -715,7 +715,7 @@ FreeRTOS on ESP32 is **preemptive** — all tasks are scheduled by priority rega
 The FreeRTOS IDLE task (one per core on dual-core ESP32 and ESP32-S3; single instance on single-core chips) is not idle in the casual sense — it performs essential system housekeeping:
 
 - **Frees deleted task memory**: when a task calls `vTaskDelete()`, the IDLE task reclaims its TCB and stack. Without IDLE running, deleted tasks leak memory permanently.
-- **Runs FreeRTOS software timers**: the timer daemon relies on IDLE-priority execution. Many ESP-IDF components (Wi-Fi, BLE, NVS) schedule work via software timers.
+- **Runs the idle hook**: when `configUSE_IDLE_HOOK = 1`, the IDLE task calls `vApplicationIdleHook()` on every iteration — some ESP-IDF components register low-priority background work here.
 - **Implements tickless idle / light sleep**: on battery-powered devices, IDLE is the entry point for low-power sleep. A permanently starved IDLE task disables light sleep entirely.
 - **Runs registered idle hooks**: ESP-IDF components register callbacks via `esp_register_freertos_idle_hook()` (e.g., Wi-Fi background maintenance, Bluetooth housekeeping). These only fire when IDLE runs.
 
