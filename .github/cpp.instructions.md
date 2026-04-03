@@ -194,7 +194,7 @@ static uint32_t colorBalance(uint32_t color, uint8_t r, uint8_t g, uint8_t b);
 
 `static` also communicates intent clearly: a reviewer immediately knows the method is stateless and safe to call without a fully constructed object.
 
-> **Rule of thumb**: if a method does not read or write any member variable, make it `static`. If it only reads member variables, make it `const`. Both together (`static const` is not a thing — just `static`) reduce coupling and improve generated code on all ESP32 targets.
+> **Rule of thumb**: if a method does not read or write any member variable, make it `static`. If it only reads member variables, make it `const`. Note: `static` methods cannot also be `const`-qualified because there is no implicit `this` pointer to be const — just use `static`. Both qualifiers reduce coupling and improve generated code on all ESP32 targets.
 
 ---
 

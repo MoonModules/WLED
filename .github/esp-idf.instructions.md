@@ -18,7 +18,7 @@ Use `CONFIG_IDF_TARGET_*` macros to gate chip-specific code at compile time. The
 | `CONFIG_IDF_TARGET_ESP32` | ESP32 (classic) | Xtensa dual-core | Primary target. Has DAC, APLL, I2S ADC mode |
 | `CONFIG_IDF_TARGET_ESP32S2` | ESP32-S2 | Xtensa single-core | Limited peripherals. 13-bit ADC |
 | `CONFIG_IDF_TARGET_ESP32S3` | ESP32-S3 | Xtensa dual-core | Preferred for large installs. Octal PSRAM, USB-OTG |
-| `CONFIG_IDF_TARGET_ESP32C3` | ESP32-C3 | RISC-V single-core | Minimal peripherals. Float-to-uint UB differs |
+| `CONFIG_IDF_TARGET_ESP32C3` | ESP32-C3 | RISC-V single-core | Minimal peripherals. RISC-V clamps out-of-range float→unsigned casts; see `cpp.instructions.md` UB note |
 | `CONFIG_IDF_TARGET_ESP32C6` | ESP32-C6 | RISC-V single-core | Wi-Fi 6, Thread/Zigbee. Future target |
 | `CONFIG_IDF_TARGET_ESP32P4` | ESP32-P4 | RISC-V dual-core | High performance. Future target |
 
@@ -56,9 +56,9 @@ WLED validates at compile time that exactly one target is defined and that it is
 | Macro | Type | Used in | Purpose |
 |---|---|---|---|
 | `SOC_I2S_NUM` | `int` | `audio_source.h` | Number of I2S peripherals (1 or 2) |
-| `SOC_I2S_SUPPORTS_ADC` | `bool` | `audio_source.h` | I2S ADC sampling mode (ESP32 only) |
-| `SOC_I2S_SUPPORTS_APLL` | `bool` | `audio_source.h` | Audio PLL for precise sample rates |
-| `SOC_I2S_SUPPORTS_PDM_RX` | `bool` | `audio_source.h` | PDM microphone input |
+| `SOC_I2S_SUPPORTS_ADC` | `bool` | `usermods/audioreactive/audio_source.h` | I2S ADC sampling mode (ESP32 only) |
+| `SOC_I2S_SUPPORTS_APLL` | `bool` | `usermods/audioreactive/audio_source.h` | Audio PLL for precise sample rates |
+| `SOC_I2S_SUPPORTS_PDM_RX` | `bool` | `usermods/audioreactive/audio_source.h` | PDM microphone input |
 | `SOC_ADC_MAX_BITWIDTH` | `int` | `util.cpp` | ADC resolution (12 or 13 bits) |
 | `SOC_ADC_CHANNEL_NUM(unit)` | `int` | `pin_manager.cpp` | ADC channels per unit |
 | `SOC_UART_NUM` | `int` | `dmx_input.cpp` | Number of UART peripherals |
@@ -148,7 +148,7 @@ For PSRAM DMA and access patterns:
 
 ## Migrating from ESP-IDF v4.4.x to v5.x
 
-The jump from IDF v4.4 (arduino-esp32 v2.x) to IDF v5.x (arduino-esp32 v3.x) is the largest API break in ESP-IDF history. This section documents the critical changes and recommended migration patterns based on the upstream WLED `V5-C6` branch.
+The jump from IDF v4.4 (arduino-esp32 v2.x) to IDF v5.x (arduino-esp32 v3.x) is the largest API break in ESP-IDF history. This section documents the critical changes and recommended migration patterns based on the upstream WLED `V5-C6` branch (`https://github.com/wled/WLED/tree/V5-C6`). Note: WLED-MM has not yet migrated to IDF v5 — these patterns prepare for the future migration.
 
 ### Compiler changes
 
@@ -287,7 +287,7 @@ WLED-MM provides convenience wrappers with automatic fallback. **Always prefer t
 ### PSRAM guidelines
 
 - **Check availability**: always test `psramFound()` before assuming PSRAM is present.
-- **DMA compatibility**: on ESP32 (classic), PSRAM buffers are **not DMA-capable**. Use `d_malloc_only()` for DMA buffers. On ESP32-S3 with octal PSRAM, `CONFIG_SOC_PSRAM_DMA_CAPABLE` is defined.
+- **DMA compatibility**: on ESP32 (classic), PSRAM buffers are **not DMA-capable** — use `d_malloc_only()` to allocate DMA buffers in DRAM only. On ESP32-S3 with octal PSRAM, PSRAM buffers *can* be used with DMA when `CONFIG_SOC_PSRAM_DMA_CAPABLE` is defined.
 - **JSON documents**: use the `PSRAMDynamicJsonDocument` allocator (defined in `wled.h`) to put large JSON documents in PSRAM:
   ```cpp
   PSRAMDynamicJsonDocument doc(16384);  // allocated in PSRAM if available
