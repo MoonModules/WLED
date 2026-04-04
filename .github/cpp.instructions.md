@@ -63,7 +63,7 @@ void calculateCRC(const uint8_t* data, size_t len) {
 
   Single-line AI-assisted edits do not need the marker — use it when the AI produced a contiguous block that a human did not write line-by-line.
 
-<!-- HUMAN_ONLY_BEGIN -->
+<!-- HUMAN_ONLY_START -->
 - **Function & feature comments:** Every non-trivial function should have a brief comment above it describing what it does. Include a note about each parameter when the names alone are not self-explanatory:
 
 ```cpp
@@ -104,13 +104,18 @@ uint8_t gammaCorrect(uint8_t value, float gamma);
 ## Memory
 
 - **PSRAM-aware allocation**: use `d_malloc()` (prefer DRAM), `p_malloc()` (prefer PSRAM) from `util.h`
-- **Avoid Variable Length Arrays (VLAs)**: GCC/Clang support VLAs as an extension (they are not part of the C++ standard), so they look like a legitimate feature — but they are allocated on the stack at runtime. On ESP32/ESP8266, FreeRTOS task stacks are typically only 2–8 KB; a VLA whose size depends on a runtime parameter (segment dimensions, pixel counts, etc.) can silently exhaust the stack and cause the program to behave in unexpected ways or crash. Prefer a fixed-size array with a compile-time bound, or heap allocation (`d_malloc` / `p_malloc`) for dynamically sized buffers. **Any VLA must be explicitly justified in the source code or PR.**
+<!-- HUMAN_ONLY_START -->
+- Variable Length Arrays (VLAs): GCC/Clang support VLAs as an extension (they are not part of the C++ standard), so they look like a legitimate feature — but they are allocated on the stack at runtime. On ESP32/ESP8266. A VLA whose size depends on a runtime parameter (segment dimensions, pixel counts, etc.) can silently exhaust the stack and cause the program to behave in unexpected ways or crash.
+<!-- HUMAN_ONLY_END -->
+  **Avoid Variable Length Arrays (VLAs)**: FreeRTOS task stacks are typically 2–8 KB. A runtime-sized VLA can silently exhaust the stack. Use fixed-size arrays or heap allocation (`d_malloc` / `p_malloc`). Any VLA must be explicitly justified in source or PR.
 - **Larger buffers** (LED data, JSON documents) should use PSRAM when available and technically feasible
 - **Hot-path**: some data should stay in DRAM or IRAM for performance reasons
 - Memory efficiency matters, but is less critical on boards with PSRAM
 
 ## `const` and `constexpr`
+Add `const` to cached locals in hot-path code (helps the compiler keep values in registers). Pass and store objects by `const&` to avoid copies in loops. 
 
+<!-- HUMAN_ONLY_START -->
 `const` is a promise to the compiler that a value (or object) will not change - a function declared with a `const char* message` parameter is not allowed to modify the content of `message`.
 This pattern enables optimizations and makes intent clear to reviewers.
 
@@ -122,12 +127,12 @@ Adding `const` to a local variable that is only assigned once is not necessary �
 const uint_fast16_t cols = virtualWidth();
 const uint_fast16_t rows = virtualHeight();
 ```
-
+<!-- HUMAN_ONLY_END -->
 ### `const` references to avoid copies
 
-<!-- HUMAN_ONLY_START -->
 Pass and store objects by `const &` (or `&`) instead of copying them implicitly. This avoids constructing temporary objects on every access — especially important in loops:
 
+<!-- HUMAN_ONLY_START -->
 ```cpp
 const auto &m = _mappings[i];          // reference, not a copy (bus_manager.cpp)
 const CRGB& c = ledBuffer[pix];        // alias — avoids creating a temporary CRGB instance
@@ -141,6 +146,7 @@ BusDigital(BusConfig &bc, uint8_t nr, const ColorOrderMap &com);
 <!-- HUMAN_ONLY_END -->
 
 ### `constexpr` over `#define`
+<!-- HUMAN_ONLY_START -->
 
 Prefer `constexpr` for compile-time constants. Unlike `#define`, `constexpr` respects scope and type safety, keeping the global namespace clean:
 
@@ -169,6 +175,10 @@ static_assert(WLED_MAX_BUSSES <= 32, "WLED_MAX_BUSSES exceeds hard limit");
   #error "WLED_MAX_BUSSES exceeds hard limit"
 #endif
 ```
+<!-- HUMAN_ONLY_END -->
+
+Prefer `constexpr` over `#define` for typed constants (scope-safe, debuggable). Use `static_assert` instead of `#if … #error` for compile-time validation.
+Exception: `#define` is required for conditional-compilation guards and build-flag-overridable values.
 
 ### `static` and `const` class methods
 
@@ -180,13 +190,14 @@ Marking a member function `const` tells the compiler that it does not modify the
 uint16_t length() const { return _len; }
 bool     isActive() const { return _active; }
 ```
-
+<!-- HUMAN_ONLY_START -->
 Benefits for GCC/Xtensa/RISC-V:
 - The compiler knows the method cannot write to `this`, so it is free to **keep member values in registers** across the call and avoid reload barriers.
 - `const` methods can be called on `const` objects and `const` references — essential when passing large objects as `const &` to avoid copying.
 - `const` allows the compiler to **eliminate redundant loads**: if a caller already has a member value cached, the compiler can prove the `const` call cannot invalidate it.
+<!-- HUMAN_ONLY_END -->
 
-Declare every getter, query, or inspection method `const`. If you need to mark a member `mutable` to work around this (e.g. for a cache or counter), document the reason.
+Declare getter, query, or inspection methods `const`. If you need to mark a member `mutable` to work around this (e.g. for a cache or counter), document the reason.
 
 #### `static` member functions
 
@@ -289,7 +300,7 @@ if (unsigned(i) >= virtualLength()) return; // bounds check (catches negative i 
 ### Avoid Nested Calls — Fast Path / Complex Path
 
 Avoid calling non-inline functions or making complex decisions inside per-pixel hot-path code. When a function has both a common simple case and a rare complex case, split it into two variants and choose once per frame rather than per pixel:
-
+<!-- HUMAN_ONLY_START -->
 ```cpp
 // Decision made once per frame in startFrame(), stored in a bool
 bool simpleSegment = _isSuperSimpleSegment;
@@ -306,16 +317,18 @@ The same principle applies to color utilities — `color_add()` accepts a `fast`
 ```cpp
 uint32_t color_add(uint32_t c1, uint32_t c2, bool fast=false);
 ```
+<!-- HUMAN_ONLY_END -->
 
 General rules:
-- Keep the per-pixel fast path free of non-inline function calls, multi-way branches and complex switch-case decisions.
-- Hoist the "which path?" decision out of the inner loop (once per frame or per segment)
-- It is acceptable to duplicate some code between fast and complex variants to keep the fast path lean
+- Keep fast-path functions free of non-inline calls, multi-way branches, and complex switch-case decisions. 
+- Hoist per-frame decisions (e.g. simple vs. complex segment) out of the per-pixel loop. 
+- Code duplication between fast/slow variants is acceptable to keep the fast path lean.
 
 ### Function Pointers to Eliminate Repeated Decisions
 
 When the same decision (e.g. "which drawing routine?") would be evaluated for every pixel, assign the chosen variant to a function pointer once and let the inner loop call through the pointer. This removes the branch entirely — the calling code (e.g. the GIF decoder loop) only ever invokes one function per frame, with no per-pixel decision.
 
+<!-- HUMAN_ONLY_START -->
 `image_loader.cpp` demonstrates the pattern: `calculateScaling()` picks the best drawing callback once per frame based on segment dimensions and GIF size, then passes it to the decoder via `setDrawPixelCallback()`:
 
 ```cpp
@@ -327,7 +340,7 @@ else
 ```
 
 Each callback is a small, single-purpose function with no internal branching — the decoder's per-pixel loop never re-evaluates which strategy to use.
-
+<!-- HUMAN_ONLY_END -->
 <!-- HUMAN_ONLY_START -->
 ### Template Specialization (Advanced)
 
@@ -368,18 +381,19 @@ if (!guard) return;  // another task is already sending
 
 This avoids FreeRTOS semaphore overhead and the risk of forgetting `esp32SemGive`. There are no current examples of this pattern in the codebase — consult with maintainers before introducing it in new code, to ensure it aligns with the project's synchronization conventions.
 
+<!-- HUMAN_ONLY_END -->
 ### Pre-Compute Outside Loops
 
 Move invariant calculations before the loop. Pre-compute reciprocals to replace division with multiplication:
-
+<!-- HUMAN_ONLY_START -->
 ```cpp
 const uint_fast16_t cols = virtualWidth();
 const uint_fast16_t rows = virtualHeight();
 uint_fast8_t fadeRate = (255 - rate) >> 1;
 float mappedRate_r = 1.0f / (float(fadeRate) + 1.1f);  // reciprocal — avoid division inside loop
 ```
-<!-- HUMAN_ONLY_END -->
 
+<!-- HUMAN_ONLY_END -->
 ### Parallel Channel Processing
 
 Process R+B and W+G channels simultaneously using the two-channel mask pattern:
@@ -394,11 +408,10 @@ return rb | wg;
 ### Bit Shifts Over Division (mainly for RISC-V boards)
 
 ESP32 and ESP32-S3 (Xtensa core) have a fast "integer divide" instruction, so manual shifts rarely help. 
-The compiler already converts power-of-two unsigned divisions to shifts at `-O2`.
-On RISC-V-based boards (ESP32-C3, ESP32-C6, ESP32-C5) explicit shifts can be beneficial:
+On RISC-V targets (ESP32-C3/C6/P4), prefer explicit bit-shifts for power-of-two arithmetic — the compiler does **not** always convert divisions to shifts on RISC-V at `-O2`. Always use unsigned operands; signed right-shift is implementation-defined.
 
-Prefer bit shifts for power-of-two operations:
-
+<!-- HUMAN_ONLY_START -->
+On RISC-V-based boards (ESP32-C3, ESP32-C6, ESP32-C5) explicit shifts can be beneficial.
 ```cpp
 position >> 3     // instead of position / 8
 (255U - rate) >> 1 // instead of (255 - rate) / 2
@@ -407,6 +420,7 @@ i & 0x0007        // instead of i % 8
 
 **Important**: The bit-shifted expression should be unsigned. On some MCUs, "signed right-shift" is implemented by an "arithmetic shift right" that duplicates the sign bit: ``0b1010 >> 1 = 0b1101``.
 
+<!-- HUMAN_ONLY_END -->
 ### Static Caching for Expensive Computations
 
 Cache results in static locals when the input rarely changes between calls:
@@ -436,8 +450,8 @@ if (lastKelvin != kelvin) {
   ```cpp
   uint16_t r1 = R(color1);  // 16-bit intermediate keeps the multiply result in 32 bits, avoiding 64-bit promotion
   ```
-<!-- HUMAN_ONLY_END -->
 
+<!-- HUMAN_ONLY_END -->
 ## Multi-Task Synchronization
 
 ESP32 runs multiple FreeRTOS tasks concurrently (e.g. network handling, LED output, JSON parsing). Use the WLED-MM mutex macros for synchronization — they expand to FreeRTOS recursive semaphore calls on ESP32 and compile to no-ops on ESP8266:
