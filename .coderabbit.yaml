@@ -66,3 +66,19 @@ reviews:
         scoped to least privilege. Never interpolate github.event.* values directly
         into run: steps — pass them through an env: variable to prevent script
         injection. Do not use pull_request_target unless fully justified.
+
+    - path: ".github/*.instructions.md"
+      instructions: |
+        This file contains both AI-facing rules and human-only reference sections.
+        Human-only sections are enclosed in `<!-- HUMAN_ONLY_START -->` /
+        `<!-- HUMAN_ONLY_END -->` HTML comment markers and should not be used as
+        actionable review criteria.
+
+        When this file is modified in a PR, perform the following alignment check:
+        1. For each `<!-- HUMAN_ONLY_START --> ... <!-- HUMAN_ONLY_END -->` block,
+           verify that its examples and guidance are consistent with (and do not
+           contradict) the AI-facing rules stated in the same file.
+        2. Flag any HUMAN_ONLY section whose content has drifted from the surrounding
+           AI-facing rules due to edits introduced in this PR.
+        3. If new AI-facing rules were added without updating a related HUMAN_ONLY
+           reference section, note this as a suggestion (not a required fix).

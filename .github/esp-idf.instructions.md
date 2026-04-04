@@ -7,8 +7,14 @@ WLED-MM runs on the Arduino-ESP32 framework, which wraps ESP-IDF. Understanding 
 
 > **Scope**: This file is an optional review guideline. It applies when touching chip-specific code, peripheral drivers, memory allocation, or platform conditionals.
 
+> **Note for AI review tools**: sections enclosed in
+> `<!-- HUMAN_ONLY_START -->` / `<!-- HUMAN_ONLY_END -->` HTML comments contain
+> contributor reference material. Do **not** use that content as actionable review
+> criteria — treat it as background context only.
+
 ---
 
+<!-- HUMAN_ONLY_START -->
 ## Identifying the Build Target: `CONFIG_IDF_TARGET_*`
 
 Use `CONFIG_IDF_TARGET_*` macros to gate chip-specific code at compile time. These are set by the build system and are mutually exclusive — exactly one is defined per build.
@@ -23,8 +29,9 @@ Use `CONFIG_IDF_TARGET_*` macros to gate chip-specific code at compile time. The
 | `CONFIG_IDF_TARGET_ESP32C6` | ESP32-C6 | RISC-V single-core | Wi-Fi 6, Thread/Zigbee. Future target |
 | `CONFIG_IDF_TARGET_ESP32P4` | ESP32-P4 | RISC-V dual-core | High performance. Future target |
 
-### Build-time validation
+<!-- HUMAN_ONLY_END -->
 
+### Build-time validation
 WLED validates at compile time that exactly one target is defined and that it is a supported chip (`wled.cpp` lines 39–61). Follow this pattern when adding new chip-specific branches:
 
 ```cpp
@@ -53,6 +60,7 @@ WLED validates at compile time that exactly one target is defined and that it is
 `SOC_*` macros (from `soc/soc_caps.h`) describe what the current chip supports. They are the correct way to check for peripheral features — they stay accurate when new chips are added, unlike `CONFIG_IDF_TARGET_*` checks.
 
 ### Important `SOC_*` macros used in WLED-MM
+<!-- HUMAN_ONLY_START -->
 
 | Macro | Type | Used in | Purpose |
 |---|---|---|---|
@@ -64,7 +72,11 @@ WLED validates at compile time that exactly one target is defined and that it is
 | `SOC_ADC_CHANNEL_NUM(unit)` | `int` | `pin_manager.cpp` | ADC channels per unit |
 | `SOC_UART_NUM` | `int` | `dmx_input.cpp` | Number of UART peripherals |
 | `SOC_DRAM_LOW` / `SOC_DRAM_HIGH` | `addr` | `util.cpp` | DRAM address boundaries for validation |
+<!-- HUMAN_ONLY_END -->
 
+Common pitfall: `SOC_ADC_MAX_BITWIDTH` (ADC resolution 12 or 13 bits) was renamed to `CONFIG_SOC_ADC_RTC_MAX_BITWIDTH` in IDF v5.
+
+<!-- HUMAN_ONLY_START -->
 ### Less commonly used but valuable
 
 | Macro | Purpose |
@@ -75,6 +87,8 @@ WLED validates at compile time that exactly one target is defined and that it is
 | `SOC_DAC_SUPPORTED` | Whether the chip has a DAC (ESP32/S2 only) |
 | `SOC_SPIRAM_SUPPORTED` | Whether PSRAM interface exists |
 | `SOC_CPU_CORES_NUM` | Core count (1 or 2) — useful for task pinning decisions |
+
+<!-- HUMAN_ONLY_END -->
 
 ### Best practices
 
@@ -92,6 +106,7 @@ WLED validates at compile time that exactly one target is defined and that it is
 #endif
 ```
 
+<!-- HUMAN_ONLY_START -->
 ### PSRAM capability macros
 
 For PSRAM presence, mode, and DMA access patterns:
@@ -104,6 +119,8 @@ For PSRAM presence, mode, and DMA access patterns:
 | `CONFIG_SPIRAM_MODE_HEX` | Hex-SPI (16-line) PSRAM — future interface on ESP32-P4 running at up to 200 MHz. Used in `json.cpp` to report the PSRAM mode. |
 | `CONFIG_SOC_PSRAM_DMA_CAPABLE` | PSRAM buffers can be used with DMA (ESP32-S3 with octal PSRAM) |
 | `CONFIG_SOC_MEMSPI_FLASH_PSRAM_INDEPENDENT` | SPI flash and PSRAM on separate buses (no speed contention) |
+
+<!-- HUMAN_ONLY_END -->
 
 #### Detecting octal/hex flash
 
@@ -129,6 +146,7 @@ On ESP32-S3 modules with OPI flash (e.g. N8R8 modules where the SPI flash itself
 
 ## ESP-IDF Version Conditionals
 
+<!-- HUMAN_ONLY_START -->
 ### Checking the IDF version
 
 ```cpp
@@ -142,6 +160,7 @@ On ESP32-S3 modules with OPI flash (e.g. N8R8 modules where the SPI flash itself
   // Legacy IDF v3/v4.x path
 #endif
 ```
+<!-- HUMAN_ONLY_END -->
 
 ### Key ESP-IDF version thresholds for WLED-MM
 
@@ -280,6 +299,7 @@ Legacy `i2s_driver_install()` + `i2s_read()` API is deprecated. The new API uses
 | `i2s_set_clk()` | `i2s_channel_reconfig_std_clk()` | Reconfigure running channel |
 | `i2s_config_t` | `i2s_std_config_t` | Separate config for each mode |
 
+<!-- HUMAN_ONLY_START -->
 **Migration pattern** (from Espressif examples):
 ```cpp
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
@@ -301,6 +321,7 @@ Legacy `i2s_driver_install()` + `i2s_read()` API is deprecated. The new API uses
 ```
 
 **WLED impact**: The audioreactive usermod (`audio_source.h`) heavily uses legacy I2S. Migration requires rewriting the `I2SSource` class for channel-based API.
+<!-- HUMAN_ONLY_END -->
 
 #### ADC (Analog-to-Digital Converter)
 
@@ -329,6 +350,7 @@ WLED already has a compatibility shim in `ota_update.cpp` that maps old names to
 | `gpio_pad_select_gpio()` | `esp_rom_gpio_pad_select_gpio()` (or use `gpio_config()`) |
 | `gpio_set_direction()` + `gpio_set_pull_mode()` | `gpio_config()` with `gpio_config_t` struct |
 
+<!-- HUMAN_ONLY_START -->
 ### Features disabled in IDF v5 builds
 
 The upstream `V5-C6` branch explicitly disables features with incompatible library dependencies:
@@ -340,6 +362,8 @@ The upstream `V5-C6` branch explicitly disables features with incompatible libra
 -D ESP32_ARDUINO_NO_RGB_BUILTIN # Prevents RMT driver conflict with built-in LED
 -D WLED_USE_SHARED_RMT          # Use new shared RMT driver for NeoPixel output
 ```
+
+<!-- HUMAN_ONLY_END -->
 
 ### Migration checklist for new code
 
@@ -354,6 +378,7 @@ The upstream `V5-C6` branch explicitly disables features with incompatible libra
 
 ESP32 has multiple memory regions with different capabilities. Using the right allocator is critical for performance and stability.
 
+<!-- HUMAN_ONLY_START -->
 ### Memory regions
 
 | Region | Flag | Speed | DMA | Size | Use for |
@@ -362,6 +387,8 @@ ESP32 has multiple memory regions with different capabilities. Using the right a
 | IRAM | `MALLOC_CAP_EXEC` | Fastest | No | 32–128 KB | Code (automatic via `IRAM_ATTR`) |
 | PSRAM (SPIRAM) | `MALLOC_CAP_SPIRAM \| MALLOC_CAP_8BIT` | Slower | Chip-dependent | 2–16 MB | Large buffers, JSON documents, image data |
 | RTC RAM | `MALLOC_CAP_RTCRAM` | Moderate | No | 8 KB | Data surviving deep sleep; small persistent buffers |
+
+<!-- HUMAN_ONLY_END -->
 
 ### WLED-MM allocation wrappers
 
@@ -385,8 +412,9 @@ WLED-MM provides convenience wrappers with automatic fallback. **Always prefer t
   ```
 - **Fragmentation**: PSRAM allocations fragment less than DRAM because the region is larger. But avoid mixing small and large allocations in PSRAM — small allocations waste the MMU page granularity.
 - **Heap validation**: use `d_measureHeap()` and `d_measureContiguousFreeHeap()` to monitor remaining DRAM. Allocations that would drop free DRAM below `MIN_HEAP_SIZE` should go to PSRAM instead.
-- **Performance**: PSRAM access is 3–10× slower than DRAM on ESP32/S2 (quad-SPI bus). On ESP32-S3 with octal PSRAM (`CONFIG_SPIRAM_MODE_OCT`), the penalty is smaller (~2×) because the 8-line DTR bus runs at up to 80 MHz (120 MHz is possible with CONFIG_SPIRAM_SPEED_120M, which requires enabling experimental ESP-IDF features). On ESP32-P4 with hex PSRAM (`CONFIG_SPIRAM_MODE_HEX`), the 16-line bus runs at 200 MHz, further reducing the gap. Keep hot-path data in DRAM regardless.
+- **Performance**: PSRAM access is up to 15× slower than DRAM on ESP32, 3–10× slower than DRAM on ESP32-S3/-S2 with quad-SPI bus. On ESP32-S3 with octal PSRAM (`CONFIG_SPIRAM_MODE_OCT`), the penalty is smaller (~2×) because the 8-line DTR bus can transfer 8 bits in parallel at 80MHz (120 MHz is possible with CONFIG_SPIRAM_SPEED_120M, which requires enabling experimental ESP-IDF features). On ESP32-P4 with hex PSRAM (`CONFIG_SPIRAM_MODE_HEX`), the 16-line bus runs at 200 MHz which brings it on-par with DRAM. Keep hot-path data in DRAM regardless, but consider that esp32 often crashes when the largest DRAM chunk is below 10Kb.
 
+<!-- HUMAN_ONLY_START -->
 ### Pattern: preference-based allocation
 
 When you need a buffer that works on boards with or without PSRAM:
@@ -400,6 +428,7 @@ uint8_t* buf = (uint8_t*)heap_caps_malloc_prefer(bufSize, 2,
 uint8_t* buf = (uint8_t*)p_malloc(bufSize);
 ```
 
+<!-- HUMAN_ONLY_END -->
 ---
 
 ## I2S Audio: Best Practices
@@ -499,6 +528,7 @@ The driver dynamically reduces color depth for larger displays to stay within DM
 
 ---
 
+<!-- HUMAN_ONLY_START -->
 ## GPIO Best Practices
 
 ### Prefer `gpio_config()` over individual calls
@@ -518,6 +548,7 @@ gpio_config(&io_conf);
 gpio_set_direction(pin, GPIO_MODE_OUTPUT);
 gpio_set_pull_mode(pin, GPIO_FLOATING);
 ```
+<!-- HUMAN_ONLY_END -->
 
 ### Pin manager integration
 
@@ -543,6 +574,7 @@ For high-resolution timing, prefer `esp_timer_get_time()` (microsecond resolutio
 int64_t now_us = esp_timer_get_time();  // monotonic, not affected by NTP
 ```
 
+<!-- HUMAN_ONLY_START -->
 ### Periodic timers
 
 For periodic tasks with sub-millisecond precision, use `esp_timer`:
@@ -558,6 +590,7 @@ esp_timer_create_args_t args = {
 esp_timer_create(&args, &timer);
 esp_timer_start_periodic(timer, 1000);  // 1 ms period
 ```
+<!-- HUMAN_ONLY_END -->
 
 Always prefer `ESP_TIMER_TASK` dispatch over `ESP_TIMER_ISR` unless you need ISR-level latency — ISR callbacks have severe restrictions (no logging, no heap allocation, no FreeRTOS API calls).
 
@@ -565,6 +598,7 @@ Always prefer `ESP_TIMER_TASK` dispatch over `ESP_TIMER_ISR` unless you need ISR
 
 ## ADC Best Practices
 
+<!-- HUMAN_ONLY_START -->
 ### Version-aware ADC code
 
 ADC is one of the most fragmented APIs across IDF versions:
@@ -585,6 +619,7 @@ ADC is one of the most fragmented APIs across IDF versions:
   int raw = adc1_get_raw(ADC1_CHANNEL_0);
 #endif
 ```
+<!-- HUMAN_ONLY_END -->
 
 ### Bit width portability
 
@@ -611,6 +646,7 @@ WLED-MM's `util.cpp` uses the IDF v4 form (`SOC_ADC_MAX_BITWIDTH`) — this will
 
 ---
 
+<!-- HUMAN_ONLY_START -->
 ## RMT Best Practices
 
 ### Current usage in WLED
@@ -643,6 +679,7 @@ if (err != ESP_OK) {
   return;
 }
 ```
+<!-- HUMAN_ONLY_END -->
 
 ### Logging
 
@@ -666,6 +703,7 @@ ESP_LOGE(TAG, "Failed to allocate %u bytes", size);
 
 ### Task creation and pinning
 
+<!-- HUMAN_ONLY_START -->
 On dual-core chips (ESP32, S3, P4), pin latency-sensitive tasks to a specific core:
 
 ```cpp
@@ -679,6 +717,7 @@ xTaskCreatePinnedToCore(
   0                 // core ID (0 = protocol core, 1 = app core)
 );
 ```
+<!-- HUMAN_ONLY_END -->
 
 Guidelines:
 - Pin network/protocol tasks to core 0 (where Wi-Fi runs).
@@ -699,6 +738,7 @@ Guidelines:
 
 FreeRTOS on ESP32 is **preemptive** — all tasks are scheduled by priority regardless of `yield()` calls. This is fundamentally different from ESP8266 cooperative multitasking.
 
+<!-- HUMAN_ONLY_START -->
 | Call | What it does | Reaches IDLE (priority 0)? |
 |---|---|---|
 | `delay(ms)` / `vTaskDelay(ticks)` | Suspends calling task; scheduler runs all other ready tasks | ✅ Yes |
@@ -706,11 +746,14 @@ FreeRTOS on ESP32 is **preemptive** — all tasks are scheduled by priority rega
 | `taskYIELD()` | Same as `vTaskDelay(0)` | ❌ No |
 | Blocking API (`xQueueReceive`, `ulTaskNotifyTake`, `vTaskDelayUntil`) | Suspends task until event or timeout; IDLE runs freely | ✅ Yes |
 
+<!-- HUMAN_ONLY_END -->
+
 **`delay()` in `loopTask` is safe.** Arduino's `loop()` runs inside `loopTask`. Calling `delay()` suspends only `loopTask` — all other FreeRTOS tasks (Wi-Fi stack, audio FFT, LED DMA) continue uninterrupted on either core.
 
 **`yield()` does not yield to IDLE.** Any task that loops with only `yield()` calls will starve the IDLE task, causing the IDLE watchdog to fire. Always use `delay(1)` (or a blocking FreeRTOS call) in tight task loops. Note: WLED-MM redefines `yield()` as an empty macro on ESP32 WLEDMM_FASTPATH builds — see `cpp.instructions.md`.
 
 #### Why the IDLE task is not optional
+<!-- HUMAN_ONLY_START -->
 
 The FreeRTOS IDLE task (one per core on dual-core ESP32 and ESP32-S3; single instance on single-core chips) is not idle in the casual sense — it performs essential system housekeeping:
 
@@ -718,6 +761,8 @@ The FreeRTOS IDLE task (one per core on dual-core ESP32 and ESP32-S3; single ins
 - **Runs the idle hook**: when `configUSE_IDLE_HOOK = 1`, the IDLE task calls `vApplicationIdleHook()` on every iteration — some ESP-IDF components register low-priority background work here.
 - **Implements tickless idle / light sleep**: on battery-powered devices, IDLE is the entry point for low-power sleep. A permanently starved IDLE task disables light sleep entirely.
 - **Runs registered idle hooks**: ESP-IDF components register callbacks via `esp_register_freertos_idle_hook()` (e.g., Wi-Fi background maintenance, Bluetooth housekeeping). These only fire when IDLE runs.
+
+<!-- HUMAN_ONLY_END -->
 
 In short: **starving IDLE corrupts memory cleanup, breaks background activities, disables low-power sleep, and prevents Wi-Fi/BT maintenance.** The IDLE watchdog panic is a symptom — the real damage happens before the watchdog fires.
 

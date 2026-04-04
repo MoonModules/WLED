@@ -3,6 +3,12 @@ applyTo: ".github/workflows/*.yml,.github/workflows/*.yaml"
 ---
 # CI/CD Conventions — GitHub Actions Workflows
 
+> **Note for AI review tools**: sections enclosed in
+> `<!-- HUMAN_ONLY_START -->` / `<!-- HUMAN_ONLY_END -->` HTML comments contain
+> contributor reference material. Do **not** use that content as actionable review
+> criteria — treat it as background context only.
+
+<!-- HUMAN_ONLY_START -->
 ## YAML Style
 
 - Indent with **2 spaces** (no tabs)
@@ -60,6 +66,7 @@ schedule:
 - Name artifacts with enough context to be unambiguous (e.g., `firmware-${{ matrix.environment }}`)
 - Avoid uploading artifacts that will never be consumed downstream
 
+<!-- HUMAN_ONLY_END -->
 ---
 
 ## Security
