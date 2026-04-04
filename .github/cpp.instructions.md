@@ -63,6 +63,7 @@ void calculateCRC(const uint8_t* data, size_t len) {
 
   Single-line AI-assisted edits do not need the marker — use it when the AI produced a contiguous block that a human did not write line-by-line.
 
+<!-- HUMAN_ONLY_BEGIN -->
 - **Function & feature comments:** Every non-trivial function should have a brief comment above it describing what it does. Include a note about each parameter when the names alone are not self-explanatory:
 
 ```cpp
@@ -74,6 +75,8 @@ void calculateCRC(const uint8_t* data, size_t len) {
  ***** */
 uint8_t gammaCorrect(uint8_t value, float gamma);
 ```
+<!-- HUMAN_ONLY_END -->
+
 
   Short accessor-style functions (getters/setters, one-liners) may skip this if their purpose is obvious from the name.
 
