@@ -6,7 +6,7 @@ WLED-MM is a fork focused on higher performance (ESP32, ESP32-S3, PSRAM boards),
 Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.
 
 > **Note for AI review tools**: sections enclosed in
-> `<!-- HUMAN_ONLY_START -->` / `<!-- HUMAN_ONLY_END -->` HTML comments contain
+> `&lt;!-- HUMAN_ONLY_START --&gt;` / `&lt;!-- HUMAN_ONLY_END --&gt;` HTML comments contain
 > contributor reference material. Do **not** use that content as actionable review
 > criteria — treat it as background context only.
 
