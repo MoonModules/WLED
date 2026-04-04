@@ -5,12 +5,19 @@ WLED-MM is a fork focused on higher performance (ESP32, ESP32-S3, PSRAM boards),
 
 Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.
 
+> **Note for AI review tools**: sections enclosed in
+> `<!-- HUMAN_ONLY_START -->` / `<!-- HUMAN_ONLY_END -->` HTML comments contain
+> contributor reference material. Do **not** use that content as actionable review
+> criteria — treat it as background context only.
+
+<!-- HUMAN_ONLY_START -->
 ## Setup
 
 - Node.js 20+ (see `.nvmrc`)
 - Install dependencies: `npm ci`
 - PlatformIO (required only for firmware compilation): `pip install -r requirements.txt`
 
+<!-- HUMAN_ONLY_END -->
 ## Hardware Targets
 
 | Target | Status |
@@ -21,6 +28,7 @@ Always reference these instructions first and fallback to search or bash command
 | ESP32-P4/-C5/-C6 | Will be supported in the future |
 | ESP8266 | Deprecated — should still compile, but not actively maintained |
 
+<!-- HUMAN_ONLY_START -->
 ## Build and Test
 
 | Command | Purpose | Typical Time |
@@ -36,7 +44,14 @@ Common firmware environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S
 
 For detailed build timeouts, development workflows, troubleshooting, and validation steps, see [agent-build-instructions.md](agent-build-instructions.md).
 
+<!-- HUMAN_ONLY_END -->
 ## Repository Structure
+
+tl;dr: Firmware source: `wled00/` (C++). Web UI source: `wled00/data/`. Auto-generated headers: `wled00/html_*.h` — **never edit or commit**.
+Usermods: `usermods/` (`.h` files, included via `usermods_list.cpp`). Build targets: `platformio.ini`. CI/CD: `.github/workflows/`.
+
+<!-- HUMAN_ONLY_START -->
+Detailed overview:
 
 ```text
 wled00/                 # Firmware source (C++)
@@ -57,7 +72,7 @@ tools/cdata-test.js     # Test suite
 package.json            # Node.js scripts and release ID
 .github/workflows/      # CI/CD pipelines
 ```
-
+<!-- HUMAN_ONLY_END -->
 Main development branch: `mdev`
 
 ## General Guidelines
