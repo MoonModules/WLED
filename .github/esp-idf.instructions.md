@@ -60,8 +60,8 @@ WLED validates at compile time that exactly one target is defined and that it is
 
 `SOC_*` macros (from `soc/soc_caps.h`) describe what the current chip supports. They are the correct way to check for peripheral features — they stay accurate when new chips are added, unlike `CONFIG_IDF_TARGET_*` checks.
 
-### Important `SOC_*` macros used in WLED-MM
 <!-- HUMAN_ONLY_START -->
+### Important `SOC_*` macros used in WLED-MM
 
 | Macro | Type | Used in | Purpose |
 |---|---|---|---|
@@ -73,9 +73,10 @@ WLED validates at compile time that exactly one target is defined and that it is
 | `SOC_ADC_CHANNEL_NUM(unit)` | `int` | `pin_manager.cpp` | ADC channels per unit |
 | `SOC_UART_NUM` | `int` | `dmx_input.cpp` | Number of UART peripherals |
 | `SOC_DRAM_LOW` / `SOC_DRAM_HIGH` | `addr` | `util.cpp` | DRAM address boundaries for validation |
-<!-- HUMAN_ONLY_END -->
 
-Common pitfall: `SOC_ADC_MAX_BITWIDTH` (ADC resolution 12 or 13 bits) was renamed to `CONFIG_SOC_ADC_RTC_MAX_BITWIDTH` in IDF v5.
+<!-- HUMAN_ONLY_END -->
+### Key pitfall
+`SOC_ADC_MAX_BITWIDTH` (ADC resolution 12 or 13 bits) was renamed to `CONFIG_SOC_ADC_RTC_MAX_BITWIDTH` in IDF v5.
 
 <!-- HUMAN_ONLY_START -->
 ### Less commonly used but valuable

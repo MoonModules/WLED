@@ -130,7 +130,7 @@ const uint_fast16_t rows = virtualHeight();
 <!-- HUMAN_ONLY_END -->
 ### `const` references to avoid copies
 
-Pass and store objects by `const &` (or `&`) instead of copying them implicitly. This avoids constructing temporary objects on every access — especially important in loops:
+Pass and store objects by `const &` (or `&`) instead of copying them implicitly. This avoids constructing temporary objects on every access — especially important in loops.
 
 <!-- HUMAN_ONLY_START -->
 ```cpp
@@ -299,7 +299,7 @@ if (unsigned(i) >= virtualLength()) return; // bounds check (catches negative i 
 
 ### Avoid Nested Calls — Fast Path / Complex Path
 
-Avoid calling non-inline functions or making complex decisions inside per-pixel hot-path code. When a function has both a common simple case and a rare complex case, split it into two variants and choose once per frame rather than per pixel:
+Avoid calling non-inline functions or making complex decisions inside per-pixel hot-path code. When a function has both a common simple case and a rare complex case, split it into two variants and choose once per frame rather than per pixel.
 <!-- HUMAN_ONLY_START -->
 ```cpp
 // Decision made once per frame in startFrame(), stored in a bool
@@ -384,7 +384,7 @@ This avoids FreeRTOS semaphore overhead and the risk of forgetting `esp32SemGive
 <!-- HUMAN_ONLY_END -->
 ### Pre-Compute Outside Loops
 
-Move invariant calculations before the loop. Pre-compute reciprocals to replace division with multiplication:
+Move invariant calculations before the loop. Pre-compute reciprocals to replace division with multiplication.
 <!-- HUMAN_ONLY_START -->
 ```cpp
 const uint_fast16_t cols = virtualWidth();
