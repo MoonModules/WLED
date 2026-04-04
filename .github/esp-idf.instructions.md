@@ -30,10 +30,10 @@ Use `CONFIG_IDF_TARGET_*` macros to gate chip-specific code at compile time. The
 | `CONFIG_IDF_TARGET_ESP32P4` | ESP32-P4 | RISC-V dual-core | High performance. Future target |
 
 <!-- HUMAN_ONLY_END -->
-
 ### Build-time validation
 WLED validates at compile time that exactly one target is defined and that it is a supported chip (`wled.cpp` lines 39–61). Follow this pattern when adding new chip-specific branches:
 
+<!-- HUMAN_ONLY_START -->
 ```cpp
 #if defined(CONFIG_IDF_TARGET_ESP32)
   // classic ESP32 path
@@ -46,6 +46,7 @@ WLED validates at compile time that exactly one target is defined and that it is
 #endif
 ```
 
+<!-- HUMAN_ONLY_END -->
 ### Guidelines
 
 - **Always test on the actual chip** before claiming support. Simulators and cross-compilation can hide peripheral differences.
@@ -160,7 +161,6 @@ On ESP32-S3 modules with OPI flash (e.g. N8R8 modules where the SPI flash itself
   // Legacy IDF v3/v4.x path
 #endif
 ```
-<!-- HUMAN_ONLY_END -->
 
 ### Key ESP-IDF version thresholds for WLED-MM
 
@@ -174,6 +174,7 @@ On ESP32-S3 modules with OPI flash (e.g. N8R8 modules where the SPI flash itself
 | **5.1.0** | Matter protocol support; new `esp_flash` API stable |
 | **5.3+** | arduino-esp32 v3.x compatibility; C6/P4 support |
 
+<!-- HUMAN_ONLY_END -->
 ### Guidelines
 
 - When adding a version guard, **always include a comment** explaining *what* changed and *why* the guard is needed.
@@ -193,6 +194,7 @@ On ESP32-S3 modules with OPI flash (e.g. N8R8 modules where the SPI flash itself
 
 The jump from IDF v4.4 (arduino-esp32 v2.x) to IDF v5.x (arduino-esp32 v3.x) is the largest API break in ESP-IDF history. This section documents the critical changes and recommended migration patterns based on the upstream WLED `V5-C6` branch (`https://github.com/wled/WLED/tree/V5-C6`). Note: WLED-MM has not yet migrated to IDF v5 — these patterns prepare for the future migration.
 
+<!-- HUMAN_ONLY_START -->
 ### Compiler changes
 
 IDF v5.x ships a much newer GCC toolchain. Key versions:
@@ -264,33 +266,41 @@ These work on both IDF v4.4 and v5.x — prefer them now:
 | Narrowing in aggregate init | Warning | Error | Use explicit cast or wider type |
 | Implicit `this` capture in lambdas | Accepted in `[=]` | Deprecated warning; error in C++20 mode | Use `[=, this]` or `[&]` |
 
+<!-- HUMAN_ONLY_END -->
 #### Recommendations
 
 - **Do not raise the minimum C++ standard yet.** WLED-MM must still build on IDF v4.4 (GCC 8.4, C++17). Use `#if __cplusplus > 201703L` to gate C++20 features.
+- **Mark intentional fallthrough** with `[[fallthrough]]` — GCC 14 warns on unmarked fallthrough by default.
+<!-- HUMAN_ONLY_START -->
 - **Prefer `std::optional` over sentinel values** (e.g., `-1` for "no pin") in new code — it works on both compilers.
 - **Use `std::string_view`** for read-only string parameters instead of `const char*` or `const String&` — zero-copy and works on GCC 8+.
 - **Avoid raw `union` type punning** — prefer `memcpy` (GCC 8) or `std::bit_cast` (GCC 13+) for strict-aliasing safety.
-- **Mark intentional fallthrough** with `[[fallthrough]]` — GCC 14 warns on unmarked fallthrough by default.
 
+<!-- HUMAN_ONLY_END -->
 ### Deprecated and removed APIs
 
 #### RMT (Remote Control Transceiver)
 
-The legacy `rmt_*` functions are removed in IDF v5. The new API is channel-based:
+The legacy `rmt_*` functions are removed in IDF v5. Do not introduce new legacy RMT calls.
 
+<!-- HUMAN_ONLY_START -->
+The new API is channel-based:
 | IDF v4 (legacy) | IDF v5 (new) | Notes |
 |---|---|---|
 | `rmt_config()` + `rmt_driver_install()` | `rmt_new_tx_channel()` / `rmt_new_rx_channel()` | Channels are now objects |
 | `rmt_write_items()` | `rmt_transmit()` with encoder | Requires `rmt_encoder_t` |
 | `rmt_set_idle_level()` | Configure in channel config | Set at creation time |
 | `rmt_item32_t` | `rmt_symbol_word_t` | Different struct layout |
+<!-- HUMAN_ONLY_END -->
 
 **WLED impact**: NeoPixelBus LED output and IR receiver both use legacy RMT. The upstream `V5-C6` branch adds `-D WLED_USE_SHARED_RMT` and disables IR until the library is ported.
 
 #### I2S (Inter-IC Sound)
 
-Legacy `i2s_driver_install()` + `i2s_read()` API is deprecated. The new API uses channel handles:
+Legacy `i2s_driver_install()` + `i2s_read()` API is deprecated. When touching audio source code, wrap any I2S init in `#if ESP_IDF_VERSION` guards.
 
+<!-- HUMAN_ONLY_START -->
+ The new API uses channel handles:
 | IDF v4 (legacy) | IDF v5 (new) | Notes |
 |---|---|---|
 | `i2s_driver_install()` | `i2s_channel_init_std_mode()` | Separate STD/PDM/TDM modes |
@@ -299,7 +309,6 @@ Legacy `i2s_driver_install()` + `i2s_read()` API is deprecated. The new API uses
 | `i2s_set_clk()` | `i2s_channel_reconfig_std_clk()` | Reconfigure running channel |
 | `i2s_config_t` | `i2s_std_config_t` | Separate config for each mode |
 
-<!-- HUMAN_ONLY_START -->
 **Migration pattern** (from Espressif examples):
 ```cpp
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
@@ -319,10 +328,10 @@ Legacy `i2s_driver_install()` + `i2s_read()` API is deprecated. The new API uses
   // Legacy i2s_driver_install() path
 #endif
 ```
-
-**WLED impact**: The audioreactive usermod (`audio_source.h`) heavily uses legacy I2S. Migration requires rewriting the `I2SSource` class for channel-based API.
 <!-- HUMAN_ONLY_END -->
+**WLED impact**: The audioreactive usermod (`audio_source.h`) heavily uses legacy I2S. Migration requires rewriting the `I2SSource` class for channel-based API.
 
+<!-- HUMAN_ONLY_START -->
 #### ADC (Analog-to-Digital Converter)
 
 Legacy `adc1_get_raw()` and `esp_adc_cal_*` are deprecated:
@@ -350,7 +359,6 @@ WLED already has a compatibility shim in `ota_update.cpp` that maps old names to
 | `gpio_pad_select_gpio()` | `esp_rom_gpio_pad_select_gpio()` (or use `gpio_config()`) |
 | `gpio_set_direction()` + `gpio_set_pull_mode()` | `gpio_config()` with `gpio_config_t` struct |
 
-<!-- HUMAN_ONLY_START -->
 ### Features disabled in IDF v5 builds
 
 The upstream `V5-C6` branch explicitly disables features with incompatible library dependencies:
@@ -364,7 +372,6 @@ The upstream `V5-C6` branch explicitly disables features with incompatible libra
 ```
 
 <!-- HUMAN_ONLY_END -->
-
 ### Migration checklist for new code
 
 1. **Never use a removed API without a version guard.** Always provide both old and new paths, or disable the feature on IDF v5.
@@ -785,6 +792,7 @@ esp_task_wdt_add(NULL);     // re-register
 
 > **IDF v5 note**: In IDF v5, `esp_task_wdt_add()` and `esp_task_wdt_delete()` require an explicit `TaskHandle_t`. Use `xTaskGetCurrentTaskHandle()` instead of `NULL`.
 
+<!-- HUMAN_ONLY_START -->
 ---
 
 ## Quick Reference: IDF v4 → v5 API Mapping
@@ -799,3 +807,4 @@ esp_task_wdt_add(NULL);     // re-register
 | GPIO | `driver/gpio.h` | `driver/gpio.h` | `gpio_pad_select_gpio()` removed |
 | Timer | `driver/timer.h` | `driver/gptimer.h` | General-purpose timer handles |
 | PCNT | `driver/pcnt.h` | `driver/pulse_cnt.h` | Handle-based API |
+<!-- HUMAN_ONLY_END -->
