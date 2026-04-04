@@ -285,14 +285,15 @@ The legacy `rmt_*` functions are removed in IDF v5. Do not introduce new legacy 
 
 <!-- HUMAN_ONLY_START -->
 The new API is channel-based:
+
 | IDF v4 (legacy) | IDF v5 (new) | Notes |
 |---|---|---|
 | `rmt_config()` + `rmt_driver_install()` | `rmt_new_tx_channel()` / `rmt_new_rx_channel()` | Channels are now objects |
 | `rmt_write_items()` | `rmt_transmit()` with encoder | Requires `rmt_encoder_t` |
 | `rmt_set_idle_level()` | Configure in channel config | Set at creation time |
 | `rmt_item32_t` | `rmt_symbol_word_t` | Different struct layout |
-<!-- HUMAN_ONLY_END -->
 
+<!-- HUMAN_ONLY_END -->
 **WLED impact**: NeoPixelBus LED output and IR receiver both use legacy RMT. The upstream `V5-C6` branch adds `-D WLED_USE_SHARED_RMT` and disables IR until the library is ported.
 
 #### I2S (Inter-IC Sound)
