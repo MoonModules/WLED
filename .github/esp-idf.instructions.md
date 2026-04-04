@@ -423,7 +423,7 @@ WLED-MM provides convenience wrappers with automatic fallback. **Always prefer t
 - **Heap validation**: use `d_measureHeap()` and `d_measureContiguousFreeHeap()` to monitor remaining DRAM. Allocations that would drop free DRAM below `MIN_HEAP_SIZE` should go to PSRAM instead.
 - **Performance**: Keep hot-path data in DRAM. Prefer PSRAM for capacity-oriented buffers and monitor contiguous DRAM headroom.
 <!-- HUMAN_ONLY_START -->
-   PSRAM access is up to 15× slower than DRAM on ESP32, 3–10× slower than DRAM on ESP32-S3/-S2 with quad-SPI bus. On ESP32-S3 with octal PSRAM (`CONFIG_SPIRAM_MODE_OCT`), the penalty is smaller (~2×) because the 8-line DTR bus can transfer 8 bits in parallel at 80MHz (120 MHz is possible with CONFIG_SPIRAM_SPEED_120M, which requires enabling experimental ESP-IDF features). On ESP32-P4 with hex PSRAM (`CONFIG_SPIRAM_MODE_HEX`), the 16-line bus runs at 200 MHz which brings it on-par with DRAM. Keep hot-path data in DRAM regardless, but consider that esp32 often crashes when the largest DRAM chunk gets below 10 KB.
+   PSRAM access is up to 15× slower than DRAM on ESP32, 3–10× slower than DRAM on ESP32-S3/-S2 with quad-SPI bus. On ESP32-S3 with octal PSRAM (`CONFIG_SPIRAM_MODE_OCT`), the penalty is smaller (~2×) because the 8-line DTR bus can transfer 8 bits in parallel at 80 MHz (120 MHz is possible with CONFIG_SPIRAM_SPEED_120M, which requires enabling experimental ESP-IDF features). On ESP32-P4 with hex PSRAM (`CONFIG_SPIRAM_MODE_HEX`), the 16-line bus runs at 200 MHz which brings it on-par with DRAM. Keep hot-path data in DRAM regardless, but consider that ESP32 often crashes when the largest DRAM chunk gets below 10 KB.
 <!-- HUMAN_ONLY_END -->
 
 <!-- HUMAN_ONLY_START -->
