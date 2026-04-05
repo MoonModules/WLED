@@ -127,10 +127,10 @@ void initPresetsFile()
     // treat an empty JSON file (e.g. "{}", "{ }") the same as a missing file:
     // f.size() < 4 is the same threshold used in appendObjectToFile() to detect an uninitialized file
     File f = WLED_FS.open(getFileName(), "r");
-    bool empty = f && f.size() < 4;   // file does exist due to previous "if"
+    bool empty = f && f.size() < 4;             // file does exist due to previous "if"
     if (f) f.close();
-    if (!empty) return;               // file not empty -> keep (nothing to init)
-    WLED_FS.remove(getFileName());    // remove the empty file so it can be recreated below
+    if (empty) WLED_FS.remove(getFileName());   // remove the empty file so it can be recreated below
+    else return;                                // file not empty -> keep (nothing to init)
   }
 
   StaticJsonDocument<64> doc;
