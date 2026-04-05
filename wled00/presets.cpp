@@ -123,7 +123,15 @@ bool getPresetName(byte index, String& name)
 
 void initPresetsFile()
 {
-  if (WLED_FS.exists(getFileName())) return;
+  if (WLED_FS.exists(getFileName())) {
+    // treat an empty JSON file (e.g. "{}") the same as a missing file:
+    // f.size() < 3 is the same threshold used in appendObjectToFile() to detect an uninitialized file
+    File f = WLED_FS.open(getFileName(), "r");
+    bool empty = f && f.size() < 3;
+    if (f) f.close();
+    if (!empty) return;
+    WLED_FS.remove(getFileName()); // remove the empty file so it can be recreated below
+  }
 
   StaticJsonDocument<64> doc;
   JsonObject sObj = doc.to<JsonObject>();
