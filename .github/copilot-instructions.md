@@ -28,8 +28,8 @@ Always reference these instructions first and fallback to search or bash command
 | ESP32-P4/-C5/-C6 | Will be supported in the future |
 | ESP8266 | Deprecated — should still compile, but not actively maintained |
 
-<!-- HUMAN_ONLY_START -->
 ## Build and Test
+<!-- HUMAN_ONLY_START -->
 
 | Command | Purpose | Typical Time |
 |---|---|---|
@@ -38,13 +38,14 @@ Always reference these instructions first and fallback to search or bash command
 | `npm run dev` | Watch mode — auto-rebuilds web UI on file changes | — |
 | `pio run -e <env>` | Build firmware for a hardware target | 15–20 min |
 
-**Always run `npm ci; npm run build` before `pio run`.** The web UI build generates `wled00/html_*.h` header files required by firmware compilation.
+<!-- HUMAN_ONLY_END -->
 
+**Always run `npm ci; npm run build` before `pio run`.** The web UI build generates `wled00/html_*.h` header files required by firmware compilation.
+**Build firmware to validate code changes**: `pio run -e esp32_4MB_V4_M` — must succeed, never skip this step.
 Common firmware environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S3_8MB_PSRAM_M_qspi`, `esp32_16MB_V4_M_eth`, `esp32dev_compat`, `esp8266_4MB_S` (deprecated)
 
 For detailed build timeouts, development workflows, troubleshooting, and validation steps, see [agent-build-instructions.md](agent-build-instructions.md).
 
-<!-- HUMAN_ONLY_END -->
 ## Repository Structure
 
 tl;dr: 
@@ -52,6 +53,7 @@ tl;dr:
 * Build targets: `platformio.ini`.
 * Web UI source: `wled00/data/`.
 * Auto-generated headers: `wled00/html_*.h` — **never edit or commit**.
+* ArduinoJSON + AsyncJSON: `wled00/dependencies/json`
 * Usermods: `usermods/` (`.h` files, included via `usermods_list.cpp`).
 * CI/CD: `.github/workflows/`.
 
@@ -61,23 +63,23 @@ Main development trunk: `mdev` branch. Make PRs against this branch.
 Detailed overview:
 
 ```text
-wled00/                 # Firmware source (C++)
-  ├── data/             # Web UI source (HTML, CSS, JS)
-  ├── src/              # Core modules, fonts, dependencies
-  ├── html_*.h          # Auto-generated (DO NOT EDIT OR COMMIT)
-  └── wled.h            # Main firmware configuration, and global variables
-usermods/               # Community addons (.h files, included via usermods_list.cpp)
-lib/                    # Project specific custom libraries. PlatformIO will compile them to separate static libraries and link them
-platformio.ini          # Build targets and configuration
+wled00/                     # Firmware source (C++)
+  ├── data/                 # Web UI source (HTML, CSS, JS)
+  ├── src/                  # Core modules, fonts, dependencies
+       └─ dependencies/json # Project-specific ArduinoJSON (v6.18.1) and AsyncJSON (v6)
+  ├── html_*.h              # Auto-generated (DO NOT EDIT OR COMMIT)
+  └── wled.h                # Main firmware configuration, and global variables
+usermods/                   # Community addons (.h files, included via usermods_list.cpp)
+lib/                           # Project specific custom libraries. PlatformIO will compile them to separate static libraries and link them
+platformio.ini                 # Build targets and configuration
 platformio_override.sample.ini # examples for custom build configurations - entries must be copied into platformio_override.ini to use them.
                                # platformio_override.ini is _not_ stored in the WLED repository!
-
-pio-scripts/            # Build tools (platformio)
-tools/                  # Build tools (Node.js), partition files, and generic utilities
-tools/cdata.js          # Web UI → header build script
-tools/cdata-test.js     # Test suite
-package.json            # Node.js scripts and release ID
-.github/workflows/      # CI/CD pipelines
+pio-scripts/                # Build tools (platformio)
+tools/                      # Build tools (Node.js), partition files, and generic utilities
+tools/cdata.js              # Web UI → header build script
+tools/cdata-test.js         # Test suite
+package.json                # Node.js scripts and release ID
+.github/workflows/          # CI/CD pipelines
 ```
 <!-- HUMAN_ONLY_END -->
 

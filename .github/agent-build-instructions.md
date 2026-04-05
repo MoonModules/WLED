@@ -38,12 +38,12 @@ Use these timeout values when running builds:
 3. Then build and test firmware
 
 
-## Before Finishing Work
+## Before Finishing Work - Testing
 
 **You MUST complete ALL of these before marking work as done:**
 
 1. **Run tests**: `npm test` — must pass
-2. **Build firmware**: `pio run -e esp32_4MB_V4_M` — must succeed
+2. **Build firmware**: `pio run -e esp32_4MB_V4_M` — must succeed after source code changes, **never skip this step**.
    - Set timeout to 30+ minutes, **never cancel**
    - Choose `esp32_4MB_V4_M` as a common, representative environment
    - If the build fails, fix the issue before proceeding
