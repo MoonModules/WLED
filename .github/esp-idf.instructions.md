@@ -499,6 +499,7 @@ The ESP32 has an audio PLL for precise sample rates. Rules:
 
 - Not supported on ESP32-C3 (`SOC_I2S_SUPPORTS_PDM_RX` not defined).
 - ESP32-S3 PDM has known issues: sample rate at 50% of expected, very low amplitude.
+  - The "very low amplitude" issue may be related to bit depth: Espressif's IDF documentation states that **in PDM mode, the data unit width is always 16 bits** regardless of the configured `bits_per_sample`. If the driver is set to 32-bit samples but PDM delivers 16-bit data, amplitude will appear at ~1/65536 of expected. Setting `bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT` explicitly (or casting the received `int32_t` buffer as `int16_t`) may restore proper amplitude. See [espressif/esp-idf#8660](https://github.com/espressif/esp-idf/issues/8660).
 - No clock pin (`I2S_CKPIN = -1`) triggers PDM mode in WLED-MM.
 
 ---
@@ -586,6 +587,13 @@ For high-resolution timing, prefer `esp_timer_get_time()` (microsecond resolutio
 int64_t now_us = esp_timer_get_time();  // monotonic, not affected by NTP
 ```
 
+> **Note**: In arduino-esp32, both `millis()` and `micros()` are thin wrappers around `esp_timer_get_time()` — they share the same monotonic clock source. Prefer the direct call when you need the full 64-bit value or ISR-safe access without truncation:
+> ```cpp
+> // arduino-esp32 internals (cores/esp32/esp32-hal-misc.c):
+> // unsigned long micros() { return (unsigned long)(esp_timer_get_time()); }
+> // unsigned long millis() { return (unsigned long)(esp_timer_get_time() / 1000ULL); }
+> ```
+
 <!-- HUMAN_ONLY_START -->
 ### Periodic timers
 
@@ -605,6 +613,29 @@ esp_timer_start_periodic(timer, 1000);  // 1 ms period
 <!-- HUMAN_ONLY_END -->
 
 Always prefer `ESP_TIMER_TASK` dispatch over `ESP_TIMER_ISR` unless you need ISR-level latency — ISR callbacks have severe restrictions (no logging, no heap allocation, no FreeRTOS API calls).
+
+### Precision waiting: coarse delay then spin-poll
+
+When waiting for a precise future deadline (e.g., FPS limiting, protocol timing), avoid spinning the entire duration — that wastes CPU and starves other tasks. Instead, yield to FreeRTOS while time allows, then spin only for the final window:
+
+```cpp
+// Wait until 'target_us' (a micros() / esp_timer_get_time() timestamp)
+long time_to_wait = (long)(target_us - micros());
+// Coarse phase: yield to FreeRTOS while we have more than ~2 ms remaining.
+// vTaskDelay(1) suspends the task for one RTOS tick, letting the Wi-Fi stack,
+// audio FFT, and other tasks run freely.
+while (time_to_wait > 2000) {
+  vTaskDelay(1);
+  time_to_wait = (long)(target_us - micros());
+}
+// Fine phase: busy-poll the last ≤2 ms for microsecond accuracy.
+// micros() wraps esp_timer_get_time() so this is low-overhead.
+while ((long)(target_us - micros()) > 0) { /* spin */ }
+```
+
+> The threshold (2000 µs here) should be at least one RTOS tick (default 1 ms on ESP32) plus some margin. A value of 1500–3000 µs works well in practice.
+>
+> Reference implementation: [troyhacks/WLED udp.cpp](https://github.com/troyhacks/WLED/blob/P4_experimental/wled00/udp.cpp#L909-L922)
 
 ---
 
@@ -690,6 +721,15 @@ if (err != ESP_OK) {
   DEBUGSR_PRINTF("I2S read failed: %s\n", esp_err_to_name(err));
   return;
 }
+```
+
+For situations between these two extremes — where you want the `ESP_ERROR_CHECK` formatted log message (file, line, error name) but must not abort — use `ESP_ERROR_CHECK_WITHOUT_ABORT()`:
+
+```cpp
+// Logs in the same format as ESP_ERROR_CHECK, but returns the error code instead of aborting.
+// Useful for non-fatal driver calls where you want visibility without crashing.
+esp_err_t err = ESP_ERROR_CHECK_WITHOUT_ABORT(i2s_set_clk(AR_I2S_PORT, rate, bits, ch));
+if (err != ESP_OK) return;  // handle as needed
 ```
 <!-- HUMAN_ONLY_END -->
 
