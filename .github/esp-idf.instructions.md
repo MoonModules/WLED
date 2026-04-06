@@ -619,7 +619,7 @@ Always prefer `ESP_TIMER_TASK` dispatch over `ESP_TIMER_ISR` unless you need ISR
 ### Precision waiting: coarse delay then spin-poll
 
 When waiting for a precise future deadline (e.g., FPS limiting, protocol timing), avoid spinning the entire duration — that wastes CPU and starves other tasks. Instead, yield to FreeRTOS while time allows, then spin only for the final window.
-<!-- HUMAN_ONLY_BEGIN -->
+<!-- HUMAN_ONLY_START -->
 ```cpp
 // Wait until 'target_us' (a micros() / esp_timer_get_time() timestamp)
 long time_to_wait = (long)(target_us - micros());
