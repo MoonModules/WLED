@@ -501,6 +501,7 @@ The ESP32 has an audio PLL for precise sample rates. Rules:
 - ESP32-S3 PDM has known issues: sample rate at 50% of expected, very low amplitude.
   - **16-bit data width**: Espressif's IDF documentation states that in PDM mode the data unit width is always 16 bits, regardless of the configured `bits_per_sample`.
   - See [espressif/esp-idf#8660](https://github.com/espressif/esp-idf/issues/8660) for the upstream issue.
+  - **Flag `bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT` in PDM mode** — this causes the S3 low-amplitude symptom.
 - No clock pin (`I2S_CKPIN = -1`) triggers PDM mode in WLED-MM.
 
 ---
