@@ -54,6 +54,7 @@ tl;dr:
 * Auto-generated headers: `wled00/html_*.h` and `wled00/js_*.h` — **never edit or commit**.
 * ArduinoJSON + AsyncJSON: `wled00/src/dependencies/json` (included via `wled.h`). CI/CD: `.github/workflows/`.
 * Usermods: `usermods/` (`.h` files, included via `usermods_list.cpp`).
+* Contributor docs: `docs/` (coding guidelines, design docs).
 
 Main development trunk: `mdev` branch. Make PRs against this branch.
 
@@ -77,6 +78,7 @@ tools/                      # Build tools (Node.js), partition files, and generi
 tools/cdata.js              # Web UI → header build script
 tools/cdata-test.js         # Test suite
 package.json                # Node.js scripts and release ID
+docs/                       # Contributor docs: coding guidelines and design documentation
 .github/workflows/          # CI/CD pipelines
 ```
 
