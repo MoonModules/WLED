@@ -76,9 +76,9 @@ When in doubt, it is easiest to replicate the code style you find in the files y
 Our review bot (coderabbit) has learned lots of detailed guides and hints - it will suggest them automatically when you submit a PR for review.
 
 If you are curious, these are the detailed guides:
-* [C++ Coding](https://github.com/MoonModules/WLED-MM/blob/mdev/.github/cpp.instructions.md)
-* [WebUi: HTML, JS, CSS](https://github.com/MoonModules/WLED-MM/blob/mdev/.github/web.instructions.md)
-* [Using ESP-IDF directly](https://github.com/MoonModules/WLED-MM/blob/mdev/.github/esp-idf.instructions.md)
+* [C++ Coding](https://github.com/MoonModules/WLED-MM/blob/mdev/docs/cpp.instructions.md)
+* [WebUi: HTML, JS, CSS](https://github.com/MoonModules/WLED-MM/blob/mdev/docs/web.instructions.md)
+* [Using ESP-IDF directly](https://github.com/MoonModules/WLED-MM/blob/mdev/docs/esp-idf.instructions.md)
 
 Below are the main rules used the WLED-MM repository.
 
