@@ -95,7 +95,7 @@ package.json                # Node.js scripts and release ID
 - **C++ formatting available**: `clang-format` is installed but not in CI
 - No automated linting is configured — match existing code style in files you edit. 
 
-See `cpp.instructions.md`, `esp-idf.instructions.md` and `web.instructions.md` for language-specific conventions, and `cicd.instructions.md` for GitHub Actions workflows.
+See `docs/cpp.instructions.md`, `docs/esp-idf.instructions.md` and `docs/web.instructions.md` for language-specific conventions, and `docs/cicd.instructions.md` for GitHub Actions workflows.
 
 ### Attribution for AI-generated code
 Using AI-generated code can hide the source of the inspiration / knowledge / sources it used. 

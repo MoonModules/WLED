@@ -3,10 +3,10 @@
 # CodeRabbit configuration — references existing guideline files to avoid
 # duplicating conventions.  See:
 #   .github/copilot-instructions.md   — project overview & general rules
-#   .github/cpp.instructions.md       — C++ coding conventions
-#   .github/web.instructions.md       — Web UI coding conventions
-#   .github/cicd.instructions.md      — GitHub Actions / CI-CD conventions
-#   .github/esp-idf.instructions.md   — ESP-IDF / chip-specific coding guidelines
+#   docs/cpp.instructions.md          — C++ coding conventions
+#   docs/web.instructions.md          — Web UI coding conventions
+#   docs/cicd.instructions.md         — GitHub Actions / CI-CD conventions
+#   docs/esp-idf.instructions.md      — ESP-IDF / chip-specific coding guidelines
 #                                       (apply when code directly uses ESP-IDF APIs:
 #                                        esp_idf_*, I2S, RMT, ADC, GPIO, heap_caps, etc.)
 #
@@ -20,11 +20,11 @@ reviews:
   path_instructions:
     - path: "**/*.{cpp,h,hpp,ino}"
       instructions: >
-        Follow the C++ coding conventions documented in .github/cpp.instructions.md
+        Follow the C++ coding conventions documented in docs/cpp.instructions.md
         and the general project guidelines in .github/copilot-instructions.md.
         If the code under review directly uses ESP-IDF APIs (e.g. heap_caps_malloc,
         I2S, RMT, ADC, GPIO, esp_timer, or any esp_idf_* / soc_* symbols), also
-        apply the guidelines in .github/esp-idf.instructions.md.
+        apply the guidelines in docs/esp-idf.instructions.md.
 
         Key rules: 2-space indentation (no tabs), camelCase functions/variables,
         PascalCase classes, UPPER_CASE macros. Mark WLED-MM-specific changes with
@@ -36,7 +36,7 @@ reviews:
 
     - path: "wled00/data/**"
       instructions: >
-        Follow the web UI conventions documented in .github/web.instructions.md.
+        Follow the web UI conventions documented in docs/web.instructions.md.
 
         Key rules: indent HTML and JavaScript with tabs, CSS with tabs or spaces.
         Files here are built into wled00/html_*.h by tools/cdata.js — never
@@ -54,11 +54,11 @@ reviews:
         Each usermod lives in its own directory under usermods/ and is implemented
         as a .h file that is pulled in by wled00/usermods_list.cpp (guarded by
         #ifdef). Usermods do not use library.json. Follow the same C++ conventions
-        as the core firmware (.github/cpp.instructions.md).
+        as the core firmware (docs/cpp.instructions.md).
 
     - path: ".github/workflows/*.{yml,yaml}"
       instructions: >
-        Follow the CI/CD conventions documented in .github/cicd.instructions.md.
+        Follow the CI/CD conventions documented in docs/cicd.instructions.md.
 
         Key rules: 2-space indentation, descriptive name: on every workflow/job/step.
         Third-party actions must be pinned to a specific version tag — branch pins
@@ -67,7 +67,7 @@ reviews:
         into run: steps — pass them through an env: variable to prevent script
         injection. Do not use pull_request_target unless fully justified.
 
-    - path: ".github/*.instructions.md"
+    - path: "docs/*.instructions.md"
       instructions: |
         This file contains both AI-facing rules and human-only reference sections.
         Human-only sections are enclosed in `<!-- HUMAN_ONLY_START -->` /
