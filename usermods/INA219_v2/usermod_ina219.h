@@ -59,14 +59,18 @@ private:
   // Select Adafruit calibration preset matching the configured voltage/current range.
   // This sets the correct PGA gain register in the INA219 Config register (BRNG + PG bits).
   // Current and power are still computed manually from the shunt voltage for accuracy.
+  // Note: the Adafruit library has no 16V preset beyond 400 mA; for 16V + higher current
+  // setCalibration_16V_400mA() is the only available 16V option and is used for all 16V cases.
   void applyCalibration() {
     if (!ina219) return;
-    if (busVoltageRange_V <= 16 && maxCurrentRange_A <= 0.4f)
+    if (busVoltageRange_V <= 16) {
       ina219->setCalibration_16V_400mA();
-    else if (maxCurrentRange_A <= 1.0f)
-      ina219->setCalibration_32V_1A();
-    else
-      ina219->setCalibration_32V_2A();
+    } else {
+      if (maxCurrentRange_A <= 1.0f)
+        ina219->setCalibration_32V_1A();
+      else
+        ina219->setCalibration_32V_2A();
+    }
   }
 
 public:
@@ -116,8 +120,15 @@ public:
     // Calculate load voltage, current and power manually using the configured shunt value.
     // This gives correct results for any shunt resistor, independent of the INA219 calibration.
     loadVoltage_V = busVoltage_V + (shuntVoltage_mV / 1000.0f);
-    current_mA    = shuntVoltage_mV / (shuntResistor_mOhm / 1000.0f);  // I = U / R
-    power_mW      = current_mA * loadVoltage_V;
+    if (shuntResistor_mOhm < 1.0f) {
+      // Guard against division by zero / near-zero shunt value (misconfigured)
+      USER_PRINTLN(F("[INA219]: shuntResistor-mOhm is invalid (<1). Skipping current/power calculation."));
+      current_mA = 0.0f;
+      power_mW   = 0.0f;
+    } else {
+      current_mA = shuntVoltage_mV / (shuntResistor_mOhm / 1000.0f);  // I = U / R
+      power_mW   = current_mA * loadVoltage_V;
+    }
   }
 
   void addToJsonInfo(JsonObject &root) override {
@@ -180,6 +191,10 @@ public:
     configComplete &= getJsonValue(top[FPSTR(_readInterval)],    readInterval,        (uint32_t)5000);
     configComplete &= getJsonValue(top[FPSTR(_i2cAddress)],      i2cAddress,          (uint8_t)0x40);
     configComplete &= getJsonValue(top[FPSTR(_shuntResistor)],   shuntResistor_mOhm,  100.0f);
+    if (shuntResistor_mOhm < 1.0f) {
+      USER_PRINTLN(F("[INA219]: shuntResistor-mOhm clamped to minimum 1 mOhm."));
+      shuntResistor_mOhm = 1.0f;
+    }
     configComplete &= getJsonValue(top[FPSTR(_maxCurrentRange)], maxCurrentRange_A,   2.0f);
     configComplete &= getJsonValue(top[FPSTR(_busVoltageRange)], busVoltageRange_V,   (uint8_t)32);
 
