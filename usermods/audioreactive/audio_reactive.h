@@ -1774,10 +1774,23 @@ class AudioReactive : public Usermod {
       transmitData.FFT_Magnitude = my_magnitude;
       transmitData.FFT_MajorPeak = FFT_MajorPeak;
 
+      #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3)
+      // ESP32-S2 and ESP32-C3: Use broadcast like the working Python script
+      //DEBUGSR_PRINTLN("ESP32-S2/C3: Sending UDP broadcast packet (like Python script)");
+      if (fftUdp.beginPacket(IPAddress(255, 255, 255, 255), audioSyncPort) != 0) {
+        fftUdp.write(reinterpret_cast<uint8_t *>(&transmitData), sizeof(transmitData));
+        int result = fftUdp.endPacket();
+        //DEBUGSR_PRINTF("UDP broadcast packet sent, result: %d\n", result);
+      }
+      #else
+      // Original ESP32 and other variants
+      //DEBUGSR_PRINTLN("ESP32: Sending multicast packet");
       if (fftUdp.beginMulticastPacket() != 0) { // beginMulticastPacket returns 0 in case of error
         fftUdp.write(reinterpret_cast<uint8_t *>(&transmitData), sizeof(transmitData));
-        fftUdp.endPacket();
+        int result = fftUdp.endPacket();
+        //DEBUGSR_PRINTF("Multicast packet sent, result: %d\n", result);
       }
+      #endif
       
       frameCounter++;
     } // transmitAudioData()
@@ -2226,11 +2239,19 @@ class AudioReactive : public Usermod {
       }
       
       if ((audioSyncPort > 0) && (audioSyncEnabled > AUDIOSYNC_NONE)) {
-      #ifdef ARDUINO_ARCH_ESP32
+      //DEBUGSR_PRINTF("Connecting UDP: port=%d, audioSyncEnabled=%d\n", audioSyncPort, audioSyncEnabled);
+      #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3)
+        // ESP32-S2 and ESP32-C3 may have issues with beginMulticast()
+        // Use regular UDP connection instead
+        //DEBUGSR_PRINTLN("ESP32-S2/C3: Using regular UDP begin");
+        udpSyncConnected = fftUdp.begin(audioSyncPort);
+      #elif defined(ARDUINO_ARCH_ESP32)
+        //DEBUGSR_PRINTLN("ESP32: Using multicast begin");
         udpSyncConnected = fftUdp.beginMulticast(IPAddress(239, 0, 0, 1), audioSyncPort);
       #else
         udpSyncConnected = fftUdp.beginMulticast(WiFi.localIP(), IPAddress(239, 0, 0, 1), audioSyncPort);
       #endif
+        //DEBUGSR_PRINTF("UDP connection result: %s\n", udpSyncConnected ? "SUCCESS" : "FAILED");
         receivedFormat = 0;
         if (udpSyncConnected) last_UDPTime = millis();
         if (apActive && !(WLED_CONNECTED)) {
@@ -2474,13 +2495,14 @@ class AudioReactive : public Usermod {
       }
 #endif
 
-#ifdef ARDUINO_ARCH_ESP32
+#if defined(ARDUINO_ARCH_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3)
       //UDP Microphone Sync  - transmit mode
     #if defined(WLEDMM_FASTPATH)
       if ((audioSyncEnabled & AUDIOSYNC_SEND) && (haveNewFFTResult || (millis() - lastTime > 24))) {  // fastpath: send data once results are ready, or each 25ms as fallback (max sampling time is 23ms)
     #else
       if ((audioSyncEnabled & AUDIOSYNC_SEND) && (millis() - lastTime > 20)) {                        // standard: send data each 20ms
     #endif
+        //DEBUGSR_PRINTF("Calling transmitAudioData: audioSyncEnabled=%d, AUDIOSYNC_SEND=%d\n", audioSyncEnabled, AUDIOSYNC_SEND);
         haveNewFFTResult = false; // reset notification
         // Only run the transmit code IF we're in Transmit mode
         transmitAudioData();
