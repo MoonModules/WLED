@@ -77,7 +77,10 @@ public:
   UsermodINA219(const char *name, bool enabled) : Usermod(name, enabled) {}
 
   void setup() override {
-    if (!enabled) return;
+    if (!enabled) {
+      initDone = true;  // mark as initialized so re-enabling via UI triggers (re)setup
+      return;
+    }
 
     if (!pinManager.joinWire()) {  // WLEDMM: allocates global I2C pins and starts Wire
       USER_PRINTLN(F("[INA219]: failed to join I2C bus."));
@@ -162,8 +165,8 @@ public:
     curr.add(F(" mA"));
 
     JsonArray pwr   = user.createNestedArray(F("INA219 Power"));
-    pwr.add(power_mW);
-    pwr.add(F(" mW"));
+    pwr.add(roundf(power_mW / 10.0f) / 100.0f);
+    pwr.add(F(" W"));
   }
 
   void addToConfig(JsonObject &root) override {
@@ -186,6 +189,7 @@ public:
     bool configComplete = !top.isNull();
 
     uint8_t oldAddress = i2cAddress;
+    bool    oldEnabled = enabled;
 
     configComplete &= getJsonValue(top[F("enabled")],            enabled,              false);
     configComplete &= getJsonValue(top[FPSTR(_readInterval)],    readInterval,        (uint32_t)5000);
@@ -202,9 +206,9 @@ public:
       DEBUG_PRINTLN(F("[INA219] config loaded."));
     } else {
       DEBUG_PRINTLN(F("[INA219] config (re)loaded."));
-      if (oldAddress != i2cAddress) {
-        setup();  // reinitialize sensor with new I2C address
-      } else {
+      if ((oldAddress != i2cAddress) || (!oldEnabled && enabled) || (enabled && !sensorFound)) {
+        setup();  // (re)initialize sensor: address changed, just enabled, or previously not found
+      } else if (enabled && sensorFound) {
         applyCalibration();  // update PGA gain for new voltage/current range
       }
     }
