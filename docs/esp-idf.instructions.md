@@ -31,7 +31,7 @@ Use `CONFIG_IDF_TARGET_*` macros to gate chip-specific code at compile time. The
 
 <!-- HUMAN_ONLY_END -->
 ### Build-time validation
-WLED validates at compile time that exactly one target is defined and that it is a supported chip (`wled.cpp` lines 39–61). Follow this pattern when adding new chip-specific branches:
+WLED-MM validates at compile time that exactly one target is defined and that it is a supported chip (`wled.cpp` lines 39–61). Follow this pattern when adding new chip-specific branches:
 
 <!-- HUMAN_ONLY_START -->
 ```cpp
@@ -193,7 +193,7 @@ On ESP32-S3 modules with OPI flash (e.g. N8R8 modules where the SPI flash itself
 
 ## Migrating from ESP-IDF v4.4.x to v5.x
 
-The jump from IDF v4.4 (arduino-esp32 v2.x) to IDF v5.x (arduino-esp32 v3.x) is the largest API break in ESP-IDF history. This section documents the critical changes and recommended migration patterns based on the upstream WLED `V5-C6` branch (`https://github.com/wled/WLED/tree/V5-C6`). Note: WLED-MM has not yet migrated to IDF v5 — these patterns prepare for the future migration.
+The jump from IDF v4.4 (arduino-esp32 v2.x) to IDF v5.x (arduino-esp32 v3.x) is the largest API break in ESP-IDF history. This section documents the critical changes and recommended migration patterns based on the upstream WLED `V5` branch (`https://github.com/wled/WLED/tree/V5`). Note: WLED-MM has not yet migrated to IDF v5 — these patterns prepare for the future migration.
 
 <!-- HUMAN_ONLY_START -->
 ### Compiler changes
@@ -295,7 +295,7 @@ The new API is channel-based:
 | `rmt_item32_t` | `rmt_symbol_word_t` | Different struct layout |
 
 <!-- HUMAN_ONLY_END -->
-**WLED impact**: NeoPixelBus LED output and IR receiver both use legacy RMT. The upstream `V5-C6` branch adds `-D WLED_USE_SHARED_RMT` and disables IR until the library is ported.
+**WLED-MM impact**: NeoPixelBus LED output and IR receiver both use legacy RMT. The upstream `V5-C6` branch adds `-D WLED_USE_SHARED_RMT` and disables IR until the library is ported.
 
 #### I2S (Inter-IC Sound)
 
@@ -331,7 +331,7 @@ Legacy `i2s_driver_install()` + `i2s_read()` API is deprecated. When touching au
 #endif
 ```
 <!-- HUMAN_ONLY_END -->
-**WLED impact**: The audioreactive usermod (`audio_source.h`) heavily uses legacy I2S. Migration requires rewriting the `I2SSource` class for channel-based API.
+**WLED-MM impact**: The audioreactive usermod (`audio_source.h`) heavily uses legacy I2S. Migration requires rewriting the `I2SSource` class for channel-based API.
 
 <!-- HUMAN_ONLY_START -->
 #### ADC (Analog-to-Digital Converter)
@@ -352,7 +352,7 @@ Legacy `adc1_get_raw()` and `esp_adc_cal_*` are deprecated:
 | `spi_flash_write()` | `esp_flash_write()` |
 | `spi_flash_erase_range()` | `esp_flash_erase_region()` |
 
-WLED already has a compatibility shim in `ota_update.cpp` that maps old names to new ones.
+WLED-MM already has a compatibility shim in `ota_update.cpp` that maps old names to new ones.
 
 #### GPIO
 
@@ -413,7 +413,7 @@ WLED-MM provides convenience wrappers with automatic fallback. **Always prefer t
 
 ### PSRAM guidelines
 
-- **Check availability**: always test `psramFound()` before assuming PSRAM is present.
+- **Check availability**: test availability with `psramFound() && ESP.getPsramSize() > 0` before assuming PSRAM is present. Never rely on `BOARD_HAS_PSRAM`only.
 - **DMA compatibility**: on ESP32 (classic), PSRAM buffers are **not DMA-capable** — use `d_malloc_only()` to allocate DMA buffers in DRAM only. On ESP32-S3 with octal PSRAM (`CONFIG_SPIRAM_MODE_OCT`), PSRAM buffers *can* be used with DMA when `CONFIG_SOC_PSRAM_DMA_CAPABLE` is defined.
 - **JSON documents**: use the `PSRAMDynamicJsonDocument` allocator (defined in `wled.h`) to put large JSON documents in PSRAM:
   ```cpp

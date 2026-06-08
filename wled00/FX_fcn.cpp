@@ -2268,7 +2268,7 @@ uint8_t WS2812FX::getActiveSegmentsNum(void) const {
 }
 
 uint16_t WS2812FX::getLengthTotal(void) const {  // WLEDMM fast int types
-  uint_fast16_t len = Segment::maxWidth * Segment::maxHeight; // will be _length for 1D (see finalizeInit()) but should cover whole matrix for 2D
+  uint_fast16_t len = min(uint32_t(UINT16_MAX -1), (uint32_t)Segment::maxWidth * Segment::maxHeight); // will be _length for 1D (see finalizeInit()) but should cover whole matrix for 2D
   if (isMatrix && _length > len) len = _length; // for 2D with trailing strip
   return len;
 }

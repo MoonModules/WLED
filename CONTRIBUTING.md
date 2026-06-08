@@ -4,7 +4,7 @@ Here are a few suggestions to make it easier for you to contribute!
 
 ## Important Developer Infos
 
-* [Project Structure, Files and Directories](https://github.com/MoonModules/WLED-MM/blob/mdev/.github/copilot-instructions.md#repository-structure) (in our AI instructions)
+* [Project Structure, Files and Directories](AGENTS.md#project-structure) (in our AI instructions)
 * KB: [Compiling WLED](https://kno.wled.ge/advanced/compiling-wled/) - slightly outdated but still helpful 😊
 * Arduino IDE is not supported any more. Use VSCode with the PlatformIO extension. 
 * [Compiling in VSCode/Platformio](https://github.com/wled/WLED-Docs/issues/161) - modern way.

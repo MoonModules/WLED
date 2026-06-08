@@ -785,9 +785,21 @@ void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segme
     // USER_PRINTF("serializeState %d\n", netDebugEnabled);
     #endif
 
+    constexpr unsigned ERROR_HOLD_MILLIS = 15000;  // minimum hold time for any error code
+    static byte lastErrorFlag = ERR_NONE;  // last error seen
+    static unsigned lastErrorTime = 0;
+
     // WLEDMM print error message to netDebug - esp32 only, as 8266 flash is very limited
-    if (errorFlag) { USER_PRINT(F("\nWLED error code = ")); USER_PRINTLN(errorFlag); }
-    if (errorFlag) {root[F("error")] = errorFlag; errorFlag = ERR_NONE;} //prevent error message to persist on screen
+    if (errorFlag && (errorFlag != lastErrorFlag)) { // only print each error code once
+      USER_PRINT(F("\nWLED-MM error code = ")); USER_PRINTLN(errorFlag); USER_FLUSH();
+      lastErrorTime = millis();
+    }
+    if (errorFlag) {
+      root[F("error")] = errorFlag; 
+      if (    (millis() > 60000) && (millis() - lastErrorTime > ERROR_HOLD_MILLIS)
+           && (errorFlag < ERR_PERSISTENT)) errorFlag = ERR_NONE; // prevent error message to stay on screen forever - hold them for 60 seconds after startup, persist "please reboot"
+    }
+    lastErrorFlag = errorFlag;
 
     root["ps"] = (currentPreset > 0) ? currentPreset : -1;
     root[F("pl")] = currentPlaylist;

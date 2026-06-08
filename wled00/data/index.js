@@ -308,6 +308,9 @@ function handleLocationHash() {
 }
 
 var timeout;
+var lastUiErrorCode = 0;
+var lastUiErrorAt = 0;
+const UI_ERROR_DEDUPE_MS = 3000; // de-duplicate same error when arriving within 3secs
 function showToast(text, error = false)
 {
 	if (error) gId('connind').style.backgroundColor = "var(--c-r)";
@@ -317,7 +320,7 @@ function showToast(text, error = false)
 	x.classList.add(error ? 'error':'show');
 	clearTimeout(timeout);
 	x.style.animation = 'none';
-	timeout = setTimeout(()=>{ x.classList.remove('show'); }, 2900);
+	timeout = setTimeout(()=>{ x.classList.remove('show'); }, 3900); // WLEDMM increased timeout from 2900 to 3900
 	if (error) console.log(text);
 }
 
@@ -2039,14 +2042,23 @@ function readState(s,command=false)
 		case 91:
 			errstr = "Brownout Restart.";
 		  break;
-		case 98:
+		case 98: // legacy value - falls through
+		case 100:
 			errstr = "Please reboot WLED to activate changed settings.";
 		  break;
-		case 99:
+		case 99: // legacy value - falls through
+		case 101:
 			errstr = "Please switch your device off and back on.";
 		  break;
 		}
-	  showToast(((s.error < 33)?'Error ':'Warning ') + s.error + ": " + errstr, (s.error < 35)||(s.error > 90));
+		const now = Date.now();
+		// throttle / de-duplicate same errors within 3 seconds 
+		const shouldShow = (s.error !== lastUiErrorCode) || ((now - lastUiErrorAt) >= UI_ERROR_DEDUPE_MS);
+		if (shouldShow) {
+	  	showToast(((s.error < 33)?'Error ':'Warning ') + s.error + ": " + errstr, (s.error < 35)||(s.error > 90));
+		}
+		lastUiErrorCode = s.error;
+		lastUiErrorAt = now;
 	}
 
 	selectedPal = i.pal;
@@ -3881,10 +3893,12 @@ function reportUpgradeEvent(info, oldVersion, alwaysReport) {
 				showToast('Report failed. Please try again later.', true);
 				// Do NOT update version info on failure - user will be prompted again
 			}
+			lastUiErrorAt = Date.now(); // WLEDMM overrule UI error toasts to make sure the message stays for at least 3 seconds
 		})
 		.catch(e => {
 			console.log('Failed to report upgrade', e);
 			showToast('Report failed', true);
+			lastUiErrorAt = Date.now(); // WLEDMM overrule UI error toasts to make sure the message stays for at least 3 seconds
 			updateVersionInfo(info.ver, false, !!alwaysReport);
 		});
 }

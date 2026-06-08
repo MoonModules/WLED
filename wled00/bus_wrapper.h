@@ -262,41 +262,43 @@ bool canUseSerial(void);   // WLEDMM (wled_serial.cpp) returns true if Serial ca
 
 #endif
 
-//APA102
+// SPI based drivers
 #if defined(WLED_USE_ETHERNET) || (defined(BOARD_HAS_PSRAM) && defined(CONFIG_SPIRAM_OCCUPY_VSPI_HOST) && (defined(CONFIG_SPIRAM_TYPE_ESPPSRAM32) || defined(CONFIG_SPIRAM_TYPE_AUTO)))
 // fix for #2542 (by @BlackBird77)
 // fix for esp32 with PSRAM: if SPI RAM is of type 32MBit, one of the SPI hosts (HSPI or VSPI) will be occupied by the system. Application code should never touch this SPI host.
 #define B_HS_DOT_3 NeoPixelBusLg<DotStarBgrFeature, DotStarEsp32HspiHzMethod, NeoGammaNullMethod> //hardware HSPI (was DotStarEsp32DmaHspi5MhzMethod in NPB @ 2.6.9)
-#warning "APA102 cannot use VSPI, falling back to HSPI"
+#define B_HS_WS1_3 NeoPixelBusLg<NeoRbgFeature, Ws2801MethodBase<TwoWireHspiImple<SpiSpeedHz>>, NeoGammaNullMethod>
+#define B_HS_LPD_3 NeoPixelBusLg<Lpd8806GrbFeature, Lpd8806MethodBase<TwoWireHspiImple<SpiSpeedHz>>, NeoGammaNullMethod>
+#define B_HS_LPO_3 NeoPixelBusLg<Lpd6803GrbFeature, Lpd6803MethodBase<TwoWireHspiImple<SpiSpeedHz>>, NeoGammaNullMethod>
+#define B_HS_P98_3 NeoPixelBusLg<P9813BgrFeature, P9813MethodBase<TwoWireHspiImple<SpiSpeedHz>>, NeoGammaNullMethod>
+#warning "APA102 and other SPI based LEDs cannot use VSPI, falling back to HSPI"
 #if CONFIG_SPIRAM_OCCUPY_HSPI_HOST
 #warning "APA102 uses HSPI driver which might be needed for PSRAM"
 #endif
 #else
 #define B_HS_DOT_3 NeoPixelBusLg<DotStarBgrFeature, DotStarSpiHzMethod, NeoGammaNullMethod> //hardware VSPI
+#define B_HS_WS1_3 NeoPixelBusLg<NeoRbgFeature, Ws2801SpiHzMethod, NeoGammaNullMethod>
+#define B_HS_LPD_3 NeoPixelBusLg<Lpd8806GrbFeature, Lpd8806SpiHzMethod, NeoGammaNullMethod>
+#define B_HS_LPO_3 NeoPixelBusLg<Lpd6803GrbFeature, Lpd6803SpiHzMethod, NeoGammaNullMethod>
+#define B_HS_P98_3 NeoPixelBusLg<P9813BgrFeature, P9813SpiHzMethod, NeoGammaNullMethod>
 #if CONFIG_SPIRAM_OCCUPY_VSPI_HOST
 #warning "APA102 uses VSPI driver which might be needed for PSRAM"
 #endif
 #endif
-#define B_SS_DOT_3 NeoPixelBusLg<DotStarBgrFeature, DotStarMethod, NeoGammaNullMethod>    //soft SPI
 
-//LPD8806
-#define B_HS_LPD_3 NeoPixelBusLg<Lpd8806GrbFeature, Lpd8806SpiHzMethod, NeoGammaNullMethod>
+//APA102 soft SPI
+#define B_SS_DOT_3 NeoPixelBusLg<DotStarBgrFeature, DotStarMethod, NeoGammaNullMethod>
+
+//LPD8806 soft SPI
 #define B_SS_LPD_3 NeoPixelBusLg<Lpd8806GrbFeature, Lpd8806Method, NeoGammaNullMethod>
 
-//LPD6803
-#define B_HS_LPO_3 NeoPixelBusLg<Lpd6803GrbFeature, Lpd6803SpiHzMethod, NeoGammaNullMethod>
+//LPD6803 soft SPI
 #define B_SS_LPO_3 NeoPixelBusLg<Lpd6803GrbFeature, Lpd6803Method, NeoGammaNullMethod>
 
-//WS2801
-#ifdef WLED_USE_ETHERNET
-#define B_HS_WS1_3 NeoPixelBusLg<NeoRbgFeature, Ws2801MethodBase<TwoWireHspiImple<SpiSpeedHz>>, NeoGammaNullMethod>
-#else
-#define B_HS_WS1_3 NeoPixelBusLg<NeoRbgFeature, Ws2801SpiHzMethod, NeoGammaNullMethod>
-#endif
+//WS2801 soft SPI
 #define B_SS_WS1_3 NeoPixelBusLg<NeoRbgFeature, Ws2801Method, NeoGammaNullMethod>
 
-//P9813
-#define B_HS_P98_3 NeoPixelBusLg<P9813BgrFeature, P9813SpiHzMethod, NeoGammaNullMethod>
+//P9813 soft SPI
 #define B_SS_P98_3 NeoPixelBusLg<P9813BgrFeature, P9813Method, NeoGammaNullMethod>
 
 // 48bit & 64bit to 24bit & 32bit RGB(W) conversion

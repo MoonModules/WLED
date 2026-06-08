@@ -114,5 +114,5 @@ Match this workflow in local development to catch failures before pushing.
 - Always **commit source code**
 - **Never edit or commit** `wled00/html_*.h` and  `wled00/js_*.h` — auto-generated from `wled00/data/`
 - Web UI rebuild is part of the PlatformIO firmware compilation pipeline
-- Common firmware environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S3_8MB_PSRAM_M_qspi`, `esp32_16MB_V4_M_eth`, `esp8266_4MB_S` (deprecated), `esp32dev_compat`
+- Common firmware environments: `esp32_4MB_V4_M`, `esp32_16MB_V4_S_HUB75`, `esp32S3_8MB_PSRAM_M_qspi`, `esp32S3_16MB_PSRAM_M_HUB75`, `esp32_16MB_V4_M_eth` (ethernet support), `esp32_16MB_V4_M_debug` (debug), `esp8266_4MB_S` (deprecated), `esp32dev_compat` (V3 legacy framework)
 - List all PlatformIO targets: `pio run --list-targets`

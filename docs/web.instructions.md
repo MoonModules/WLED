@@ -22,6 +22,12 @@ applyTo: "wled00/data/**"
 - `settings*.htm` — configuration pages
 - `*.css` — stylesheets (inlined during build)
 
+## Accessibility & Interaction
+
+The WLED web UI targets commonly used browser/platform combinations: desktop browsers on Mac and PC (primarily pointer-driven, touch rare), 
+and touch-only devices (phones, tablets). If possible, keep the UI accessible to users with disabilities. 
+Full keyboard operability is not a strict requirement - adding keyboard shortcuts should be a case-by-case decision.
+
 ## Build Integration
 
 Files in this directory are processed by `tools/cdata.js` into generated headers

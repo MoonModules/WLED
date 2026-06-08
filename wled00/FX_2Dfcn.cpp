@@ -34,7 +34,7 @@ void WS2812FX::setUpMatrix() {
     // safety check 
     // WLEDMM no check on Segment::maxWidth * Segment::maxHeight > MAX_LEDS || 
     if (Segment::maxWidth <= 1 || Segment::maxHeight <= 1) {
-      DEBUG_PRINTF("2D Bounds error. %d x %d\n", Segment::maxWidth, Segment::maxHeight);
+      USER_PRINTF("Matrix 2D bounds (%d x %d) invalid.\n", Segment::maxWidth, Segment::maxHeight);
       isMatrix = false;
       Segment::maxWidth = _length;
       Segment::maxHeight = 1;

@@ -1,6 +1,7 @@
 #include "wled.h"
 #ifdef ARDUINO_ARCH_ESP32
 #include "esp_ota_ops.h"
+#include "sdkconfig.h"
 #endif
 
 /*
@@ -9,6 +10,17 @@
 
 #define SERIAL_MAXTIME_MILLIS 100 // to avoid blocking other activities, do not spend more than 100ms with continuous reading
 // at 115200 baud, 100ms is enough to send/receive 1280 chars
+
+#ifdef ARDUINO_ARCH_ESP32
+  // CONFIG_INT_WDT_TIMEOUT_MS = 300 = interrupt watchdog timeout in milliseconds
+  // CONFIG_TASK_WDT_TIMEOUT_S = 5   = idle task watchdog timeout in seconds
+  // CONFIG_ESP_TASK_WDT_TIMEOUT_S (new name)
+#ifdef CONFIG_ESP_TASK_WDT_TIMEOUT_S
+static_assert(SERIAL_MAXTIME_MILLIS < (CONFIG_ESP_TASK_WDT_TIMEOUT_S * 1000 - 2 * portTICK_PERIOD_MS), "SERIAL_MAXTIME_MILLIS must be shorter than the IDLE watchdog timeout.");
+#else // arduino-esp32 1.0.x uses CONFIG_TASK_WDT_TIMEOUT_S
+static_assert(SERIAL_MAXTIME_MILLIS < (CONFIG_TASK_WDT_TIMEOUT_S * 1000 - 2 * portTICK_PERIOD_MS), "SERIAL_MAXTIME_MILLIS must be shorter than the IDLE watchdog timeout.");
+#endif
+#endif
 
 enum class AdaState {
   Header_A,
@@ -108,10 +120,12 @@ void handleSerial()
   static byte red   = 0x00;
   static byte green = 0x00;
 
+  if (Serial.available() > 0) delay(1); // pet the watchdog
+
   unsigned long startTime = millis();
   while ((Serial.available() > 0) && (millis() - startTime < SERIAL_MAXTIME_MILLIS))
   {
-    yield();
+    yield(); // useless on esp32
     byte next = Serial.peek();
     switch (state) {
       case AdaState::Header_A:

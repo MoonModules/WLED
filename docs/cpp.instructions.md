@@ -25,7 +25,15 @@ See also: [CONTRIBUTING.md](../CONTRIBUTING.md) for general style guidelines tha
 
 - **camelCase** for functions and variables: `setValuesFromMainSeg()`, `effectCurrent`
 - **PascalCase** for classes and structs: `PinManagerClass`, `BusConfig`
+- **PascalCase** for enum values: `PinOwner::BusDigital`
 - **UPPER_CASE** for macros and constants: `WLED_MAX_USERMODS`, `DEFAULT_CLIENT_SSID`
+
+## General
+
+- Follow the existing style in the file you are editing
+- If possible, use `static` for local (C-style) variables and functions (keeps the global namespace clean)
+- Avoid unexplained "magic numbers". Prefer named constants (`constexpr`) or C-style `#define` constants for repeated numbers that have the same meaning
+- Include `"wled.h"` as the primary project header where needed
 
 <!-- HUMAN_ONLY_START -->
 ## Header Guards
@@ -61,7 +69,7 @@ Most headers use `#ifndef` / `#define` guards. Some newer headers add `#pragma o
 void calculateCRC(const uint8_t* data, size_t len) {
   ...
 }
-// AI: end of AI-generated section
+// AI: end
 ```
 
   Single-line AI-assisted edits do not need the marker — use it when the AI produced a contiguous block that a human did not write line-by-line.
@@ -142,25 +150,28 @@ Heap fragmentation is a concern:
 <!-- HUMAN_ONLY_END -->
 
 ## `const` and `constexpr`
-Add `const` to cached locals in hot-path code (helps the compiler keep values in registers). Pass and store objects by `const&` to avoid copies in loops. 
-
 <!-- HUMAN_ONLY_START -->
 `const` is a promise to the compiler that a value (or object) will not change - a function declared with a `const char* message` parameter is not allowed to modify the content of `message`.
 This pattern enables optimizations and makes intent clear to reviewers.
 
-### `const` locals
+`constexpr` allows to define constants that are *guaranteed* to be evaluated by the compiler (zero run-time costs).
 
+<!-- HUMAN_ONLY_END -->
+- For function parameters that are read-only, prefer `const &` or `const`.
+
+### `const` locals
+<!-- HUMAN_ONLY_START -->
 * Adding `const` to a local variable that is only assigned once is optional, but *not* strictly necessary.
-* In hot-path code, `const` on cached locals may help the compiler keep values in registers:
+<!-- HUMAN_ONLY_END -->
+* In hot-path code, `const` on cached locals may help the compiler keep values in registers.
   ```cpp
   const uint_fast16_t cols = vWidth();
   const uint_fast16_t rows = vHeight();
   ```
 
-<!-- HUMAN_ONLY_END -->
 ### `const` references to avoid copies
-
-Pass and store objects by `const &` (or `&`) instead of copying them implicitly. This avoids constructing temporary objects on every access — especially important in loops.
+- Pass objects by `const &` (or `&`) instead of copying them implicitly.
+- Use `const &` (or `&`) inside loops - This avoids constructing temporary objects on every access.
 
 <!-- HUMAN_ONLY_START -->
 ```cpp
@@ -174,11 +185,14 @@ For function parameters that are read-only, prefer `const &`:
 BusDigital(BusConfig &bc, uint8_t nr, const ColorOrderMap &com);
 ```
 <!-- HUMAN_ONLY_END -->
+- Class **Data Members:** Avoid reference data members (`T&` or `const T&`) in a class. 
+  A reference member can outlive the object it refers to, causing **dangling reference** bugs that are hard to diagnose. Prefer value storage or use a pointer and document the expected lifetime.
 
-### `constexpr` over `#define`
 <!-- HUMAN_ONLY_START -->
+<!-- hidden from AI for now - codebase is not compliant to this rule (slowly migrating) -->
+### `constexpr` over `#define`
 
-Prefer `constexpr` for compile-time constants. Unlike `#define`, `constexpr` respects scope and type safety, keeping the global namespace clean:
+- Prefer `constexpr` for compile-time constants. Unlike `#define`, `constexpr` respects scope and type safety, keeping the global namespace clean.
 
 ```cpp
 // Prefer:
@@ -190,11 +204,14 @@ constexpr int WLED_MAX_BUSSES = WLED_MAX_DIGITAL_CHANNELS + WLED_MAX_ANALOG_CHAN
 ```
 
 Note: `#define` is still needed for conditional compilation guards (`#ifdef`), platform macros, and values that must be overridable from build flags.
+<!-- HUMAN_ONLY_END -->
 
 ### `static_assert` over `#error`
 
-Use `static_assert` instead of the C-style `#if … #error … #endif` pattern when validating compile-time constants. It provides a clear message and works with `constexpr` values:
+- Use `static_assert` instead of the C-style `#if … #error … #endif` pattern when validating compile-time constants. It provides a clear message and works with `constexpr` values.
+- `#define` and `#if ... #else ... #endif` is still needed for conditional-compilation guards and build-flag-overridable values.
 
+<!-- HUMAN_ONLY_START -->
 ```cpp
 // Prefer:
 constexpr int WLED_MAX_BUSSES = WLED_MAX_DIGITAL_CHANNELS + WLED_MAX_ANALOG_CHANNELS;
@@ -212,10 +229,6 @@ static_assert(WLED_MAX_BUSSES <= 32, "WLED_MAX_BUSSES exceeds hard limit");
                "PinOwner::None must be zero, so default array initialization works as expected");
 ```
 <!-- HUMAN_ONLY_END -->
-
-Prefer `constexpr` over `#define` for typed constants (scope-safe, debuggable). Use `static_assert` instead of `#if … #error` for compile-time validation.
-Exception: `#define` is required for conditional-compilation guards and build-flag-overridable values.
-
 ### `static` and `const` class methods
 
 #### `const` member functions
@@ -425,7 +438,7 @@ Move invariant calculations before the loop. Pre-compute reciprocals to replace 
 ```cpp
 const uint_fast16_t cols = virtualWidth();
 const uint_fast16_t rows = virtualHeight();
-uint_fast8_t fadeRate = (255 - rate) >> 1;
+uint_fast8_t fadeRate = (255U - rate) >> 1;
 float mappedRate_r = 1.0f / (float(fadeRate) + 1.1f);  // reciprocal — avoid division inside loop
 ```
 
@@ -441,13 +454,14 @@ uint32_t wg = (((c1 >> 8) & TWO_CHANNEL_MASK) * amount) & ~TWO_CHANNEL_MASK;
 return rb | wg;
 ```
 
-### Bit Shifts Over Division (mainly for RISC-V boards)
+### Bit Shifts Over Division (mainly for RISC-V and ESP8266 boards)
 
 ESP32 and ESP32-S3 (Xtensa core) have a fast "integer divide" instruction, so manual shifts rarely help. 
-On RISC-V targets (ESP32-C3/C6/P4), prefer explicit bit-shifts for power-of-two arithmetic — the compiler does **not** always convert divisions to shifts on RISC-V at `-O2`. Always use unsigned operands; signed right-shift is implementation-defined.
+On RISC-V targets (ESP32-C3/C6/P4) and ESP8266, prefer explicit bit-shifts for power-of-two arithmetic — the compiler does **not** always convert divisions to shifts. 
+Always use unsigned operands for right shifts; signed right-shift is implementation-defined.
 
 <!-- HUMAN_ONLY_START -->
-On RISC-V-based boards (ESP32-C3, ESP32-C6, ESP32-C5) explicit shifts can be beneficial.
+Explicit shifts can be beneficial on RISC-V-based boards (ESP32-C3, ESP32-C6, ESP32-C5) and on ESP8266 boards.
 ```cpp
 position >> 3     // instead of position / 8
 (255U - rate) >> 1 // instead of (255 - rate) / 2
@@ -488,6 +502,9 @@ if (lastKelvin != kelvin) {
   ```
 
 <!-- HUMAN_ONLY_END -->
+
+---
+
 ## Multi-Task Synchronization
 
 ESP32 runs multiple FreeRTOS tasks concurrently (e.g. network handling, LED output, JSON parsing). Use the WLED-MM mutex macros for synchronization — they expand to FreeRTOS recursive semaphore calls on ESP32 and compile to no-ops on ESP8266:
@@ -525,7 +542,7 @@ Always pair every `esp32SemTake` with a matching `esp32SemGive`. Choose a timeou
 <!-- HUMAN_ONLY_START -->
 * On ESP32, `delay(ms)` calls `vTaskDelay(ms / portTICK_PERIOD_MS)`, which **suspends only the calling task**. The FreeRTOS scheduler immediately runs all other ready tasks. 
 * The Arduino `loop()` function runs inside `loopTask`. Calling `delay()` there does *not* block the network stack, audio FFT, LED DMA, nor any other FreeRTOS task.
-* This differs from ESP8266, where `delay()` stalled the entire system unless `yield()` was called inside.
+* This differs from ESP8266, where `delay()` stalls the entire system unless `yield()` was called inside.
 <!-- HUMAN_ONLY_END -->
 
 - On ESP32, `delay()` is generally allowed, as it helps to efficiently manage CPU usage of all tasks.
@@ -565,12 +582,11 @@ void myTask(void*) {
 - Prefer blocking FreeRTOS primitives (`xQueueReceive`, `ulTaskNotifyTake`, `vTaskDelayUntil`) over `delay(1)` polling where precise timing or event-driven behaviour is needed.
 - **Watchdog note.** WLED-MM disables the Task Watchdog by default (`WLED_WATCHDOG_TIMEOUT 0` in `wled.h`). When enabled, `esp_task_wdt_reset()` is called at the end of each `loop()` iteration. Long blocking operations inside `loop()` — such as OTA downloads or slow file I/O — must call `esp_task_wdt_reset()` periodically, or be restructured so the main loop is not blocked for longer than the configured timeout.
 
-## General
+## Caveats and Pitfalls
 
-- Follow the existing style in the file you are editing
-- If possible, use `static` for local (C-style) variables and functions (keeps the global namespace clean)
-- Avoid unexplained "magic numbers". Prefer named constants (`constexpr`) or C-style `#define` constants for repeated numbers that have the same meaning
-- Include `"wled.h"` as the primary project header where needed
+- **LittleFS filenames**: File paths passed to `file.open()` must not exceed 255 bytes (`LFS_NAME_MAX`). Validate constructed paths (e.g., `/ledmap_` + segment name + `.json`) stay within this limit (assume standard configurations, like WLED_MAX_SEGNAME_LEN = 64).
+
+- In C/C++, additive operators (`+`, `-`) have HIGHER precedence than shift operators (`<<`, `>>`). Therefore `x - edge0 << 8` correctly parses as `(x - edge0) << 8`. Do NOT flag this pattern as a precedence bug. When reviewing WLED-MM fixed-point code or any C/C++ shift expressions, verify against cppreference before claiming precedence issues with mixed `-`/`+` and `<<`/`>>` expressions.
 
 - **Float-to-unsigned conversion is undefined behavior when the value is out of range.** Converting a negative `float` directly to an unsigned integer type (`uint8_t`, `uint16_t`, …) is UB per the C++ standard — the Xtensa (ESP32) toolchain may silently wrap, but RISC-V (ESP32-C3/C5/C6/P4) can produce different results due to clamping. Cast through a signed integer first:
   ```cpp

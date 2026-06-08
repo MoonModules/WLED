@@ -94,7 +94,8 @@ struct BusConfig {
     for (uint8_t i = 0; i < min(unsigned(nPins), sizeof(pins)/sizeof(pins[0])); i++) pins[i] = ppins[i];   //softhack007 fix for potential array out-of-bounds access
   }
 
-  //validates start and length and extends total if needed // WLEDMM this function is not used anywhere
+  //validates start and length and extends total if needed 
+  #if 0  // WLEDMM this function is not used anywhere
   bool adjustBounds(uint16_t& total) {
     if (!count) count = 1;
     if (count > MAX_LEDS_PER_BUS) count = MAX_LEDS_PER_BUS;
@@ -105,6 +106,7 @@ struct BusConfig {
     if (start + count > total) total = start + count;
     return true;
   }
+#endif
 };
 
 // Defines an LED Strip and its color ordering.
@@ -127,9 +129,7 @@ struct ColorOrderMap {
     }
 
     const ColorOrderMapEntry* get(uint8_t n) const {
-      if (n > _count) {
-        return nullptr;
-      }
+      if (n >= count()) return nullptr;
       return &(_mappings[n]);
     }
 

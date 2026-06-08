@@ -57,7 +57,7 @@ const ethernet_settings ethernetBoards[] = {
     ETH_CLOCK_GPIO0_IN	  // eth_clk_mode
   },
 
-  // QuinLed-ESP32-Ethernet
+  // QuinLed-ESP32-Ethernet or Olimex-ESP32-Gateway
   {
     0,			              // eth_address,
     5,			              // eth_power,
@@ -89,7 +89,7 @@ const ethernet_settings ethernetBoards[] = {
 
   // ESP32-ETHERNET-KIT-VE
   {
-    1,                    // eth_address, WLED-MM: Changed from 0 to 1 based on not working with 0 on same devkit.
+    1,                    // eth_address,
     5,                    // eth_power,
     23,                   // eth_mdc,
     18,                   // eth_mdio,
@@ -157,19 +157,38 @@ const ethernet_settings ethernetBoards[] = {
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO0_IN	 // eth_clk_mode
   },
-
-
-  //WLEDMM: Olimex-ESP32-Gateway (like QuinLed-ESP32-Ethernet
+ 
+ // WLED_ETH_QUINLED_V4 (14) - QuinLED Dig-Uno/Quad v4
   {
-    0,			              // eth_address,
-    5,			              // eth_power,
-    23,			              // eth_mdc,
-    18,			              // eth_mdio,
-    ETH_PHY_LAN8720,      // eth_type,
-    ETH_CLOCK_GPIO17_OUT	// eth_clk_mode
+    0,                   // eth_address
+    -1,                  // eth_power
+    7,                   // eth_mdc
+    8,                   // eth_mdio
+    ETH_PHY_LAN8720,     // eth_type
+    ETH_CLOCK_GPIO0_IN   // eth_clk_mode
+  },
+ 
+ // WLED_ETH_QUINLED_OCTA_V4 (15) - QuinLED Dig-Octa 32-8L v4
+  {
+    0,                   // eth_address
+    -1,                  // eth_power
+    23,                  // eth_mdc
+    18,                  // eth_mdio
+    ETH_PHY_LAN8720,     // eth_type
+    ETH_CLOCK_GPIO0_IN   // eth_clk_mode
   }
 
+  //WLEDMM: Olimex-ESP32-Gateway (like QuinLed-ESP32-Ethernet
+   // -> duplicate of QuinLed-ESP32 -> removed.
+
 };
+
+// sanity checks for ethernet config table and WLED_ETH_DEFAULT
+static_assert((sizeof(ethernetBoards)/sizeof(ethernetBoards[0])) == WLED_NUM_ETH_TYPES, "WLED_NUM_ETH_TYPES does not match size of ethernetBoards[] table.");
+#ifdef WLED_ETH_DEFAULT
+  static_assert(((WLED_ETH_DEFAULT) >= WLED_ETH_NONE) && ((WLED_ETH_DEFAULT) < WLED_NUM_ETH_TYPES), "WLED_ETH_DEFAULT is out of range.");
+#endif
+
 #endif
 
 

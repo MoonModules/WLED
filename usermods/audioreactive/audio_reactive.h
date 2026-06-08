@@ -1904,7 +1904,11 @@ class AudioReactive : public Usermod {
         } catch (...) {
           packetSize = 0;
           #ifdef ARDUINO_ARCH_ESP32
+          #if ESP_IDF_VERSION_MAJOR < 5
           fftUdp.flush();
+          #else
+          fftUdp.clear();
+          #endif
           #endif
           DEBUG_PRINTLN(F("receiveAudioData: parsePacket out of memory exception caught!"));
           USER_FLUSH();
@@ -1916,7 +1920,11 @@ class AudioReactive : public Usermod {
 
         #ifdef ARDUINO_ARCH_ESP32
         if ((packetSize > 0) && ((packetSize < 5) || (packetSize > UDPSOUND_MAX_PACKET))) {
+          #if ESP_IDF_VERSION_MAJOR < 5
           fftUdp.flush();
+          #else
+          fftUdp.clear();
+          #endif
           continue; // Skip invalid packets -> next iteration
         }
         #endif
@@ -1945,7 +1953,7 @@ class AudioReactive : public Usermod {
       } while ((packetSize > 0) && ((packetsReceived < maxSamples) || (maxSamples == AR_UDP_FLUSH_ALL))); // repeat until we have read enough packets, or no more packets available
 
       #if defined(WLED_DEBUG) || defined(SR_DEBUG)
-      if ((packetsReceived > 1) && haveFreshData) {DEBUGSR_PRINTF("AR UDP: dropped  %d packets [%ums]\t%d maxDrop.\n", packetsReceived-1, millis() - last_UDPTime, maxSamples-1);} // for debugging
+      if ((packetsReceived > 1) && haveFreshData) {DEBUGSR_PRINTF("AR UDP: dropped  %d packets [%lums]\t%d maxDrop.\n", packetsReceived-1, millis() - last_UDPTime, maxSamples-1);} // for debugging
       #endif
       return haveFreshData;
     }
@@ -2279,14 +2287,9 @@ class AudioReactive : public Usermod {
           useNetworkAudio = true;  // don't fall back to local audio in standard "receive mode"
       }
 
-      // suspend local sound processing when "real time mode" is active (E131, UDP, ADALIGHT, ARTNET)
-      if (  (realtimeOverride == REALTIME_OVERRIDE_NONE)  // please add other overrides here if needed
-          &&( (realtimeMode == REALTIME_MODE_GENERIC)
-            ||(realtimeMode == REALTIME_MODE_E131)
-            ||(realtimeMode == REALTIME_MODE_UDP)
-            ||(realtimeMode == REALTIME_MODE_ADALIGHT)
-            ||(realtimeMode == REALTIME_MODE_ARTNET) ) )  // please add other modes here if needed
-      {
+      // suspend local sound processing when "real time mode" is active (E131, UDP, ADALIGHT, ARTNET, DDP, DMX)
+      //  exception: sound input is still needed when useMainSegmentOnly - other segments are still running with local input.
+      if ((realtimeMode != REALTIME_MODE_INACTIVE) && (realtimeOverride == REALTIME_OVERRIDE_NONE) && !useMainSegmentOnly) {
         #ifdef WLED_DEBUG
         if ((disableSoundProcessing == false) && (audioSyncEnabled < AUDIOSYNC_REC)) {  // we just switched to "disabled"
           DEBUG_PRINTLN("[AR userLoop]  realtime mode active - audio processing suspended.");
@@ -2415,7 +2418,11 @@ class AudioReactive : public Usermod {
             lastTime = millis();
           } else {
 #ifdef ARDUINO_ARCH_ESP32
+          #if ESP_IDF_VERSION_MAJOR < 5
             fftUdp.flush(); // WLEDMM: Flush this if we haven't read it. Does not work on 8266.
+          #else
+            fftUdp.clear();
+          #endif
 #endif
           }
           if (useNetworkAudio) {

@@ -506,8 +506,9 @@ BusNetwork::BusNetwork(BusConfig &bc, const ColorOrderMap &com) : Bus(bc.type, b
   }
   _UDPchannels = _rgbw ? 4 : 3;
   #ifdef ESP32
+  size_t bufferSize = (uint32_t(bc.count) * _UDPchannels) + 15; // WLEDMM avoid uint16 overflow
   // _data = (byte*) heap_caps_calloc_prefer((bc.count * _UDPchannels)+15, sizeof(byte), 3, MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT|MALLOC_CAP_8BIT, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-  _data = (byte*) d_calloc((bc.count * _UDPchannels)+15, sizeof(byte));
+  _data = (byte*) d_calloc(bufferSize, sizeof(byte));
   #else
   _data = (byte*) calloc((bc.count * _UDPchannels)+15, sizeof(byte));
   #endif

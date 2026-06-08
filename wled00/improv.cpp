@@ -16,8 +16,8 @@
 #endif
 
 #define IMPROV_VERSION 1
-
-void parseWiFiCommand(char *rpcData);
+// forward declarations
+static void parseWiFiCommand(char* rpcData);
 
 enum ImprovPacketType {
   Current_State = 0x01,
@@ -44,7 +44,7 @@ void handleImprovPacket() {
   bool timeout = false;
   uint8_t waitTime = 25;
   uint16_t packetByte = 0;
-  uint8_t packetLen = 9;
+  size_t packetLen = 9;
   uint8_t checksum = 0;
 
   uint8_t rpcCommandType = 0;
@@ -117,8 +117,8 @@ void handleImprovPacket() {
             return;
           }
         } else if (packetByte > 9) { //RPC data
-          rpcData[packetByte - 10] = next;
           if (packetByte > 137) return; //prevent buffer overflow
+          rpcData[packetByte - 10] = next;
         }
       }
     }
@@ -147,7 +147,7 @@ void sendImprovStateResponse(uint8_t state, bool error) {
 // used by sendImprovIPRPCResult(), sendImprovInfoResponse(), and handleImprovWifiScan()
 void sendImprovRPCResult(ImprovRPCType type, uint8_t n_strings, const char **strings) {
   if (improvError > 0 && improvError < 3) sendImprovStateResponse(0x00, true);
-  uint8_t packetLen = 12;
+  size_t packetLen = 12;
   char out[256] = {'I','M','P','R','O','V'};
   out[6] = IMPROV_VERSION;
   out[7] = ImprovPacketType::RPC_Response;
@@ -156,7 +156,7 @@ void sendImprovRPCResult(ImprovRPCType type, uint8_t n_strings, const char **str
   //out[10] = 0; //Data len (set below)
   uint16_t pos = 11;
 
-  for (uint8_t s = 0; s < n_strings; s++) {
+  for (unsigned s = 0; s < n_strings; s++) {
     size_t len = strlen(strings[s]);
     if (pos + len > 254) continue; // simple buffer overflow guard
     out[pos++] = len;
@@ -169,7 +169,7 @@ void sendImprovRPCResult(ImprovRPCType type, uint8_t n_strings, const char **str
   out[10]   = pos -11; // Data len
 
   uint8_t checksum = 0;
-  for (uint8_t i = 0; i < packetLen -1; i++) checksum += out[i];
+  for (unsigned i = 0; i < packetLen -1; i++) checksum += out[i];
   out[packetLen -1] = checksum;
   Serial.write((uint8_t*)out, packetLen);
   Serial.write('\n');
@@ -182,7 +182,7 @@ void sendImprovIPRPCResult(ImprovRPCType type) {
   {
     char urlStr[64];
     IPAddress localIP = Network.localIP();
-    uint8_t len = sprintf(urlStr, "http://%d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
+    unsigned len = sprintf(urlStr, "http://%d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
     if (len > 24) return; //sprintf fail?
     const char *str[1] = {urlStr};
     sendImprovRPCResult(type, 1, str);
@@ -200,7 +200,7 @@ void sendImprovInfoResponse() {
   #else // ESP32
   strncpy(bString, ESP.getChipModel(), 31);
   #if CONFIG_IDF_TARGET_ESP32
-  bString[5] = '\0';  // disregard chip revision for classic ESP32
+  bString[5] = '\0'; // disregard chip revision for classic ESP32
   #else
   bString[31] = '\0'; // just in case
   #endif
@@ -238,8 +238,8 @@ void handleImprovWifiScan() {
     bool isOpen = WiFi.encryptionType(i) == WIFI_AUTH_OPEN;
     #endif
 
-    char ssidStr[33];
-    strcpy(ssidStr, WiFi.SSID(i).c_str());
+    char ssidStr[33] = {'\0'};
+    strlcpy(ssidStr, WiFi.SSID(i).c_str(), sizeof(ssidStr));
     const char *str[3] = {ssidStr, rssiStr, isOpen ? "NO":"YES"};
     sendImprovRPCResult(ImprovRPCType::Request_Scan, 3, str);
   }
@@ -252,20 +252,19 @@ void startImprovWifiScan() {}
 void handleImprovWifiScan() {}
 #endif
 
-void parseWiFiCommand(char* rpcData) {
-  uint8_t len = rpcData[0];
+static void parseWiFiCommand(char* rpcData) {
+  unsigned len = rpcData[0];
   if (!len || len > 126) return;
 
   uint8_t ssidLen = rpcData[1];
   if (ssidLen > len -1 || ssidLen > 32) return;
-  memset(clientSSID, 0, 32);
-  memcpy(clientSSID, rpcData+2, ssidLen);
+  memset(clientSSID, 0, sizeof(clientSSID));
+  memcpy(clientSSID, rpcData+2, min(size_t(ssidLen), sizeof(clientSSID)-1));
 
-  memset(clientPass, 0, 64);
+  memset(clientPass, 0, sizeof(clientPass));
   if (len > ssidLen +1) {
     uint8_t passLen = rpcData[2+ssidLen];
-    memset(clientPass, 0, 64);
-    memcpy(clientPass, rpcData+3+ssidLen, passLen);
+    memcpy(clientPass, rpcData+3+ssidLen, min(size_t(passLen), sizeof(clientPass)-1));
   }
 
   sendImprovStateResponse(0x03); //provisioning

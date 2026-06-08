@@ -335,7 +335,7 @@ void handleNotifications()
     if (packetSize) {
 #ifdef ARDUINO_ARCH_ESP32
       if (!receiveDirect) {rgbUdp.flush(); notifierUdp.flush(); notifier2Udp.flush(); return;}
-      if (packetSize > UDP_IN_MAXSIZE || packetSize < 3) {rgbUdp.flush(); notifierUdp.flush(); notifier2Udp.flush(); return;}
+      if (packetSize > UDP_IN_MAXSIZE || packetSize < 3) {rgbUdp.flush(); notifierUdp.flush(); notifier2Udp.flush(); return;} // packetSize must not exceed buffersize (UDP_IN_MAXSIZE)
 #else
       if (!receiveDirect) {return;}
       if (packetSize > UDP_IN_MAXSIZE || packetSize < 3) {return;}
@@ -468,6 +468,7 @@ void handleNotifications()
         uint8_t numSrcSegs = udpIn[39];
         for (size_t i = 0; i < numSrcSegs; i++) {
           uint16_t ofs = 41 + i*udpIn[40]; //start of segment offset byte
+          if (ofs + 36 > UDP_IN_MAXSIZE) break; // WLEDMM avoid reading outsize of array
           uint8_t id = udpIn[0 +ofs];
           if (id > strip.getSegmentsNum()) break;
 
@@ -601,6 +602,7 @@ void handleNotifications()
     if (tpmPacketCount == 1) tpmPayloadFrameSize = (udpIn[2] << 8) + udpIn[3]; //save frame size for the whole payload if this is the first packet
     byte packetNum = udpIn[4]; //starts with 1!
     byte numPackets = udpIn[5];
+    tpmPayloadFrameSize = min(tpmPayloadFrameSize, uint16_t(UDP_IN_MAXSIZE - 6)); // WLEDMM clamp to buffer size
 
     uint16_t id = (tpmPayloadFrameSize/3)*(packetNum-1); //start LED
     uint16_t totalLen = strip.getLengthTotal();
