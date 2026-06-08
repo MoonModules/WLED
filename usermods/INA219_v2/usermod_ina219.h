@@ -192,15 +192,34 @@ public:
     bool    oldEnabled = enabled;
 
     configComplete &= getJsonValue(top[F("enabled")],            enabled,              false);
+
     configComplete &= getJsonValue(top[FPSTR(_readInterval)],    readInterval,        (uint32_t)5000);
+    if (readInterval < 100) {  // avoid hammering the I2C bus; 100 ms is a sane minimum
+      USER_PRINTLN(F("[INA219]: readInterval-ms too small, clamped to 100 ms."));
+      readInterval = 100;
+      configComplete = false;
+    }
+
     configComplete &= getJsonValue(top[FPSTR(_i2cAddress)],      i2cAddress,          (uint8_t)0x40);
+    if (i2cAddress != 0x40 && i2cAddress != 0x41 && i2cAddress != 0x44 && i2cAddress != 0x45) {
+      USER_PRINTF("[INA219]: invalid i2cAddress 0x%02X, defaulting to 0x40.\n", i2cAddress);
+      i2cAddress = 0x40;
+      configComplete = false;
+    }
+
     configComplete &= getJsonValue(top[FPSTR(_shuntResistor)],   shuntResistor_mOhm,  100.0f);
     if (shuntResistor_mOhm < 1.0f) {
       USER_PRINTLN(F("[INA219]: shuntResistor-mOhm clamped to minimum 1 mOhm."));
       shuntResistor_mOhm = 1.0f;
     }
     configComplete &= getJsonValue(top[FPSTR(_maxCurrentRange)], maxCurrentRange_A,   2.0f);
+
     configComplete &= getJsonValue(top[FPSTR(_busVoltageRange)], busVoltageRange_V,   (uint8_t)32);
+    if (busVoltageRange_V != 16 && busVoltageRange_V != 32) {  // only 16 V or 32 V presets exist
+      USER_PRINTF("[INA219]: invalid busVoltageRange-V %u, defaulting to 32 V.\n", busVoltageRange_V);
+      busVoltageRange_V = 32;
+      configComplete = false;
+    }
 
     if (!initDone) {
       DEBUG_PRINTLN(F("[INA219] config loaded."));
