@@ -78,6 +78,12 @@ public:
 
   void setup() override {
     if (!enabled) {
+      if (ina219)
+      {
+        delete ina219;
+        ina219 = nullptr;
+      }
+      sensorFound = false;
       initDone = true;  // mark as initialized so re-enabling via UI triggers (re)setup
       return;
     }
