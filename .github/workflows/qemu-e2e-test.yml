@@ -91,7 +91,9 @@ jobs:
         run: npm ci
       
       - name: Install Playwright Browsers
-        run: npx playwright install --with-deps chromium
+        run: |
+          npm install @playwright/test
+          npx playwright install --with-deps chromium
       
       - name: Install ESP32 exception decoder
         run: |
