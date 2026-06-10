@@ -160,27 +160,14 @@ jobs:
           
           echo ""
           echo "=== Testing Network Connectivity ==="
+          echo "Note: ICMP ping to guest IP won't work (QEMU user-mode networking limitation)"
+          echo "Only TCP connectivity via hostfwd is supported"
           
-          # Wait up to 1 minute for network connectivity
+          # Wait up to 1 minute for HTTP connectivity
           for i in {1..30}; do
-            # Test ping connectivity first
-            echo "Attempt $i/30: Testing connectivity..."
-            if ping -c 1 -W 2 localhost > /dev/null 2>&1; then
-              echo "✓ Localhost ping successful"
-              
-              # Try pinging the QEMU guest IP if we can detect it
-              GUEST_IP=$(grep -o "10\.0\.2\.[0-9]\+" qemu-output.log | tail -1 || echo "")
-              if [ -n "$GUEST_IP" ]; then
-                echo "Detected guest IP: $GUEST_IP"
-                if ping -c 1 -W 2 "$GUEST_IP" > /dev/null 2>&1; then
-                  echo "✓ Guest IP ($GUEST_IP) ping successful"
-                else
-                  echo "⚠ Guest IP ($GUEST_IP) not responding to ping"
-                fi
-              fi
-            fi
+            echo "Attempt $i/30: Testing HTTP connectivity..."
             
-            # Test HTTP connectivity
+            # Test HTTP connectivity (only reliable test in QEMU user-mode networking)
             if curl -f -m 5 http://localhost:8080/ > /dev/null 2>&1; then
               echo "✓ SUCCESS: WLED HTTP server is responding!"
               

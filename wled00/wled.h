@@ -900,7 +900,8 @@ WLED_GLOBAL volatile uint8_t jsonBufferLock _INIT(0);
 
 #ifdef ARDUINO_ARCH_ESP32
   #ifdef WLED_QEMU
-  #define WLED_CONNECTED (ETH.localIP()[0] != 0) // QEMU does not have wifi
+  // QEMU: Use Network.isConnected() instead of ETH.localIP() since ETH object uses OpenETH driver
+  #define WLED_CONNECTED Network.isConnected()
   #else
   #define WLED_CONNECTED (WiFi.status() == WL_CONNECTED || ETH.localIP()[0] != 0)
   #endif

@@ -4,6 +4,16 @@
 #include <Arduino.h>
 #ifdef ARDUINO_ARCH_ESP32
 #include "esp_ota_ops.h"
+#ifdef WLED_QEMU
+// Includes for OpenETH driver (QEMU's emulated ethernet MAC)
+#include "esp_eth.h"
+#include "esp_eth_mac.h"
+#include "esp_eth_phy.h"
+#include "esp_eth_netif_glue.h"
+#include "esp_netif.h"
+#include "esp_event.h"
+#include "tcpip_adapter.h"
+#endif
 #endif
 #warning WLED-MM is licensed under the EUPL-1.2. By installing WLED MM you implicitly accept the terms!
 
@@ -1078,55 +1088,112 @@ bool WLED::initEthernet()
   #endif
 
   #ifdef WLED_QEMU
-  // QEMU: Skip hardware initialization - QEMU's open_eth doesn't fully emulate MAC registers
-  // The ethernet hardware init crashes with LoadStorePIFAddrError in emac_ll_clock_enable_rmii_output
-  // espressif example on how to init open_eth:
-  // https://github.com/esp-afr-sdk/blob/release/v4.4/examples/common_components/protocol_examples_common/connect.c - look for esp_eth_mac_new_openeth()
-
-  // Don't call ETH.begin() - avoids MAC register crash
-  // But manually initialize lwIP and DHCP for QEMU
-  USER_PRINTLN(F("initC: QEMU mode - initializing network stack"));
-  tcpip_adapter_init();
+  // QEMU: Use OpenCores Ethernet MAC (designed for QEMU's open_eth model)
+  // Do NOT call ETH.begin() — it uses the real ESP32 EMAC which crashes in QEMU
+  // Reference: https://github.com/mluis/qemu-esp32/issues/2
+  // Reference: https://github.com/esp-afr-sdk/blob/release/v4.4/examples/common_components/protocol_examples_common/connect.c
   
-  #if !defined(WLED_STATIC_IP_DEFAULT_1)
-  USER_PRINTLN(F("initC: QEMU - Starting DHCP client on ethernet interface"));
-  esp_err_t dhcp_result = tcpip_adapter_dhcpc_start(TCPIP_ADAPTER_IF_ETH);
-  if (dhcp_result == ESP_OK) {
-    USER_PRINTLN(F("initC: QEMU - DHCP client started successfully"));
-  } else {
-    USER_PRINTF("initC: QEMU - DHCP client start failed with error: %d\n", dhcp_result);
+  USER_PRINTLN(F("initC: QEMU mode - initializing OpenETH MAC driver"));
+  
+  // 1. Ensure event loop exists (Arduino may not have created it without WiFi/ETH)
+  esp_err_t err = esp_event_loop_create_default();
+  if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+    USER_PRINTF("initC: QEMU - ERROR: esp_event_loop_create_default failed: %d\n", err);
+    return false;
   }
   
-  // Give DHCP some time and check status
-  delay(2000);
+  // 2. Initialize TCP/IP stack
+  tcpip_adapter_init();
+  
+  // 3. Create the OpenCores MAC (designed for QEMU)
+  eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();
+  esp_eth_mac_t *mac = esp_eth_mac_new_openeth(&mac_config);
+  if (!mac) {
+    USER_PRINTLN(F("initC: QEMU - ERROR: esp_eth_mac_new_openeth() failed"));
+    USER_PRINTLN(F("initC: QEMU - CONFIG_ETH_USE_OPENETH may not be enabled in arduino-esp32"));
+    USER_PRINTLN(F("initC: QEMU - Check sdkconfig.defaults.qemu and rebuild ESP-IDF"));
+    return false;
+  }
+  
+  // 4. Create the DP83848 PHY (what QEMU emulates alongside open_eth)
+  eth_phy_config_t phy_config = ETH_PHY_DEFAULT_CONFIG();
+  phy_config.phy_addr = 1;         // QEMU open_eth uses PHY address 1
+  phy_config.reset_gpio_num = -1;  // No GPIO reset in QEMU
+  esp_eth_phy_t *phy = esp_eth_phy_new_dp83848(&phy_config);
+  if (!phy) {
+    USER_PRINTLN(F("initC: QEMU - ERROR: esp_eth_phy_new_dp83848() failed"));
+    return false;
+  }
+  
+  // 5. Install the Ethernet driver
+  esp_eth_config_t eth_config = ETH_DEFAULT_CONFIG(mac, phy);
+  esp_eth_handle_t eth_handle = NULL;
+  err = esp_eth_driver_install(&eth_config, &eth_handle);
+  if (err != ESP_OK) {
+    USER_PRINTF("initC: QEMU - ERROR: esp_eth_driver_install failed: %d\n", err);
+    return false;
+  }
+  
+  // 6. Attach to TCP/IP stack via netif glue
+  esp_netif_config_t cfg = ESP_NETIF_DEFAULT_ETH();
+  esp_netif_t *eth_netif = esp_netif_new(&cfg);
+  if (!eth_netif) {
+    USER_PRINTLN(F("initC: QEMU - ERROR: esp_netif_new failed"));
+    esp_eth_driver_uninstall(eth_handle);
+    return false;
+  }
+  
+  void *glue = esp_eth_new_netif_glue(eth_handle);
+  if (!glue) {
+    USER_PRINTLN(F("initC: QEMU - ERROR: esp_eth_new_netif_glue failed"));
+    esp_netif_destroy(eth_netif);
+    esp_eth_driver_uninstall(eth_handle);
+    return false;
+  }
+  
+  err = esp_netif_attach(eth_netif, glue);
+  if (err != ESP_OK) {
+    USER_PRINTF("initC: QEMU - ERROR: esp_netif_attach failed: %d\n", err);
+    esp_netif_destroy(eth_netif);
+    esp_eth_driver_uninstall(eth_handle);
+    return false;
+  }
+  
+  // 7. Register IP event handler so we know when DHCP succeeds
+  auto got_ip_handler = [](void*, esp_event_base_t, int32_t, void* event_data) {
+    ip_event_got_ip_t* event = (ip_event_got_ip_t*)event_data;
+    USER_PRINTF("initC: QEMU - Got IP via DHCP: " IPSTR "\n", IP2STR(&event->ip_info.ip));
+    USER_PRINTF("initC: QEMU - Gateway: " IPSTR "\n", IP2STR(&event->ip_info.gw));
+    USER_PRINTF("initC: QEMU - Netmask: " IPSTR "\n", IP2STR(&event->ip_info.netmask));
+  };
+  esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, got_ip_handler, NULL);
+  
+  // 8. Start Ethernet
+  err = esp_eth_start(eth_handle);
+  if (err != ESP_OK) {
+    USER_PRINTF("initC: QEMU - ERROR: esp_eth_start failed: %d\n", err);
+    esp_netif_destroy(eth_netif);
+    esp_eth_driver_uninstall(eth_handle);
+    return false;
+  }
+  
+  USER_PRINTLN(F("initC: QEMU - OpenETH driver started, waiting for DHCP..."));
+  
+  // Give DHCP some time to complete
+  delay(3000);
+  
+  // Check if we got an IP
   tcpip_adapter_ip_info_t ip_info_check;
   if (tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_ETH, &ip_info_check) == ESP_OK) {
     if (ip_info_check.ip.addr != 0) {
-      USER_PRINTF("initC: QEMU - Got IP address: %d.%d.%d.%d\n",
-        IP2STR(&ip_info_check.ip));
-      USER_PRINTF("initC: QEMU - Gateway: %d.%d.%d.%d\n",
-        IP2STR(&ip_info_check.gw));
-      USER_PRINTF("initC: QEMU - Netmask: %d.%d.%d.%d\n",
-        IP2STR(&ip_info_check.netmask));
+      USER_PRINTF("initC: QEMU - Confirmed IP: " IPSTR "\n", IP2STR(&ip_info_check.ip));
     } else {
-      USER_PRINTLN(F("initC: QEMU - No IP address assigned yet (DHCP may still be negotiating)"));
+      USER_PRINTLN(F("initC: QEMU - WARNING: No IP assigned yet (DHCP may still be negotiating)"));
     }
   }
-  #else
-  // Or set static IP:
-  USER_PRINTLN(F("initC: QEMU - Configuring static IP address"));
-  tcpip_adapter_ip_info_t ip_info;
-  IP4_ADDR(&ip_info.ip, 10, 0, 2, 15);
-  IP4_ADDR(&ip_info.gw, 10, 0, 2, 2);
-  IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
-  tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_ETH, &ip_info);
-  USER_PRINTF("initC: QEMU - Static IP: %d.%d.%d.%d\n", IP2STR(&ip_info.ip));
-  #endif
-
-  // Network stack will still work via QEMU's user-mode networking (slirp)
-  DEBUG_PRINTLN(F("initC: QEMU mode - skipping ETH.begin() hardware initialization"));
+  
   successfullyConfiguredEthernet = true;
-  USER_PRINTLN(F("initC: *** Ethernet configured for QEMU (hardware init skipped) ***"));
+  USER_PRINTLN(F("initC: *** QEMU OpenETH configured successfully! ***"));
   return true;
   #else
   if (!ETH.begin(

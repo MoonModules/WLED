@@ -121,13 +121,16 @@ npx playwright show-report
 - Verify firmware was built successfully
 
 **Ethernet/network connection issues:**
-- QEMU provides DHCP server (10.0.2.0/24 network, guest IP 10.0.2.15)
-- The build uses `WLED_QEMU` flag to skip hardware initialization (prevents crashes):
-  - Ethernet MAC hardware init (`ETH.begin()`) is skipped - causes LoadStorePIFAddrError crash
-  - WiFi initialization is completely disabled - WiFi hardware not emulated, causes LoadStorePIFAddrError
-- Network still works via QEMU's user-mode networking (slirp)
+- QEMU provides DHCP server (10.0.2.0/24 network, guest IP typically 10.0.2.15)
+- The build uses `WLED_QEMU` flag with OpenETH MAC driver (`esp_eth_mac_new_openeth`):
+  - Bypasses ESP32 internal EMAC hardware (causes LoadStorePIFAddrError crash)
+  - Uses OpenCores Ethernet MAC driver designed for QEMU's `open_eth` model
+  - Initializes proper lwIP network interface with DHCP client
+  - WiFi initialization is completely disabled - WiFi hardware not emulated
+- Network works via QEMU's user-mode networking (slirp) with full TCP/IP stack
+- **ICMP (ping) does not work** - QEMU user-mode networking limitation (TCP/UDP only)
 - If DHCP fails, enable static IP in `platformio.ini` (see comments in file)
-- Check QEMU output for "Ethernet configured for QEMU" and "WiFi disabled" messages
+- Check QEMU output for "OpenETH configured successfully" message
 - Port forwarding: ESP32 port 80 → localhost:8080
 
 **Tests fail with connection errors:**
