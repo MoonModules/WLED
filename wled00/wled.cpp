@@ -1350,6 +1350,7 @@ bool WLED::initEthernet()
   return true;
 
   #else  // CONFIG_ETH_USE_OPENETH not compiled into the platform libraries
+  #warning "CONFIG_ETH_USE_OPENETH not compiled into the platform libraries!"
   // Fallback: CONFIG_ETH_USE_OPENETH was not set in the ESP-IDF that shipped with this
   // platform, so esp_eth_mac_new_openeth() is unavailable.  We still need to at least
   // initialise the TCP/IP adapter and mark ethernet as configured so that the rest of
@@ -1368,7 +1369,7 @@ bool WLED::initEthernet()
   if (!ETH.begin(
                 (uint8_t) es.eth_address,
                 (int)     es.eth_power,
-
+                (int)     es.eth_mdc,
                 (int)     es.eth_mdio,
                 (eth_phy_type_t)   es.eth_type,
                 (eth_clock_mode_t) es.eth_clk_mode
