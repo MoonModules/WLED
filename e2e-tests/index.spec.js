@@ -3,9 +3,11 @@ const { test, expect } = require('./fixtures');
 
 /**
  * Test that the main index page loads without JavaScript errors.
- * The WLED web UI is served from compiled-in firmware data via the '/' route.
- * The '/index.htm' path only serves from LittleFS (custom uploaded UI) and
- * won't work when there's no filesystem content.
+ * The WLED web UI is served from compiled-in firmware data.
+ *
+ * NOTE: We navigate to '/sliders' (not '/') because '/' calls serveIndexOrWelcome()
+ * which serves the welcome page when no WiFi config is saved (e.g. fresh boot in QEMU).
+ * '/sliders' calls serveIndex() directly, always serving the full main UI.
  */
 test.describe('WLED Index Page', () => {
   test('should load main UI without JavaScript errors', async ({ page }) => {
@@ -24,16 +26,14 @@ test.describe('WLED Index Page', () => {
       pageErrors.push(error.message);
     });
 
-    // The main UI is served at '/' (or '/sliders') from compiled-in PAGE_index
-    await page.goto('/');
-    
-    // Wait for page to be loaded (don't wait for networkidle as API calls may hang)
+    // Use /sliders — always serves the built-in main UI, bypasses welcome page check
+    await page.goto('/sliders');
     await page.waitForLoadState('load');
     
     // Wait a bit for initial JavaScript to execute
     await page.waitForTimeout(3000);
-    
-    // Check that the page title is set
+
+    // Title is "WLED" from <title>WLED</title>, or device name (also contains WLED)
     await expect(page).toHaveTitle(/WLED/);
     
     // Check for JavaScript errors
@@ -46,17 +46,14 @@ test.describe('WLED Index Page', () => {
   });
 
   test('should have basic UI elements', async ({ page }) => {
-    await page.goto('/');
+    // Use /sliders — always serves the built-in main UI
+    await page.goto('/sliders');
     await page.waitForLoadState('load');
     await page.waitForTimeout(3000);
-    
-    // Check for the picker container (color wheel)
-    const pickerContainer = page.locator('#picker');
-    await expect(pickerContainer).toBeAttached();
-    
-    // Check for the controls/sliders container
-    const controls = page.locator('#sliders');
-    await expect(controls).toBeAttached();
+
+    // Both `#picker` (color wheel) and `#sliders` are defined in index.htm
+    await expect(page.locator('`#picker`')).toBeAttached();
+    await expect(page.locator('`#sliders`')).toBeAttached();
   });
 
   test('JSON API /json/info should return valid data', async ({ page }) => {
