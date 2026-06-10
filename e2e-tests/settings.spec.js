@@ -20,18 +20,18 @@ const { test, expect } = require('./fixtures');
  */
 test.describe('WLED Settings Pages', () => {
   const settingsPages = [
-    { path: '/settings', name: 'Main Settings' },
-    { path: '/settings/wifi', name: 'WiFi Settings' },
-    { path: '/settings/leds', name: 'LED Settings' },
-    { path: '/settings/ui', name: 'UI Settings' },
-    { path: '/settings/sync', name: 'Sync Settings' },
-    { path: '/settings/time', name: 'Time Settings' },
-    { path: '/settings/sec', name: 'Security Settings' },
-    { path: '/settings/um', name: 'Usermod Settings' },
-    { path: '/settings/2D', name: '2D Settings' },
+    { path: '/settings', name: 'Main Settings', title: 'WLED Settings' },
+    { path: '/settings/wifi', name: 'WiFi Settings', title: 'Wi-Fi Settings' },
+    { path: '/settings/leds', name: 'LED Settings', title: 'LED Settings' },
+    { path: '/settings/ui', name: 'UI Settings', title: 'UI Settings' },
+    { path: '/settings/sync', name: 'Sync Settings', title: 'Sync Settings' },
+    { path: '/settings/time', name: 'Time Settings', title: 'Time Settings' },
+    { path: '/settings/sec', name: 'Security Settings', title: 'Misc Settings' },
+    { path: '/settings/um', name: 'Usermod Settings', title: 'Usermod Settings' },
+    { path: '/settings/2D', name: '2D Settings', title: '2D Set-up' },
   ];
 
-  for (const { path, name } of settingsPages) {
+  for (const { path, name, title } of settingsPages) {
     test(`${name} (${path}) should load without JavaScript errors`, async ({ page }) => {
       const pageErrors = [];
 
@@ -44,8 +44,8 @@ test.describe('WLED Settings Pages', () => {
       await page.waitForLoadState('load');
       await page.waitForTimeout(2000);
       
-      // Check that the page loaded with WLED title
-      await expect(page).toHaveTitle(/WLED/);
+      // Check that the page loaded with expected title
+      await expect(page).toHaveTitle(title);
       
       // Check for JavaScript uncaught exceptions
       expect(pageErrors, `Page errors in ${name}: ${pageErrors.join(', ')}`).toHaveLength(0);
