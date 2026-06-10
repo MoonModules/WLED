@@ -185,13 +185,21 @@ jobs:
                 echo "⚠ Unexpected status code: $HTTP_STATUS"
               fi
               
-              # Test basic page access
+              # Test basic page/API access
               echo ""
               echo "=== Testing Basic Page Access ==="
-              if curl -f -m 5 http://localhost:8080/index.htm > /dev/null 2>&1; then
-                echo "✓ index.htm accessible"
+              # Note: /index.htm only works if a custom file exists on LittleFS filesystem.
+              # The root URL / always works (serves compiled-in PAGE_index from html_*.h).
+              # Test /json/info which is always available via the JSON API.
+              if curl -f -m 5 http://localhost:8080/json/info > /dev/null 2>&1; then
+                echo "✓ /json/info accessible (JSON API working)"
               else
-                echo "⚠ index.htm not accessible"
+                echo "⚠ /json/info not accessible"
+              fi
+              if curl -f -m 5 http://localhost:8080/json/state > /dev/null 2>&1; then
+                echo "✓ /json/state accessible"
+              else
+                echo "⚠ /json/state not accessible"
               fi
               
               exit 0
