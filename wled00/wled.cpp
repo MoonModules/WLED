@@ -12,7 +12,7 @@
 #include "esp_eth_netif_glue.h"
 #include "esp_netif.h"
 #include "esp_event.h"
-#include "tcpip_adapter.h"
+#include "tcpip_adapter.h" // This header is deprecated, please use new network related API in esp_netif.h
 #endif
 #endif
 #warning WLED-MM is licensed under the EUPL-1.2. By installing WLED MM you implicitly accept the terms!
