@@ -1,6 +1,8 @@
 #include "wled.h"
 #include "fcn_declare.h"
 #include "const.h"
+#include "util.h"
+
 #ifdef ESP8266
 #include "user_interface.h" // for bootloop detection
 #include <Hash.h>            // for SHA1 on ESP8266
@@ -8,6 +10,7 @@
 #include "mbedtls/sha1.h"   // for SHA1 on ESP32
 #include "esp_efuse.h"
 #include "esp_adc_cal.h"
+#include "esp_heap_caps.h"
 #endif
 
 //helper to get int value at a position in string
@@ -220,19 +223,34 @@ bool isAsterisksOnly(const char* str, byte maxLen)
 
 
 //threading/network callback details: https://github.com/Aircoookie/WLED/pull/2336#discussion_r762276994
-bool requestJSONBufferLock(uint8_t module)
+bool requestJSONBufferLock(uint8_t module, unsigned timeoutMS)
 {
-  unsigned long now = millis();
+  bool haveLock = false;
+  #ifdef ARDUINO_ARCH_ESP32
+    // We use a recursive mutex to prevent parallel JSON writes from parallel tasks.
+    // This also fixes hanging up for the full timeout interval in cases when the contention is from the same task.
+    // see https://github.com/wled/WLED/pull/4089 for more details.
+    if (esp32SemTake(jsonBufferLockMutex, timeoutMS) == pdTRUE) haveLock = true;  // WLEDMM must wait longer than suspendStripService timeout = 1500ms
+  #else
+    // 8266: only wait in case that can_yield() tells us we can yield and delay
+    if (can_yield()) {
+      unsigned long now = millis();
+      while (jsonBufferLock && millis()-now < timeoutMS) delay(1); // wait for fraction for buffer lock // WLEDMM must wait longer than suspendStripService timeout = 1500ms
+      if (!jsonBufferLock) haveLock = true;
+    }
+  #endif
 
-  while (jsonBufferLock && millis()-now < 1100) delay(1); // wait for fraction for buffer lock
-
-  if (jsonBufferLock) {
+  if (jsonBufferLock || !haveLock) {
+    #ifdef ARDUINO_ARCH_ESP32
+    if (haveLock) esp32SemGive(jsonBufferLockMutex);  // we got the mutex, but jsonBufferLock says the opposite -> give up
+    #endif
     USER_PRINT(F("ERROR: Locking JSON buffer failed! (still locked by "));
     USER_PRINT(jsonBufferLock);
     USER_PRINTLN(")");
     return false; // waiting time-outed
   }
 
+  // success - we keep holding the mutex until releaseJSONBufferLock()
   jsonBufferLock = module ? module : 255;
   DEBUG_PRINT(F("JSON buffer locked. ("));
   DEBUG_PRINT(jsonBufferLock);
@@ -250,11 +268,14 @@ void releaseJSONBufferLock()
   DEBUG_PRINTLN(")");
   fileDoc = nullptr;
   jsonBufferLock = 0;
+  #ifdef ARDUINO_ARCH_ESP32
+  esp32SemGive(jsonBufferLockMutex); // return the mutex
+  #endif
 }
 
 
 // extracts effect mode (or palette) name from names serialized string
-// caller must provide large enough buffer for name (including SR extensions)!
+// caller must provide large enough buffer for name (including SR extensions)! maxLen is (buffersize - 1)
 uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLen)
 {
   if (src == JSON_mode_names || src == nullptr) {
@@ -276,7 +297,7 @@ uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLe
 
   if (src == JSON_palette_names && mode > (GRADIENT_PALETTE_COUNT + 13)) {
     snprintf_P(dest, maxLen, PSTR("~ Custom %d ~"), 255-mode);
-    dest[maxLen-1] = '\0';
+    dest[maxLen] = '\0';
     return strlen(dest);
   }
 
@@ -295,11 +316,12 @@ uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLe
       case '"':
         insideQuotes = !insideQuotes;
         break;
-      case '[':
+      case '[': // falls through
       case ']':
         break;
       case ',':
         if (!insideQuotes) qComma++;
+         // falls through
       default:
         if (!insideQuotes || (qComma != mode)) break;
         dest[printedChars++] = singleJsonSymbol;
@@ -311,7 +333,7 @@ uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLe
 }
 
 
-// extracts effect slider data (1st group after @)
+// extracts effect slider data (1st group after @) -> maxLen is (buffersize - 1)
 uint8_t extractModeSlider(uint8_t mode, uint8_t slider, char *dest, uint8_t maxLen, uint8_t *var)
 {
   dest[0] = '\0'; // start by clearing buffer
@@ -497,6 +519,7 @@ um_data_t* simulateSound(uint8_t simulationId)
   if (!um_data) {
     //claim storage for arrays
     fftResult = (uint8_t *)malloc(sizeof(uint8_t) * 16);
+    //fftResult = (uint8_t *)d_malloc(sizeof(uint8_t) * 16); // might potentially fail with nullptr. We don't have a solution or fallback for this case.
 
     // initialize um_data pointer structure
     // NOTE!!!
@@ -690,6 +713,331 @@ int32_t hw_random(int32_t lowerlimit, int32_t upperlimit) {
   uint32_t diff = upperlimit - lowerlimit;
   return hw_random(diff) + lowerlimit;
 }
+
+
+// memory allocation functions with minimum free heap size check
+#ifdef ESP8266
+static void *validateFreeHeap(void *buffer) {
+  // make sure there is enough free heap left if buffer was allocated in DRAM region, free it if not
+  // note: ESP826 needs very little contiguous heap for webserver, checking total free heap works better
+  if (getFreeHeapSize() < MIN_HEAP_SIZE) {
+    free(buffer);
+    return nullptr;
+  }
+  return buffer;
+}
+
+void *d_malloc(size_t size) {
+  // note: using "if (getContiguousFreeHeap() > MIN_HEAP_SIZE + size)" did perform worse in tests with regards to keeping heap healthy and UI working
+  void *buffer = malloc(size);
+  return validateFreeHeap(buffer);
+}
+
+void *d_malloc_only(size_t size) {
+  return d_malloc(size);
+}
+
+void *d_calloc(size_t count, size_t size) {
+  void *buffer = calloc(count, size);
+  return validateFreeHeap(buffer);
+}
+
+// realloc with malloc fallback, note: on ESPS8266 there is no safe way to ensure MIN_HEAP_SIZE during realloc()s, free buffer and allocate new one
+void *d_realloc_malloc(void *ptr, size_t size) {
+  //void *buffer = realloc(ptr, size);
+  //buffer = validateFreeHeap(buffer);
+  //if (buffer) return buffer; // realloc successful
+  //d_free(ptr); // free old buffer if realloc failed (or min heap was exceeded)
+  //return d_malloc(size); // fallback to malloc
+  free(ptr);
+  return d_malloc(size);
+}
+
+void *d_realloc_malloc_nofree(void *ptr, size_t size) {
+  void *buffer = realloc(ptr, size);
+  //buffer = validateFreeHeap(buffer); violates contract
+  return buffer; // realloc done
+}
+
+
+void d_free(void *ptr) { free(ptr); }
+
+void *p_malloc(size_t size) { return d_malloc(size); }
+void *p_calloc(size_t count, size_t size) { return d_calloc(count, size); }
+void *p_realloc_malloc(void *ptr, size_t size) { return d_realloc_malloc(ptr, size); }
+void *p_realloc_malloc_nofree(void *ptr, size_t size) { return d_realloc_malloc_nofree(ptr, size); }
+void p_free(void *ptr) { free(ptr); }
+
+#else
+
+static size_t lastHeap = 65535;
+static size_t lastMinHeap = 65535;
+WLED_create_spinlock(heapStatusMux); // to prevent race conditions on lastHeap and lastMinHeap
+
+inline static void d_measureHeap(void) {
+#ifdef WLEDMM_FILEWAIT  // only when we don't use the RMTHI driver
+  if (!strip.isUpdating())  // skip measurement while sending out LEDs - prevents flickering
+#endif
+  {
+    size_t newlastHeap    = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    size_t newlastMinHeap = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    portENTER_CRITICAL(&heapStatusMux); // atomic operation
+      lastHeap = newlastHeap;
+      lastMinHeap = newlastMinHeap;
+    portEXIT_CRITICAL(&heapStatusMux);
+  }
+}
+
+size_t d_measureContiguousFreeHeap(void) { 
+  d_measureHeap();
+  return lastMinHeap;
+} // returns largest contiguous free block // WLEDMM may glitch, too
+
+size_t d_measureFreeHeap(void) {
+  d_measureHeap();
+  return lastHeap;
+} // returns free heap (ESP.getFreeHeap() can include other memory types) // WLEDMM can cause LED glitches
+
+// early check to avoid heap fragmentation: when PSRAM is available, we reject DRAM request if remaining heap possibly gets too low.
+//   This check is not exact - in case of strong heap fragmentation, there might be multiple chunks of similar sizes.
+//   However it still improves stability in low-heap situations (tested).
+static inline bool isOkForDRAMHeap(size_t amount) {
+#if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3)
+  // if (!psramFound()) return true; // No PSRAM -> accept everything // disabled - increases fragmentation
+  size_t avail = d_measureContiguousFreeHeap();
+  if ((amount < avail) && (avail - amount > MIN_HEAP_SIZE)) return true;
+  else {
+    DEBUG_PRINTF("* isOkForDRAMHeap() DRAM allocation rejected (%u bytes requested, %u-%u available).\n", amount, avail, MIN_HEAP_SIZE);
+    return(false);
+  }
+  #else
+  return true; // No PSRAM -> no other options
+  #endif
+}
+
+static void *validateFreeHeap(void *buffer) {
+  // make sure there is enough free heap left if buffer was allocated in DRAM region, free it if not
+  // TODO: between allocate and free, heap can run low (async web access), only IDF V5 allows for a pre-allocation-check of all free blocks
+  if (buffer == nullptr) return buffer; // early exit, nothing to check
+  if ((uintptr_t)buffer > SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH) { 
+    size_t avail = d_measureContiguousFreeHeap();
+    if (avail < MIN_HEAP_SIZE) { 
+      heap_caps_free(buffer);
+      USER_PRINTF("* validateFreeHeap() DRAM allocation rejected - largest remaining chunk too small (%u bytes).\n", avail);
+      d_measureHeap(); // update statistics after free
+      return nullptr;
+    }
+  }
+  return buffer;
+}
+
+#ifdef BOARD_HAS_PSRAM
+#define RTC_RAM_THRESHOLD 1024 // use RTC RAM for allocations smaller than this size
+#else
+#define RTC_RAM_THRESHOLD (psramFound() ? 1024 : 65535) // without PSRAM, allow any size into RTC RAM (useful especially on S2 without PSRAM)
+#endif
+
+void *d_malloc(size_t size) {
+  void *buffer = nullptr;
+  #if !defined(CONFIG_IDF_TARGET_ESP32)
+  // the newer ESP32 variants have byte-accessible fast RTC memory that can be used as heap, access speed is on-par with DRAM
+  // the system does prefer normal DRAM until full, since free RTC memory is ~7.5k only, its below the minimum heap threshold and needs to be allocated explicitly
+  // use RTC RAM for small allocations or if DRAM is running low to improve fragmentation
+  if (size <= RTC_RAM_THRESHOLD || getContiguousFreeHeap() < 2*MIN_HEAP_SIZE + size) {
+    //buffer = heap_caps_malloc_prefer(size, 2, MALLOC_CAP_RTCRAM, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    buffer = heap_caps_malloc(size, MALLOC_CAP_RTCRAM | MALLOC_CAP_8BIT);
+    DEBUG_PRINTF("* d_malloc() trying RTCRAM (%u bytes) - %s.\n", size, buffer?"success":"fail");
+  }
+  #endif
+
+  if ((buffer == nullptr) && isOkForDRAMHeap(size)) // no RTC RAM allocation: use DRAM
+    buffer = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // allocate in any available heap memory
+  buffer = validateFreeHeap(buffer); // make sure there is enough free heap left
+
+  #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3) // WLEDMM always try PSRAM (auto-detected)
+  if (!buffer && psramFound()) {
+    DEBUG_PRINTF("* d_malloc() using PSRAM(%u bytes) fsllback.\n", size);
+    return heap_caps_malloc_prefer(size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT); // DRAM failed,try PSRAM if available
+  }
+  #endif
+
+  if (!buffer) { errorFlag = ERR_LOW_MEM; USER_PRINTF("* d_malloc() failed (%u bytes) !\n", size); }
+  else if (errorFlag == ERR_LOW_MEM) errorFlag = ERR_NONE; // reset mem error flag
+  return buffer;
+}
+
+void *d_malloc_only(size_t size) {
+  // variant of d_malloc that only allocates from "internal" DRAM (no PSRAM fallback) - MIN_HEAP_SIZE checking relaxed to post-malloc only
+  void *buffer = nullptr;  
+  #if !defined(CONFIG_IDF_TARGET_ESP32) // try RTCRAM on newer chips
+  if (size <= RTC_RAM_THRESHOLD || getContiguousFreeHeap() < 2*MIN_HEAP_SIZE + size) {
+    buffer = heap_caps_malloc(size, MALLOC_CAP_RTCRAM | MALLOC_CAP_8BIT);
+    DEBUG_PRINTF("* d_malloc() trying RTCRAM (%u bytes) - %s.\n", size, buffer?"success":"fail");
+  }
+  #endif
+  if (!buffer) buffer = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  buffer = validateFreeHeap(buffer); // make sure there is enough free heap left
+
+  if (!buffer) { errorFlag = ERR_LOW_MEM; USER_PRINTF("* d_malloc_only() failed (%u bytes) !\n", size); }
+  else if (errorFlag == ERR_LOW_MEM) errorFlag = ERR_NONE; // reset mem error flag
+  return buffer;
+}
+
+void *d_calloc(size_t count, size_t size) {
+  // similar to d_malloc but uses heap_caps_calloc
+  void *buffer = nullptr;
+  #if !defined(CONFIG_IDF_TARGET_ESP32)
+  if ((size * count) <= RTC_RAM_THRESHOLD || getContiguousFreeHeap() < 2*MIN_HEAP_SIZE + (size * count)) {
+    //buffer = heap_caps_calloc_prefer(count, size, 2, MALLOC_CAP_RTCRAM, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    buffer = heap_caps_calloc(count, size, MALLOC_CAP_RTCRAM | MALLOC_CAP_8BIT);
+    DEBUG_PRINTF("* d_calloc() trying RTCRAM (%u bytes) - %s.\n", size*count, buffer?"success":"fail");
+  }
+  #endif
+
+  if ((buffer == nullptr) && isOkForDRAMHeap(size*count)) // no RTC RAM allocation: use DRAM
+    buffer = heap_caps_calloc(count, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // allocate in any available heap memory
+  buffer = validateFreeHeap(buffer); // make sure there is enough free heap left
+
+  #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3) // WLEDMM always try PSRAM (auto-detected)
+  if (!buffer && psramFound()) {
+    DEBUG_PRINTF("* d_calloc() using PSRAM (%u bytes) fallback.\n", size*count);
+    return heap_caps_calloc_prefer(count, size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT); // DRAM failed,try PSRAM if available
+  }
+  #endif
+  if (!buffer) { errorFlag = ERR_LOW_MEM; USER_PRINTF("* d_calloc() failed (%u bytes) !\n", size*count); }
+  else if (errorFlag == ERR_LOW_MEM) errorFlag = ERR_NONE; // reset mem error flag
+  return buffer;
+}
+
+// realloc with malloc fallback, original buffer is freed if realloc fails but not copied!
+void *d_realloc_malloc(void *ptr, size_t size) {
+  #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3) // WLEDMM always try PSRAM (auto-detected)
+    void *buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+  #else
+    void *buffer = heap_caps_realloc(ptr, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  #endif
+  void *bufferNew = buffer;
+  buffer = validateFreeHeap(buffer);
+  if (buffer) return buffer;   // realloc successful
+  if (!bufferNew) d_free(ptr); // free old buffer if realloc failed; don't double-free an invalid pointer if min heap was exceeded
+  DEBUG_PRINTF("* d_realloc_malloc(): realloc failed (%u bytes), trying malloc.\n", size);
+  return d_malloc(size);       // fallback to malloc
+}
+
+// realloc without malloc fallback, original buffer not changed if realloc fails
+void *d_realloc_malloc_nofree(void *ptr, size_t size) {
+  DEBUG_PRINTF("* d_realloc_malloc_nofree() realloc to %u bytes requested.\n", size);
+  void* buffer = nullptr;
+  #if (ESP_IDF_VERSION_MAJOR > 3)
+    // only basic sanity checks possible: prefer PSRAM if DRAM is low
+    size_t oldSize = ptr ? heap_caps_get_allocated_size(ptr) : 0; // heap_caps_get_allocated_size crashes on nullptr
+    size_t delta = (size > oldSize) ? (size - oldSize) : 0;
+    if ((delta == 0) || isOkForDRAMHeap(delta)) {     // prefer DRAM
+      buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+    } else {                                          // prefer PSRAM
+      buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+    }
+  #else
+    // V3 lacks heap_caps_get_allocated_size() -> no sanity check
+    buffer = heap_caps_realloc_prefer(ptr, size, 2, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+  #endif
+  //buffer = validateFreeHeap(buffer); // violates contract
+  if (!buffer) { USER_PRINTF("* d_realloc_malloc_nofree() failed (%u bytes) !\n", size); }
+  return buffer;
+}
+
+void d_free(void *ptr) { heap_caps_free(ptr); }
+void p_free(void *ptr) { heap_caps_free(ptr); }
+
+#if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3)  // V4 can auto-detect PSRAM
+// p_xalloc: prefer PSRAM, use DRAM as fallback
+void *p_malloc(size_t size) {
+  if (!psramFound()) return d_malloc(size);
+  void *buffer = heap_caps_malloc_prefer(size, 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+  return validateFreeHeap(buffer);
+}
+
+void *p_calloc(size_t count, size_t size) {
+  // similar to p_malloc but uses heap_caps_calloc
+  if (!psramFound()) return d_calloc(count, size);
+  void *buffer = heap_caps_calloc_prefer(count, size, 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+  return validateFreeHeap(buffer);
+}
+
+// realloc with malloc fallback, original buffer is freed if realloc fails but not copied!
+void *p_realloc_malloc(void *ptr, size_t size) {
+  if (!psramFound()) return d_realloc_malloc(ptr, size);
+  void *buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+  void *bufferNew = buffer;
+  buffer = validateFreeHeap(buffer);
+  if (buffer) return buffer;   // realloc successful
+  if (!bufferNew) p_free(ptr); // free old buffer if realloc failed; don't double-free an invalid pointer if min heap was exceeded
+  return p_malloc(size); // fallback to malloc
+}
+
+// realloc without malloc fallback, original buffer not changed if realloc fails
+void *p_realloc_malloc_nofree(void *ptr, size_t size) {
+  if (!psramFound()) return d_realloc_malloc_nofree(ptr, size);
+  void *buffer = heap_caps_realloc_prefer(ptr, size, 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+  //buffer = validateFreeHeap(buffer); // violates contract
+  return buffer;
+}
+
+#else // NO PSRAM support -> fall back to DRAM
+void *p_malloc(size_t size) { return d_malloc(size); }
+void *p_calloc(size_t count, size_t size) { return d_calloc(count, size); }
+void *p_realloc_malloc(void *ptr, size_t size) { return d_realloc_malloc(ptr, size); }
+void *p_realloc_malloc_nofree(void *ptr, size_t size) { return d_realloc_malloc_nofree(ptr, size); }
+#endif
+#endif
+
+
+#if 0 // WLEDMM not used yet
+// allocation function for buffers like pixel-buffers and segment data
+// optimises the use of memory types to balance speed and heap availability, always favours DRAM if possible
+// if multiple conflicting types are defined, the lowest bits of "type" take priority (see fcn_declare.h for types)
+void *allocate_buffer(size_t size, uint32_t type) {
+  void *buffer = nullptr;
+  #if CONFIG_IDF_TARGET_ESP32
+  // only classic ESP32 has "32bit accessible only" aka IRAM type. Using it frees up normal DRAM for other purposes
+  // this memory region is used for IRAM_ATTR functions, whatever is left is unused and can be used for pixel buffers
+  // prefer this type over PSRAM as it is slightly faster, except for _pixels where it is on-par as PSRAM-caching does a good job for mostly sequential access
+  if (type & BFRALLOC_NOBYTEACCESS) {
+    // prefer 32bit region, then PSRAM, fallback to any heap. Note: if adding "INTERNAL"-flag this wont work
+    buffer = heap_caps_malloc_prefer(size, 3, MALLOC_CAP_32BIT, MALLOC_CAP_SPIRAM, MALLOC_CAP_8BIT);
+    buffer = validateFreeHeap(buffer);
+  }
+  else
+  #endif
+  #if !defined(BOARD_HAS_PSRAM)
+  buffer = d_malloc(size);
+  #else
+  if (type & BFRALLOC_PREFER_DRAM) {
+    if (getContiguousFreeHeap() < 3*(MIN_HEAP_SIZE/2) + size && size > PSRAM_THRESHOLD)
+      buffer = p_malloc(size); // prefer PSRAM for large allocations & when DRAM is low
+    else
+      buffer = d_malloc(size); // allocate in DRAM if enough free heap is available, PSRAM as fallback
+  }
+  else if (type & BFRALLOC_ENFORCE_DRAM)
+    buffer = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // use DRAM only, otherwise return nullptr
+  else if (type & BFRALLOC_PREFER_PSRAM) {
+    // if DRAM is plenty, prefer it over PSRAM for speed, reserve enough DRAM for segment data: if MAX_SEGMENT_DATA is exceeded, always uses PSRAM
+    if (getContiguousFreeHeap() > 4*MIN_HEAP_SIZE + size + ((uint32_t)(MAX_SEGMENT_DATA - Segment::getUsedSegmentData())))
+      buffer = d_malloc(size);
+    else
+      buffer = p_malloc(size); // prefer PSRAM
+  }
+  else if (type & BFRALLOC_ENFORCE_PSRAM)
+    buffer = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); // use PSRAM only, otherwise return nullptr
+  buffer = validateFreeHeap(buffer);
+  #endif
+  if (buffer && (type & BFRALLOC_CLEAR))
+    memset(buffer, 0, size); // clear allocated buffer
+
+  return buffer;
+}
+#endif
+
 
 // Platform-agnostic SHA1 computation from String input
 String computeSHA1(const String& input) {

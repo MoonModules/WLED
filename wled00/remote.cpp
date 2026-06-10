@@ -14,6 +14,9 @@
 #define WIZMOTE_BUTTON_TWO         17
 #define WIZMOTE_BUTTON_THREE       18
 #define WIZMOTE_BUTTON_FOUR        19
+#define WIZMOTE_BUTTON_FIVE        20
+#define WIZMOTE_BUTTON_SIX         21
+#define WIZMOTE_BUTTON_SEVEN       22
 #define WIZMOTE_BUTTON_BRIGHT_UP   9
 #define WIZMOTE_BUTTON_BRIGHT_DOWN 8
 
@@ -37,10 +40,10 @@ void handleRemote(){}
 typedef struct message_structure {
   uint8_t program;      // 0x91 for ON button, 0x81 for all others
   uint8_t seq[4];       // Incremental sequence number 32 bit unsigned integer LSB first
-  uint8_t byte5 = 32;   // Unknown
+  uint8_t dt1 = 32;     // Button Data Type (0x20)
   uint8_t button;       // Identifies which button is being pressed
-  uint8_t byte8 = 1;    // Unknown, but always 0x01
-  uint8_t byte9 = 100;  // Unknown, but always 0x64
+  uint8_t dt2 = 1;      // Battery Level Data Type (0x01)
+  uint8_t batLevel = 100; // Battery Level 0-100
 
   uint8_t byte10;  // Unknown, maybe checksum
   uint8_t byte11;  // Unknown, maybe checksum
@@ -167,6 +170,9 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     case WIZMOTE_BUTTON_TWO            : presetWithFallback(2, FX_MODE_BREATH,        0); resetNightMode(); break;
     case WIZMOTE_BUTTON_THREE          : presetWithFallback(3, FX_MODE_FIRE_FLICKER,  0); resetNightMode(); break;
     case WIZMOTE_BUTTON_FOUR           : presetWithFallback(4, FX_MODE_RAINBOW,       0); resetNightMode(); break;
+    case WIZMOTE_BUTTON_FIVE           : presetWithFallback(5, FX_MODE_CANDLE,        0); resetNightMode(); break;
+    case WIZMOTE_BUTTON_SIX            : presetWithFallback(6, FX_MODE_RANDOM_COLOR,  0); resetNightMode(); break;
+    case WIZMOTE_BUTTON_SEVEN          : presetWithFallback(7, FX_MODE_FADE,          0); resetNightMode(); break;
     case WIZMOTE_BUTTON_NIGHT          : activateNightMode();                             stateUpdated(CALL_MODE_BUTTON); break;
     case WIZMOTE_BUTTON_BRIGHT_UP      : brightnessUp();                                  stateUpdated(CALL_MODE_BUTTON); break;
     case WIZMOTE_BUTTON_BRIGHT_DOWN    : brightnessDown();                                stateUpdated(CALL_MODE_BUTTON); break;

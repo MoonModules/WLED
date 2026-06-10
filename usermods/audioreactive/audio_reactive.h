@@ -127,12 +127,14 @@
 #define AUDIOSYNC_REC_PLUS 0x06  // UDP sound sync - receiver + local mode (uses local input if no receiving udp sound)
 #define AUDIOSYNC_IDLE_MS  2500  // timeout for "receiver idle" (milliseconds) 
 
-static volatile bool disableSoundProcessing = false;      // if true, sound processing (FFT, filters, AGC) will be suspended. "volatile" as its shared between tasks.
+static volatile bool disableSoundProcessing = false;      // if true, sound processing (FFT, filters, AGC) will be suspended. "volatile" as it is shared between tasks.
 static uint8_t audioSyncEnabled = AUDIOSYNC_NONE;         // bit field: bit 0 - send, bit 1 - receive, bit 2 - use local if not receiving
 static bool audioSyncSequence = true;                     // if true, the receiver will drop out-of-sequence packets
-static bool udpSyncConnected = false;         // UDP connection status -> true if connected to multicast group
+static uint8_t audioSyncPurge = 1;                        // 0: process each packet (don't purge); 1: auto-purge old packets; 2: only process latest received packet (always purge)
+static bool udpSyncConnected = false;                     // UDP connection status -> true if connected to multicast group
+static volatile bool isOOM = false;                       // FFTask: not enough memory for buffers (audio processing failed to start)
 
-#define NUM_GEQ_CHANNELS 16                                           // number of frequency channels. Don't change !!
+#define NUM_GEQ_CHANNELS 16                               // number of frequency channels. Don't change !!
 
 // audioreactive variables
 #ifdef ARDUINO_ARCH_ESP32
@@ -174,7 +176,7 @@ static bool limiterOn = false;                 // bool: enable / disable dynamic
 #else
 static bool limiterOn = true;
 #endif
-static uint8_t micQuality = 0;   // affects input filtering; 0 normal, 1 minimal filtering, 2 no filtering
+[[maybe_unused]] static uint8_t micQuality = 0;   // input filtering; 0 normal, 1 minimal filtering, 2 no filtering - unused on 8266
 #ifdef FFT_USE_SLIDING_WINDOW
 static uint16_t attackTime = 24;              // int: attack time in milliseconds. Default 0.024sec
 static uint16_t decayTime = 250;              // int: decay time in milliseconds.  New default 250ms.
@@ -245,8 +247,8 @@ const float agcSampleSmooth[AGC_NUM_PRESETS]  = {  1/12.f,   1/6.f,  1/16.f}; //
 static AudioSource *audioSource = nullptr;
 static uint8_t useInputFilter = 0;                        // enables low-cut filtering. Applies before FFT.
 
-//WLEDMM add experimental settings
-static uint8_t micLevelMethod = 0;                        // 0=old "floating" miclev, 1=new  "freeze" mode, 2=fast freeze mode (mode 2 may not work for you)
+//WLEDMM experimental settings
+static uint8_t micLevelMethod = 1;                        // 0=old "floating" miclev, 1=new  "freeze" mode, 2=fast freeze mode (mode 2 may not work for you)
 #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3)
 static constexpr uint8_t averageByRMS = false;                      // false: use mean value, true: use RMS (root mean squared). use simpler method on slower MCUs.
 #else
@@ -316,7 +318,7 @@ static const float fftResultPink[MAX_PINK+1][NUM_GEQ_CHANNELS] = {
    * Your HiFi equipment should receive its audio input from Line-In, SPDIF, HDMI, or another "undistorted" connection (like CDROM). 
    * Try not to use Bluetooth or MP3 when playing the "pink noise" audio. BT-audio and MP3 both perform "acoustic adjustments" that we don't want now.
 
-   * SR WLED: enable AGC ("standard" or "lazy"), set squelch to a low level, check that LEDs don't reacts in silence.
+   * SR WLED: enable AGC ("standard" or "lazy"), set squelch to a low level, check that LEDs don't react in silence.
    * SR WLED: select "Generic Line-In" as your Frequency Profile, "Linear" or "Square Root" as Frequency Scale
    * SR WLED: Dynamic Limiter On, Dynamics Fall Time around 4200 - makes GEQ hold peaks for much longer
    * SR WLED: Select GEQ effect, move all effect slider to max (i.e. right side)
@@ -327,12 +329,12 @@ static const float fftResultPink[MAX_PINK+1][NUM_GEQ_CHANNELS] = {
    * Your own profile: 
    *  - Target for each LED bar is 50% to 75% of the max height --> 8(high) x 16(wide) panel means target = 5. 32 x 16 means target = 22.
    *  - From left to right - count the LEDs in each of the 16 frequency columns (that's why you need the photo). This is the barheight for each channel.
-   *  - math time! Find the multiplier that will bring each bar to to target.
+   *  - math time! Find the multiplier that will bring each bar to the target.
    *    * in case of square root scale: multiplier = (target * target) / (barheight * barheight)
    *    * in case of linear scale:      multiplier = target / barheight
    * 
    *  - replace one of the "userdef" lines with a copy of the parameter line for "Line-In", 
-   *  - go through your new "userdef" parameter line, multiply each entry with the mutliplier you found for that column.
+   *  - go through your new "userdef" parameter line, multiply each entry with the multiplier you found for that column.
 
    * Compile + upload
    * Test your new profile (same procedure as above). Iterate the process to improve results.
@@ -403,7 +405,7 @@ constexpr float binWidth = SAMPLE_RATE / (float)samplesFFT; // frequency range o
 // lib_deps += https://github.com/kosme/arduinoFFT#develop @ 1.9.2
 #if  !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 // these options actually cause slow-down on -S2 (-S2 doesn't have floating point hardware)
-//#define FFT_SPEED_OVER_PRECISION     // enables use of reciprocals (1/x etc), and an a few other speedups - WLEDMM not faster on ESP32
+//#define FFT_SPEED_OVER_PRECISION     // enables use of reciprocals (1/x etc), and a few other speedups - WLEDMM not faster on ESP32
 //#define FFT_SQRT_APPROXIMATION       // enables "quake3" style inverse sqrt                               - WLEDMM slower on ESP32
 #endif
 #define sqrt(x) sqrtf(x)             // little hack that reduces FFT time by 10-50% on ESP32 (as alternative to FFT_SQRT_APPROXIMATION)
@@ -453,13 +455,13 @@ static bool alocateFFTBuffers(void) {
     USER_PRINT(F("\nFree heap ")); USER_PRINTLN(ESP.getFreeHeap());
   #endif
 
-  if (vReal) free(vReal); // should not happen
-  if (vImag) free(vImag); // should not happen
-  if ((vReal = (float*) calloc(sizeof(float), samplesFFT)) == nullptr) return false; // calloc or die
-  if ((vImag = (float*) calloc(sizeof(float), samplesFFT)) == nullptr) return false;
+  if (vReal) d_free(vReal); vReal = nullptr; // should not happen
+  if (vImag) d_free(vImag); vImag = nullptr; // should not happen
+  if ((vReal = (float*) d_calloc(samplesFFT, sizeof(float))) == nullptr) return false; // calloc or die
+  if ((vImag = (float*) d_calloc(samplesFFT, sizeof(float))) == nullptr) return false;
 #ifdef FFT_MAJORPEAK_HUMAN_EAR
-  if (pinkFactors) free(pinkFactors);
-  if ((pinkFactors = (float*) calloc(sizeof(float), samplesFFT)) == nullptr) return false;
+  if (pinkFactors) p_free(pinkFactors);
+  if ((pinkFactors = (float*) p_calloc(samplesFFT, sizeof(float))) == nullptr) return false;
 #endif
 
   #ifdef SR_DEBUG
@@ -470,6 +472,27 @@ static bool alocateFFTBuffers(void) {
   #endif
   return(true); // success
 }
+
+// de-allocate FFT sample buffers from heap
+static void destroyFFTBuffers(bool panicOOM) {
+  #ifdef FFT_MAJORPEAK_HUMAN_EAR
+    if (pinkFactors) p_free(pinkFactors); pinkFactors = nullptr;
+#endif
+  if (vImag) d_free(vImag); vImag = nullptr;
+  if (vReal) d_free(vReal); vReal = nullptr;
+
+  if (panicOOM && !isOOM) { // notify user
+    isOOM = true;
+    errorFlag = ERR_LOW_MEM;
+    USER_PRINTLN("AR startup failed - out of memory!");
+  }
+  #ifdef SR_DEBUG
+    USER_PRINTLN("\ndestroyFFTBuffers() completed successfully.");
+    USER_PRINT(F("Free heap: ")); USER_PRINTLN(ESP.getFreeHeap());
+    USER_FLUSH();
+  #endif
+}
+
 
 // High-Pass "DC blocker" filter
 // see https://www.dsprelated.com/freebooks/filters/DC_Blocker.html
@@ -485,6 +508,22 @@ static void runDCBlocker(uint_fast16_t numSamples, float *sampleBuffer) {
     ym1 = filtered;    
     sampleBuffer[i] = filtered;
   }  
+}
+
+// 
+// FFT runner - "return" from a task function causes crash. This wrapper keeps the task alive
+//
+void runFFTcode(void * parameter) __attribute__((noreturn,used));
+void runFFTcode(void * parameter) {
+  bool firstFail = true; // prevents flood of warnings
+  do {
+    if (!disableSoundProcessing) {
+      FFTcode(parameter);
+      if (firstFail) {USER_PRINTLN(F("warning: unexpected exit of FFT main task."));}
+      firstFail = false;
+    } else firstFail = true; // re-enable warning message
+    vTaskDelay(1000); // if we arrive here, FFcode has returned due to OOM. Wait a bit, then try again.
+  } while (true);  
 }
 
 //
@@ -510,13 +549,18 @@ void FFTcode(void * parameter)
   static float* oldSamples = nullptr; // previous 50% of samples
   static bool haveOldSamples = false; // for sliding window FFT
   bool usingOldSamples = false;
-  if (!oldSamples) oldSamples = (float*) calloc(sizeof(float), samplesFFT_2); // allocate on first run
-  if (!oldSamples) { disableSoundProcessing = true; return; }                 // no memory -> die
+  if (!oldSamples) oldSamples = (float*) d_calloc(samplesFFT_2, sizeof(float));       // allocate on first run
+  if (!oldSamples) { disableSoundProcessing = true; haveOldSamples = false; destroyFFTBuffers(true); return; } // no memory -> die
 #endif
 
   bool success = true;
   if ((vReal == nullptr) || (vImag == nullptr)) success = alocateFFTBuffers(); // allocate sample buffers on first run
-  if (success == false) { disableSoundProcessing = true; return; }             // no memory -> die
+  if (success == false) {
+    // no memory -> clean up heap, then suspend
+    disableSoundProcessing = true;
+    destroyFFTBuffers(true);
+    return; 
+  }
 
   // create FFT object - we have to do if after allocating buffers
 #if defined(FFT_LIB_REV) && FFT_LIB_REV > 0x19
@@ -526,7 +570,8 @@ void FFTcode(void * parameter)
   // recommended version optimized by @softhack007 (API version 1.9)
   #if defined(WLED_ENABLE_HUB75MATRIX) && defined(CONFIG_IDF_TARGET_ESP32)
     static float* windowWeighingFactors = nullptr;
-    if (!windowWeighingFactors) windowWeighingFactors = (float*) calloc(sizeof(float), samplesFFT); // cache for FFT windowing factors - use heap
+    if (!windowWeighingFactors) windowWeighingFactors = (float*) d_calloc(samplesFFT, sizeof(float)); // cache for FFT windowing factors - use heap
+    if (!windowWeighingFactors) { disableSoundProcessing = true; haveOldSamples = false;  destroyFFTBuffers(true); return; }    // alloc failed
   #else
     static float windowWeighingFactors[samplesFFT] = {0.0f};                                        // cache for FFT windowing factors - use global RAM
   #endif
@@ -674,11 +719,11 @@ void FFTcode(void * parameter)
     haveOldSamples = true;
     #endif
 
-    // find highest sample in the batch, and count zero crossings
+    // find the highest sample in the batch, and count zero crossings
     float maxSample = 0.0f;                         // max sample from FFT batch
     uint_fast16_t newZeroCrossingCount = 0;
     for (int i=0; i < samplesFFT; i++) {
-	    // pick our  our current mic sample - we take the max value from all samples that go into FFT
+	    // pick our current mic sample - we take the max value from all samples that go into FFT
 	    if ((vReal[i] <= (INT16_MAX - 1024)) && (vReal[i] >= (INT16_MIN + 1024))) { //skip extreme values - normally these are artefacts
       #ifdef FFT_USE_SLIDING_WINDOW
         if (usingOldSamples) {
@@ -705,7 +750,7 @@ void FFTcode(void * parameter)
     micReal_max = datMax;
     micReal_avg = datAvg / samplesFFT;
 #if 0
-    // compute mix/max again after filering - usefull for filter debugging
+    // compute min/max again after filtering - useful for filter debugging
     for (int i=0; i < samplesFFT; i++) {
       if (i==0) {
         datMin = datMax = vReal[i];
@@ -749,7 +794,7 @@ void FFTcode(void * parameter)
           break;
           case 0: // falls through
           default:
-            FFT.windowing(FFTWindow::Blackman_Harris, FFTDirection::Forward);  // Weigh data using "Blackman- Harris" window - sharp peaks due to excellent sideband rejection
+            FFT.windowing(FFTWindow::Blackman_Harris, FFTDirection::Forward);  // Weigh data using "Blackman - Harris" window - sharp peaks due to excellent sideband rejection
             wc = 1.0f;              // 2.7929062517 * 2.0
         }
         #ifdef FFT_USE_SLIDING_WINDOW
@@ -1188,7 +1233,9 @@ class AudioReactive : public Usermod {
       double FFT_MajorPeak;   //  08 Bytes
     };
 
-    #define UDPSOUND_MAX_PACKET 96 // max packet size for audiosync, with a bit of "headroom"
+    #define UDPSOUND_MAX_PACKET     96 // max packet size for audiosync, with a bit of "headroom"
+    #define AR_UDP_READ_INTERVAL_MS 18 // 23ms = time for reading one new batch of samples @ 22kHz; minus 5ms margin for network overhead
+    #define AR_UDP_FLUSH_ALL       255 // tells receiveAudioData to purge the network input queue
 
     // set your config variables to their boot default value (this can also be done in readFromConfig() or a constructor if you prefer)
   #if defined(SR_ENABLE_DEFAULT) || defined(UM_AUDIOREACTIVE_ENABLE)
@@ -1230,11 +1277,11 @@ class AudioReactive : public Usermod {
     float soundPressure = 0;      // Sound Pressure estimation, based on microphone raw readings. 0 ->5db, 255 ->105db
 
     // used to feed "Info" Page
-    unsigned long last_UDPTime = 0;    // time of last valid UDP sound sync datapacket
+    unsigned long last_UDPTime = 0;    // time of last valid UDP sound sync data packet
     int receivedFormat = 0;            // last received UDP sound sync format - 0=none, 1=v1 (0.13.x), 2=v2 (0.14.x)
     float maxSample5sec = 0.0f;        // max sample (after AGC) in last 5 seconds 
     unsigned long sampleMaxTimer = 0;  // last time maxSample5sec was reset
-    #define CYCLE_SAMPLEMAX 3500       // time window for merasuring
+    #define CYCLE_SAMPLEMAX 3500       // time window for measuring
 
     // strings to reduce flash memory usage (used more than twice)
     static const char _name[];
@@ -1293,7 +1340,7 @@ class AudioReactive : public Usermod {
       //
       // Set true if wanting to see all the bands in their own vertical space on the Serial Plotter, false if wanting to see values in Serial Monitor
       const bool mapValuesToPlotterSpace = false;
-      // Set true to apply an auto-gain like setting to to the data (this hasn't been tested recently)
+      // Set true to apply an auto-gain like setting to the data (this hasn't been tested recently)
       const bool scaleValuesFromCurrentMaxVal = false;
       // prints the max value seen in the current data
       const bool printMaxVal = false;
@@ -1340,7 +1387,7 @@ class AudioReactive : public Usermod {
     /*
     * A "PI controller" multiplier to automatically adjust sound sensitivity.
     * 
-    * A few tricks are implemented so that sampleAgc does't only utilize 0% and 100%:
+    * A few tricks are implemented so that sampleAgc doesn't only utilize 0% and 100%:
     * 0. don't amplify anything below squelch (but keep previous gain)
     * 1. gain input = maximum signal observed in the last 5-10 seconds
     * 2. we use two setpoints, one at ~60%, and one at ~80% of the maximum signal
@@ -1573,12 +1620,12 @@ class AudioReactive : public Usermod {
     //   * sample < squelch   -> just above hearing level -->   5db ==> 0
     // see https://en.wikipedia.org/wiki/Sound_pressure#Examples_of_sound_pressure
     // use with I2S digital microphones. Expect stupid values for analog in, and with Line-In !!
-    float estimatePressure() {
+    float estimatePressure() const {
       // some constants
       constexpr float logMinSample = 0.8329091229351f; // ln(2.3)
-      constexpr float sampleMin = 2.3f;
+      constexpr float sampleRangeMin = 2.3f;
       constexpr float logMaxSample = 10.1895683436f; // ln(32767 - 6144)
-      constexpr float sampleMax = 32767.0f - 6144.0f;
+      constexpr float sampleRangeMax = 32767.0f - 6144.0f;
 
       // take the max sample from last I2S batch.
       float micSampleMax = fabsf(sampleReal);      // from getSample() - nice results, however a bit distorted by MicLev processing
@@ -1586,18 +1633,18 @@ class AudioReactive : public Usermod {
       if (dmType == 0) micSampleMax *= 2.0f;       // correction for ADC analog
       //if (dmType == 4) micSampleMax *= 16.0f;      // correction for I2S Line-In
       if (dmType == 5) micSampleMax *= 2.0f;       // correction for PDM
-      if (dmType == 4) {               // I2S Line-In. This is a dirty trick to make sound pressure look interesting for line-in (which doesn't have "sound pressure" as its not a microphone)
+      if (dmType == 4) {               // I2S Line-In. This is a dirty trick to make sound pressure look interesting for line-in (which doesn't have "sound pressure" as it is not a microphone)
         micSampleMax /= 11.0f;         // reduce to max 128
         micSampleMax *= micSampleMax;  // blow up --> max 16000
       }
       // make sure we are in expected ranges
-      if(micSampleMax <= sampleMin) return 0.0f;
-      if(micSampleMax >= sampleMax) return 255.0f;
+      if(micSampleMax <= sampleRangeMin) return 0.0f;
+      if(micSampleMax >= sampleRangeMax) return 255.0f;
 
       // apply logarithmic scaling
       float scaledvalue = logf(micSampleMax);
       scaledvalue = (scaledvalue - logMinSample) / (logMaxSample - logMinSample); // 0...1
-      return fminf(fmaxf(256.0*scaledvalue, 0), 255.0);        // scaled value
+      return fminf(fmaxf(256.0f*scaledvalue, 0.0f), 255.0f);        // scaled value
     }
 #endif
 
@@ -1751,24 +1798,18 @@ class AudioReactive : public Usermod {
 
       // validate sequence, discard out-of-sequence packets
       static uint8_t lastFrameCounter = 0;
+      int lastReceivedFormat = receivedFormat;
       // add info for UI
       if ((receivedPacket.frameCounter > 0) && (lastFrameCounter > 0)) receivedFormat = 3; // v2+
       else receivedFormat = 2; // v2
 
-         // Simpler 8-bit rollover-safe sequence check:
-         // (int8_t)(cur - prev) > 0  => cur is ahead of prev by 1..127
-         //                        0 => duplicate, 
-		 //                      < 0 => older
-         //    bool sequenceOK = !audioSyncSequence || receivedPacket.frameCounter == 0 ||   // always accept legacy "0"
-         //    ((int8_t)(receivedPacket.frameCounter - lastFrameCounter) > 0);
-
 	  // check sequence
       bool sequenceOK = false;
-      if(receivedPacket.frameCounter > lastFrameCounter) sequenceOK = true;                  // sequence OK
-      if((lastFrameCounter < 12) && (receivedPacket.frameCounter > 248)) sequenceOK = false; // prevent sequence "roll-back" due to late packets (1->254)
-      if((lastFrameCounter > 248) && (receivedPacket.frameCounter < 12)) sequenceOK = true;  // handle roll-over (255 -> 0)
+      if ((int8_t)(receivedPacket.frameCounter - lastFrameCounter) > 0) sequenceOK = true;    // 8-bit rollover-safe sequence check
+      if (millis()- last_UDPTime >= AUDIOSYNC_IDLE_MS) sequenceOK = true;                     // receiver timed out - resync needed
+      if (lastReceivedFormat < 2) sequenceOK = true;                                          // first or second V2 packet - accept anything (prevents delay when re-enabling AR)
       if(audioSyncSequence == false) sequenceOK = true;                                       // sequence checking disabled by user
-      if((sequenceOK == false) && (receivedPacket.frameCounter != 0)) {                      // always accept "0" - its the legacy value
+      if((sequenceOK == false) && (receivedPacket.frameCounter != 0)) {                       // always accept "0" as the legacy value
         DEBUGSR_PRINTF("Skipping audio frame out of order or duplicated - %u vs %u\n", lastFrameCounter, receivedPacket.frameCounter);
         return false;   // reject out-of sequence frame
       }
@@ -1848,26 +1889,30 @@ class AudioReactive : public Usermod {
       agcSensitivity = 128.0f; // substitute - V1 format does not include this value
     }
 
-    bool receiveAudioData() {
+    bool receiveAudioData( unsigned maxSamples) {  // maxSamples = AR_UDP_FLUSH_ALL (255) means "purge complete input queue" 
       if (!udpSyncConnected) return false;
       bool haveFreshData = false;
       size_t packetSize = 0;
       static uint8_t fftUdpBuffer[UDPSOUND_MAX_PACKET + 1] = {0};
-      size_t lastValidPacketSize = 0;
 
-      // Loop to read all available packets
-      while (true) {
+      // Loop to read available packets
+      unsigned packetsReceived = 0;
+      do {
         #if __cpp_exceptions
         try {
           packetSize = fftUdp.parsePacket();
         } catch (...) {
           packetSize = 0;
           #ifdef ARDUINO_ARCH_ESP32
+          #if ESP_IDF_VERSION_MAJOR < 5
           fftUdp.flush();
+          #else
+          fftUdp.clear();
+          #endif
           #endif
           DEBUG_PRINTLN(F("receiveAudioData: parsePacket out of memory exception caught!"));
           USER_FLUSH();
-          continue; // Skip to next iteration
+          //continue; // don't skip to next iteration -> we are OOM
         }
         #else
         packetSize = fftUdp.parsePacket();
@@ -1875,32 +1920,41 @@ class AudioReactive : public Usermod {
 
         #ifdef ARDUINO_ARCH_ESP32
         if ((packetSize > 0) && ((packetSize < 5) || (packetSize > UDPSOUND_MAX_PACKET))) {
+          #if ESP_IDF_VERSION_MAJOR < 5
           fftUdp.flush();
-          continue; // Skip invalid packets
+          #else
+          fftUdp.clear();
+          #endif
+          continue; // Skip invalid packets -> next iteration
         }
         #endif
 
-        if (packetSize == 0) break; // No more packets available
+        if (packetSize == 0) break; // No more packets available --> exit loop
 
         if ((packetSize > 5) && (packetSize <= UDPSOUND_MAX_PACKET)) {
           fftUdp.read(fftUdpBuffer, packetSize);
-          lastValidPacketSize = packetSize;
         }
-      }
 
-      // Process only the last valid packet
-      if (lastValidPacketSize > 0) {
-        if (lastValidPacketSize == sizeof(audioSyncPacket) && (isValidUdpSyncVersion((const char *)fftUdpBuffer))) {
-          receivedFormat = 2;
-          haveFreshData = decodeAudioData(lastValidPacketSize, fftUdpBuffer);
-        } else if (lastValidPacketSize == sizeof(audioSyncPacket_v1) && (isValidUdpSyncVersion_v1((const char *)fftUdpBuffer))) {
-          decodeAudioData_v1(lastValidPacketSize, fftUdpBuffer);
-          receivedFormat = 1;
-          haveFreshData = true;
-        } else {
-          receivedFormat = 0; // unknown format
+        // Process each received packet: last value will persist, intermediate ones needed to update sequence counters
+        if (packetSize > 0) {
+          if (packetSize == sizeof(audioSyncPacket) && (isValidUdpSyncVersion((const char *)fftUdpBuffer))) {
+            //receivedFormat = max(receivedFormat, 2); // format V2 or V2+ - will be set in decodeAudioData()
+            haveFreshData |= decodeAudioData(packetSize, fftUdpBuffer);
+          } else if (packetSize == sizeof(audioSyncPacket_v1) && (isValidUdpSyncVersion_v1((const char *)fftUdpBuffer))) {
+            decodeAudioData_v1(packetSize, fftUdpBuffer);
+            receivedFormat = 1;
+            haveFreshData = true;
+          } else {
+            receivedFormat = 0; // unknown format
+          }
         }
-      }
+
+        packetsReceived++;
+      } while ((packetSize > 0) && ((packetsReceived < maxSamples) || (maxSamples == AR_UDP_FLUSH_ALL))); // repeat until we have read enough packets, or no more packets available
+
+      #if defined(WLED_DEBUG) || defined(SR_DEBUG)
+      if ((packetsReceived > 1) && haveFreshData) {DEBUGSR_PRINTF("AR UDP: dropped  %d packets [%lums]\t%d maxDrop.\n", packetsReceived-1, millis() - last_UDPTime, maxSamples-1);} // for debugging
+      #endif
       return haveFreshData;
     }
 
@@ -1916,9 +1970,10 @@ class AudioReactive : public Usermod {
      * You can use it to initialize variables, sensors or similar.
      * It is called *AFTER* readFromConfig()
      */
-    void setup()
+    void setup() override
     {
       disableSoundProcessing = true; // just to be sure
+      isOOM = false;
       if (!initDone) {
         // usermod exchangeable data
         // we will assign all usermod exportable data here as pointers to original variables or arrays and allocate memory for pointers
@@ -2018,7 +2073,7 @@ class AudioReactive : public Usermod {
           break;
         #if  !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
         case 5:
-          DEBUGSR_PRINT(F("AR: I2S PDM Microphone - ")); DEBUGSR_PRINTLN(F(I2S_PDM_MIC_CHANNEL_TEXT));
+          DEBUGSR_PRINT(F("AR: Generic PDM Microphone - ")); DEBUGSR_PRINTLN(F(I2S_PDM_MIC_CHANNEL_TEXT));
           audioSource = new I2SSource(SAMPLE_RATE, BLOCK_SIZE, 1.0f/4.0f);
           useInputFilter = 1;  // PDM bandpass filter - this reduces the noise floor on SPM1423 from 5% Vpp (~380) down to 0.05% Vpp (~5)
           delay(100);
@@ -2076,6 +2131,8 @@ class AudioReactive : public Usermod {
           if ((sclPin >= 0) && (i2c_scl < 0)) i2c_scl = sclPin;
           if (i2c_sda >= 0) sdaPin = -1;                        // -1 = use global
           if (i2c_scl >= 0) sclPin = -1;
+          if (audioSource) audioSource->initialize(i2swsPin, i2ssdPin, i2sckPin, mclkPin);
+          break;
         case 9:
           DEBUGSR_PRINTLN(F("AR: ES8311 Source (Mic)"));
           audioSource = new ES8311Source(SAMPLE_RATE, BLOCK_SIZE, 1.0f);
@@ -2167,7 +2224,7 @@ class AudioReactive : public Usermod {
      * connected() is called every time the WiFi is (re)connected
      * Use it to initialize network interfaces
      */
-    void connected()
+    void connected() override
     {
       if (udpSyncConnected) {   // clean-up: if open, close old UDP sync connection
         udpSyncConnected = false;
@@ -2207,7 +2264,7 @@ class AudioReactive : public Usermod {
      * 2. Try to avoid using the delay() function. NEVER use delays longer than 10 milliseconds.
      *    Instead, use a timer check as shown here.
      */
-    void loop()
+    void loop() override
     {
       static unsigned long lastUMRun = millis();
 
@@ -2230,14 +2287,9 @@ class AudioReactive : public Usermod {
           useNetworkAudio = true;  // don't fall back to local audio in standard "receive mode"
       }
 
-      // suspend local sound processing when "real time mode" is active (E131, UDP, ADALIGHT, ARTNET)
-      if (  (realtimeOverride == REALTIME_OVERRIDE_NONE)  // please add other overrides here if needed
-          &&( (realtimeMode == REALTIME_MODE_GENERIC)
-            ||(realtimeMode == REALTIME_MODE_E131)
-            ||(realtimeMode == REALTIME_MODE_UDP)
-            ||(realtimeMode == REALTIME_MODE_ADALIGHT)
-            ||(realtimeMode == REALTIME_MODE_ARTNET) ) )  // please add other modes here if needed
-      {
+      // suspend local sound processing when "real time mode" is active (E131, UDP, ADALIGHT, ARTNET, DDP, DMX)
+      //  exception: sound input is still needed when useMainSegmentOnly - other segments are still running with local input.
+      if ((realtimeMode != REALTIME_MODE_INACTIVE) && (realtimeOverride == REALTIME_OVERRIDE_NONE) && !useMainSegmentOnly) {
         #ifdef WLED_DEBUG
         if ((disableSoundProcessing == false) && (audioSyncEnabled < AUDIOSYNC_REC)) {  // we just switched to "disabled"
           DEBUG_PRINTLN("[AR userLoop]  realtime mode active - audio processing suspended.");
@@ -2285,7 +2337,7 @@ class AudioReactive : public Usermod {
         if (lastUMRun == 0) userloopDelay=0; // startup - don't have valid data from last run.
 
         #if defined(SR_DEBUG)
-          // complain when audio userloop has been delayed for long time. Currently we need userloop running between 500 and 1500 times per second.
+          // complain when audio userloop has been delayed for long time. Currently, we need userloop running between 500 and 1500 times per second.
           // softhack007 disabled temporarily - avoid serial console spam with MANY LEDs and low FPS
           //if ((userloopDelay > /*23*/ 65) && !disableSoundProcessing && (audioSyncEnabled == AUDIOSYNC_NONE)) {
             //DEBUG_PRINTF("[AR userLoop] hiccup detected -> was inactive for last %d millis!\n", userloopDelay);
@@ -2340,7 +2392,25 @@ class AudioReactive : public Usermod {
           bool have_new_sample = false;
           if (millis() - lastTime > delayMs) {
             // DEBUG_PRINTF(F("AR reading at %d compared to %d max\n"), millis() - lastTime, delayMs); // TroyHacks
-            have_new_sample = receiveAudioData();
+
+            unsigned timeElapsed = (millis() - last_UDPTime);
+            unsigned maxReadSamples = timeElapsed / AR_UDP_READ_INTERVAL_MS;         // estimate how many packets arrived since last receive
+            maxReadSamples = max(1U, min(maxReadSamples, 20U));                      // constrain to [1...20] = max 380ms drop
+            // check if we should purge the receiving queue
+            switch (audioSyncPurge) {
+              case 0: maxReadSamples = 1; break;                                       // never drop packets, unless new connection or timed out
+              case 2: maxReadSamples = AR_UDP_FLUSH_ALL; break;                        // always drop - process latest packet only
+              default: 
+              // falls through
+              case 1:                                                                  // auto drop when silence detected, or when receiver loop is slower than sender
+                if (fabsf(volumeSmth) < 0.25f) maxReadSamples = AR_UDP_FLUSH_ALL;
+                break;
+            }
+            if (receivedFormat == 0) maxReadSamples = AR_UDP_FLUSH_ALL;              // new connection -> always flush queue
+            if (timeElapsed >= AUDIOSYNC_IDLE_MS) maxReadSamples = AR_UDP_FLUSH_ALL; // too long since last run - always flush queue
+
+            // try to get fresh data
+            have_new_sample = receiveAudioData(maxReadSamples);
             if (have_new_sample) {
               last_UDPTime = millis();
               useNetworkAudio = true;  // UDP input arrived - use it
@@ -2348,7 +2418,11 @@ class AudioReactive : public Usermod {
             lastTime = millis();
           } else {
 #ifdef ARDUINO_ARCH_ESP32
+          #if ESP_IDF_VERSION_MAJOR < 5
             fftUdp.flush(); // WLEDMM: Flush this if we haven't read it. Does not work on 8266.
+          #else
+            fftUdp.clear();
+          #endif
 #endif
           }
           if (useNetworkAudio) {
@@ -2423,12 +2497,12 @@ class AudioReactive : public Usermod {
     }
 
 #if defined(_MoonModules_WLED_) && defined(WLEDMM_FASTPATH)
-    void loop2(void) { 
+    void loop2(void) override {
       loop();
     }
 #endif
 
-    bool getUMData(um_data_t **data)
+    bool getUMData(um_data_t **data) override
     {
       if (!data || !enabled) return false; // no pointer provided by caller or not enabled -> exit
       *data = um_data;
@@ -2437,7 +2511,7 @@ class AudioReactive : public Usermod {
 
 
 #ifdef ARDUINO_ARCH_ESP32
-    void onUpdateBegin(bool init)
+    void onUpdateBegin(bool init) override
     {
 #ifdef WLED_DEBUG
       fftTime = sampleTime = filterTime = 0;
@@ -2475,11 +2549,12 @@ class AudioReactive : public Usermod {
           vTaskResume(FFT_Task);
           connected(); // resume UDP
         } else {
+          isOOM = false;
           if (audioSource)                    // WLEDMM only create FFT task if we have a valid audio source
 //          xTaskCreatePinnedToCore(
 //          xTaskCreate(                        // no need to "pin" this task to core #0
           xTaskCreateUniversal(
-            FFTcode,                          // Function to implement the task
+            runFFTcode,                       // Function to implement the task
             "FFT",                            // Name of the task
             3592,                             // Stack size in words // 3592 leaves 800-1024 bytes of task stack free
             NULL,                             // Task input parameter
@@ -2526,7 +2601,7 @@ class AudioReactive : public Usermod {
      * handleButton() can be used to override default button behaviour. Returning true
      * will prevent button working in a default way.
      */
-    bool handleButton(uint8_t b) {
+    bool handleButton(uint8_t b) override {
       yield();
       // crude way of determining if audio input is analog
       // better would be for AudioSource to implement getType()
@@ -2549,7 +2624,7 @@ class AudioReactive : public Usermod {
      * Creating an "u" object allows you to add custom key/value pairs to the Info section of the WLED web UI.
      * Below it is shown how this could be used for e.g. a light sensor
      */
-    void addToJsonInfo(JsonObject& root)
+    void addToJsonInfo(JsonObject& root) override
     {
 #ifdef ARDUINO_ARCH_ESP32
       char myStringBuffer[16]; // buffer for snprintf() - not used yet on 8266
@@ -2624,15 +2699,17 @@ class AudioReactive : public Usermod {
 #else  // ESP32 only
         } else {
           // Analog or I2S digital input
-          if (audioSource && (audioSource->isInitialized())) {
+          if (audioSource && (audioSource->isInitialized()) && !isOOM) {
             // audio source successfully configured
             if (audioSource->getType() == AudioSource::Type_I2SAdc) {
               infoArr.add(F("ADC analog"));
             } else {
-              if (dmType != 51)
-                infoArr.add(F("I2S digital"));
+              if (dmType != 51) {
+                if (dmType == 5) infoArr.add(F("PDM digital"));
+                else infoArr.add(F("I2S digital"));
+              }
               else
-                infoArr.add(F("legacy I2S PDM"));
+                infoArr.add(F("legacy PDM"));
             }
             // input level or "silence"
             if (maxSample5sec > 1.0) {
@@ -2645,7 +2722,8 @@ class AudioReactive : public Usermod {
           } else {
             // error during audio source setup
             infoArr.add(F("not initialized"));
-            if (dmType < 254) infoArr.add(F(" - check pin settings"));
+            if (isOOM) infoArr.add(F(" - out of memory"));
+            else if (dmType < 254) infoArr.add(F(" - check pin settings"));
           }
         }
 
@@ -2736,7 +2814,7 @@ class AudioReactive : public Usermod {
      * addToJsonState() can be used to add custom entries to the /json/state part of the JSON API (state object).
      * Values in the state object may be modified by connected clients
      */
-    void addToJsonState(JsonObject& root)
+    void addToJsonState(JsonObject& root) override
     {
       if (!initDone) return;  // prevent crash on boot applyPreset()
       JsonObject usermod = root[FPSTR(_name)];
@@ -2751,7 +2829,7 @@ class AudioReactive : public Usermod {
      * readFromJsonState() can be used to receive data clients send to the /json/state part of the JSON API (state object).
      * Values in the state object may be modified by connected clients
      */
-    void readFromJsonState(JsonObject& root)
+    void readFromJsonState(JsonObject& root) override
     {
       if (!initDone) return;  // prevent crash on boot applyPreset()
       bool prevEnabled = enabled;
@@ -2805,8 +2883,7 @@ class AudioReactive : public Usermod {
      * 
      * I highly recommend checking out the basics of ArduinoJson serialization and deserialization in order to use custom settings!
      */
-    void addToConfig(JsonObject& root)
-    {
+    void addToConfig(JsonObject& root) override {
       JsonObject top = root.createNestedObject(FPSTR(_name));
       top[FPSTR(_enabled)] = enabled;
 #ifdef ARDUINO_ARCH_ESP32
@@ -2857,6 +2934,7 @@ class AudioReactive : public Usermod {
       JsonObject sync = top.createNestedObject("sync");
       sync[F("port")] = audioSyncPort;
       sync[F("mode")] = audioSyncEnabled;
+      sync[F("skip_old_data")] = audioSyncPurge;
       sync[F("check_sequence")] = audioSyncSequence;
     }
 
@@ -2876,8 +2954,7 @@ class AudioReactive : public Usermod {
      * 
      * This function is guaranteed to be called on boot, but could also be called every time settings are updated
      */
-    bool readFromConfig(JsonObject& root)
-    {
+    bool readFromConfig(JsonObject& root) override {
       JsonObject top = root[FPSTR(_name)];
       bool configComplete = !top.isNull();
 
@@ -2941,6 +3018,7 @@ class AudioReactive : public Usermod {
 
       configComplete &= getJsonValue(top["sync"][F("port")], audioSyncPort);
       configComplete &= getJsonValue(top["sync"][F("mode")], audioSyncEnabled);
+      configComplete &= getJsonValue(top["sync"][F("skip_old_data")], audioSyncPurge);
       configComplete &= getJsonValue(top["sync"][F("check_sequence")], audioSyncSequence);
 
       // WLEDMM notify user when a reboot is necessary
@@ -2948,7 +3026,7 @@ class AudioReactive : public Usermod {
       if (initDone) {
         if ((audioSource != nullptr) && (oldDMType != dmType)) errorFlag = ERR_REBOOT_NEEDED;  // changing mic type requires reboot
         if (   (audioSource != nullptr) && (enabled==true)
-            && ((oldI2SsdPin != i2ssdPin) || (oldI2SsdPin != i2ssdPin) || (oldI2SckPin != i2sckPin)) ) errorFlag = ERR_REBOOT_NEEDED;  // changing mic pins requires reboot
+            && ((oldI2SsdPin != i2ssdPin) || (oldI2SwsPin != i2swsPin) || (oldI2SckPin != i2sckPin)) ) errorFlag = ERR_REBOOT_NEEDED;  // changing mic pins requires reboot
         if ((audioSource != nullptr) && (oldI2SmclkPin != mclkPin)) errorFlag = ERR_REBOOT_NEEDED;  // changing MCLK pin requires reboot
         if ((oldDMType != dmType) && (oldDMType == 0)) errorFlag = ERR_POWEROFF_NEEDED;  // changing from analog mic requires power cycle
         if ((oldDMType != dmType) && (dmType == 0)) errorFlag = ERR_POWEROFF_NEEDED;  // changing to analog mic requires power cycle
@@ -2958,8 +3036,7 @@ class AudioReactive : public Usermod {
     }
 
 
-    void appendConfigData()
-    {
+    void appendConfigData() override {
       oappend(SET_F("ux='AudioReactive';"));        // ux = shortcut for Audioreactive - fingers crossed that "ux" isn't already used as JS var, html post parameter or css style
       oappend(SET_F("uxp=ux+':digitalmic:pin[]';")); // uxp = shortcut for AudioReactive:digitalmic:pin[]
       oappend(SET_F("addInfo(ux+':help',0,'<button onclick=\"location.href=&quot;https://mm.kno.wled.ge/soundreactive/Sound-Settings&quot;\" type=\"button\">?</button>');"));
@@ -3007,14 +3084,14 @@ class AudioReactive : public Usermod {
       #endif
       #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
         #if SR_DMTYPE==5
-          oappend(SET_F("addOption(dd,'Generic I2S PDM (⎌)',5);"));
+          oappend(SET_F("addOption(dd,'Generic PDM (⎌)',5);"));
         #else
-          oappend(SET_F("addOption(dd,'Generic I2S PDM',5);"));
+          oappend(SET_F("addOption(dd,'Generic PDM',5);"));
         #endif
         #if SR_DMTYPE==51
-          oappend(SET_F("addOption(dd,'.Legacy I2S PDM ☾ (⎌)',51);"));
+          oappend(SET_F("addOption(dd,'.Legacy PDM ☾ (⎌)',51);"));
         #else
-          oappend(SET_F("addOption(dd,'.Legacy I2S PDM ☾',51);"));
+          oappend(SET_F("addOption(dd,'.Legacy PDM ☾',51);"));
         #endif
       #endif
       #if SR_DMTYPE==6
@@ -3053,8 +3130,8 @@ class AudioReactive : public Usermod {
       //WLEDMM: experimental settings
       oappend(SET_F("xx='experiments';")); // shortcut
       oappend(SET_F("dd=addDropdown(ux,xx+':micLev');"));
-      oappend(SET_F("addOption(dd,'Floating  (⎌)',0);"));
-      oappend(SET_F("addOption(dd,'Freeze',1);"));
+      oappend(SET_F("addOption(dd,'Floating',0);"));
+      oappend(SET_F("addOption(dd,'Freeze  (⎌)',1);"));
       oappend(SET_F("addOption(dd,'Fast Freeze',2);"));
       oappend(SET_F("addInfo(ux+':'+xx+':micLev',1,'☾');"));
 
@@ -3169,6 +3246,11 @@ class AudioReactive : public Usermod {
 #ifdef ARDUINO_ARCH_ESP32
       oappend(SET_F("addOption(dd,'Receive or Local',6);"));  // AUDIOSYNC_REC_PLUS
 #endif
+      // Receiver drops old packets and processes the latest packet only
+      oappend(SET_F("dd=addDropdown(ux,'sync:skip_old_data');"));
+      oappend(SET_F("addOption(dd,'Never',0);"));
+      oappend(SET_F("addOption(dd,'Auto (recommended)',1);")); // auto = drop during silence, or when last receive happened too long ago 
+      oappend(SET_F("addOption(dd,'Always',2);"));
       // check_sequence: Receiver skips out-of-sequence packets when enabled
       oappend(SET_F("dd=addDropdown(ux,'sync:check_sequence');"));
       oappend(SET_F("addOption(dd,'Off',0);"));
@@ -3233,10 +3315,10 @@ class AudioReactive : public Usermod {
 
    
     /*
-     * getId() allows you to optionally give your V2 usermod an unique ID (please define it in const.h!).
+     * getId() allows you to optionally give your V2 usermod a unique ID (please define it in const.h!).
      * This could be used in the future for the system to determine whether your usermod is installed.
      */
-    uint16_t getId()
+    uint16_t getId() override
     {
       return USERMOD_ID_AUDIOREACTIVE;
     }

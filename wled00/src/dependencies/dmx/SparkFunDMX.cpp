@@ -14,13 +14,15 @@ Distributed as-is; no warranty is given.
 ******************************************************************************/
 
 /* ----- LIBRARIES ----- */
-#if defined(ARDUINO_ARCH_ESP32)
+#if defined(ARDUINO_ARCH_ESP32) && defined(WLED_ENABLE_DMX)
 
 #include <Arduino.h>
 #if !defined(CONFIG_IDF_TARGET_ESP32C3)  && !defined(CONFIG_IDF_TARGET_ESP32S2)
 
 #include "SparkFunDMX.h"
 #include <HardwareSerial.h>
+
+#pragma message "using SparkFunDMX"
 
 #define dmxMaxChannel  512
 #define defaultMax 32
@@ -34,8 +36,8 @@ static const int enablePin = -1;		// disable the enable pin because it is not ne
 static const int rxPin = -1;       // disable the receiving pin because it is not needed - softhack007: Pin=-1 means "use default" not "disable"
 static const int txPin = 2;        // transmit DMX data over this pin (default is pin 2)
 
-//DMX value array and size. Entry 0 will hold startbyte
-static uint8_t dmxData[dmxMaxChannel] = { 0 };
+//DMX value array and size. Entry 0 will hold startbyte, so we need 512+1 elements
+static uint8_t dmxData[dmxMaxChannel+1] = { 0 };
 static int chanSize = 0;
 #if !defined(DMX_SEND_ONLY)
 static int currentChannel = 0;
@@ -121,6 +123,7 @@ void SparkFunDMX::initWrite (int chanQuant) {
 #if !defined(DMX_SEND_ONLY)
 // Function to read DMX data
 uint8_t SparkFunDMX::read(int Channel) {
+  if ((Channel > dmxMaxChannel) || (Channel < 1)) return 0; // WLEDMM prevent array out-of-bounds access
   if (Channel > chanSize) Channel = chanSize;
   return(dmxData[Channel - 1]); //subtract one to account for start byte
 }
@@ -128,8 +131,9 @@ uint8_t SparkFunDMX::read(int Channel) {
 
 // Function to send DMX data
 void SparkFunDMX::write(int Channel, uint8_t value) {
-  if (Channel < 0) Channel = 0;
-  if (Channel > chanSize) chanSize = Channel;
+  if (Channel < 1) Channel = 1;
+  if (Channel+1 > chanSize) chanSize = min(dmxMaxChannel +1, Channel+1); // WLEDMM "+1" as we need to account for start byte
+  if (Channel > dmxMaxChannel) Channel = dmxMaxChannel;                  // WLEDMM prevent array out-of-bounds access
   dmxData[0] = 0;
   dmxData[Channel] = value; //add one to account for start byte
 }
@@ -149,7 +153,7 @@ void SparkFunDMX::update() {
     
     //Send DMX data
     DMXSerial.begin(DMXSPEED, DMXFORMAT, rxPin, txPin);//Begin the Serial port
-    DMXSerial.write(dmxData, chanSize);
+    DMXSerial.write(dmxData, min(dmxMaxChannel+1, chanSize)); // send max 513 bytes = start byte + 512 channels
     DMXSerial.flush();
     DMXSerial.end();//clear our DMX array, end the Hardware Serial port
   }
@@ -160,9 +164,11 @@ void SparkFunDMX::update() {
 	{
 		while (DMXSerial.available())
 		{
-			dmxData[currentChannel++] = DMXSerial.read();
+		  uint8_t newdata = DMXSerial.read();
+		  if (currentChannel <= dmxMaxChannel)
+		    dmxData[currentChannel++] = newdata;
 		}
-	if (currentChannel > chanSize) //Set the channel counter back to 0 if we reach the known end size of our packet
+	if ((currentChannel > chanSize) || (currentChannel > dmxMaxChannel)) //Set the channel counter back to 0 if we reach the known end size of our packet
 	{
 		
       portENTER_CRITICAL(&timerMux);

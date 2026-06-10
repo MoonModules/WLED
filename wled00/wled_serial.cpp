@@ -1,6 +1,7 @@
 #include "wled.h"
 #ifdef ARDUINO_ARCH_ESP32
 #include "esp_ota_ops.h"
+#include "sdkconfig.h"
 #endif
 
 /*
@@ -9,6 +10,17 @@
 
 #define SERIAL_MAXTIME_MILLIS 100 // to avoid blocking other activities, do not spend more than 100ms with continuous reading
 // at 115200 baud, 100ms is enough to send/receive 1280 chars
+
+#ifdef ARDUINO_ARCH_ESP32
+  // CONFIG_INT_WDT_TIMEOUT_MS = 300 = interrupt watchdog timeout in milliseconds
+  // CONFIG_TASK_WDT_TIMEOUT_S = 5   = idle task watchdog timeout in seconds
+  // CONFIG_ESP_TASK_WDT_TIMEOUT_S (new name)
+#ifdef CONFIG_ESP_TASK_WDT_TIMEOUT_S
+static_assert(SERIAL_MAXTIME_MILLIS < (CONFIG_ESP_TASK_WDT_TIMEOUT_S * 1000 - 2 * portTICK_PERIOD_MS), "SERIAL_MAXTIME_MILLIS must be shorter than the IDLE watchdog timeout.");
+#else // arduino-esp32 1.0.x uses CONFIG_TASK_WDT_TIMEOUT_S
+static_assert(SERIAL_MAXTIME_MILLIS < (CONFIG_TASK_WDT_TIMEOUT_S * 1000 - 2 * portTICK_PERIOD_MS), "SERIAL_MAXTIME_MILLIS must be shorter than the IDLE watchdog timeout.");
+#endif
+#endif
 
 enum class AdaState {
   Header_A,
@@ -76,8 +88,8 @@ void sendBytes(){
 }
 
 bool canUseSerial(void) {   // WLEDMM returns true if Serial can be used for debug output (i.e. not configured for other purpose)
-  #if defined(CONFIG_IDF_TARGET_ESP32C3) && ARDUINO_USB_CDC_ON_BOOT && !defined(WLED_DEBUG_HOST)
-  //  on -C3, USB CDC blocks if disconnected! so check if Serial is active before printing to it.
+  #if ARDUINO_USB_CDC_ON_BOOT && (defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32P4)) && !defined(WLED_DEBUG_HOST)
+  //  on S3/C3/C6/P4, USB CDC blocks if disconnected! so check if Serial is active before printing to it.
   if (!Serial) return false;
   #endif
   if (pinManager.isPinAllocated(hardwareTX) && (pinManager.getPinOwner(hardwareTX) != PinOwner::DebugOut)) 
@@ -108,10 +120,12 @@ void handleSerial()
   static byte red   = 0x00;
   static byte green = 0x00;
 
+  if (Serial.available() > 0) delay(1); // pet the watchdog
+
   unsigned long startTime = millis();
   while ((Serial.available() > 0) && (millis() - startTime < SERIAL_MAXTIME_MILLIS))
   {
-    yield();
+    yield(); // useless on esp32
     byte next = Serial.peek();
     switch (state) {
       case AdaState::Header_A:

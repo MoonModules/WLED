@@ -94,9 +94,16 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   // if using vectors use this code to append segment
   if (id >= strip.getSegmentsNum()) {
     if (stop <= 0) return false; // ignore empty/inactive segments
-    strip.appendSegment(Segment(0, strip.getLengthTotal()));
-    id = strip.getSegmentsNum()-1; // segments are added at the end of list
-    newSeg = true;
+    if (esp32SemTake(segmentMux, 2100) == pdTRUE) { // wait long, but don't wait forever
+      // WLEDMM make sure we have exclusive access to the segment list
+      strip.appendSegment(Segment(0, strip.getLengthTotal()));
+      id = strip.getSegmentsNum()-1; // segments are added at the end of list
+      newSeg = true;
+      esp32SemGive(segmentMux);
+    } else {
+      USER_PRINTLN(F("deserializeSegment(): segment not added - failed to acquire segmentMux."));
+      return false;
+    }
   }
 
   // WLEDMM: before changing segments, make sure our strip is _not_ servicing effects in parallel
@@ -246,6 +253,12 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
       // segment has RGB or White
       for (size_t i = 0; i < 3; i++)
       {
+        // JSON "col" array can contain the following values for each of segment's colors (primary, background, custom):
+        // "col":[int|string|object|array, int|string|object|array, int|string|object|array]
+        //   int = Kelvin temperature or 0 for black
+        //   string = hex representation of [WW]RRGGBB or "r" for random color
+        //   object = individual channel control {"r":0,"g":127,"b":255,"w":255}, each being optional (valid to send {})
+        //   array = direct channel values [r,g,b,w] (w element being optional)
         int rgbw[] = {0,0,0,0};
         bool colValid = false;
         JsonArray colX = colarr[i];
@@ -258,6 +271,9 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
             if (kelvin == 0) seg.setColor(i, 0);
             if (kelvin >  0) colorKtoRGB(kelvin, brgbw);
             colValid = true;
+            } else if (hexCol[0] == 'r' && hexCol[1] == '\0') { // Random colors via JSON API in Segment object like col=["r","r","r"] · Issue #4996
+              setRandomColor(brgbw);
+              colValid = true;
           } else { //HEX string, e.g. "FFAA00"
             colValid = colorFromHexString(brgbw, hexCol);
           }
@@ -320,7 +336,10 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   // end fix
   if (getVal(elem["fx"], &fx, 0, last)) { //load effect ('r' random, '~' inc/dec, 0-255 exact value, 5~10r pick random between 5 & 10)
     if (!presetId && currentPlaylist>=0) unloadPlaylist();
-    if (fx != seg.mode) seg.setMode(fx, elem[F("fxdef")], elem[F("fxdef2")]); // WLEDMM fxdef2 added
+    bool doLoadDefault = elem[F("fxdef")] == true;
+    if (fx == FX_MODE_IMAGE) doLoadDefault = true;        // WLEDMM quick fix: when called from PixelForge, images were always shown with blur
+    if (fx == FX_MODE_2DSCROLLTEXT) doLoadDefault = true; //        same hack for scrolling text 
+    if (fx != seg.mode) seg.setMode(fx, doLoadDefault, elem[F("fxdef2")]); // WLEDMM fxdef2 added
   }
 
   //getVal also supports inc/decrementing and random
@@ -353,8 +372,10 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
       USER_PRINTLN(F("deserializeSegment() image: strip is still drawing effects."));
       strip.waitUntilIdle();
     }
+    // WLEDMM protect against parallel drawing
+    bool drawSuccess = false;
+    if (esp32SemTake(busDrawMux, 250) == pdTRUE) {      // WLEDMM first acquire draw mutex, start of critical section
     seg.startFrame();
-    // WLEDMM end
 
     // set brightness immediately and disable transition
     transitionDelayTemp = 0;
@@ -404,8 +425,13 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
         set = 0;
       }
     }
+    drawSuccess = true;
+    esp32SemGive(busDrawMux); // release lock
+    } // end of critical section
+
     seg.map1D2D = oldMap1D2D; // restore mapping
-    strip.trigger(); // force segment update
+    if (drawSuccess) strip.trigger(); // force segment update
+    else USER_PRINTLN(F("deserializeSegment() image drawing failed, could not acquire busDrawMux.")); // log failure messaage
     suspendStripService = oldLock; // restore previous lock status
   }
   // send UDP/WS if segment options changed (except selection; will also deselect current preset)
@@ -438,7 +464,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
 
   bool stateResponse = root[F("v")] | false;
 
-  //WLEDMM: store netDebug, also if not WLED_DEBUG 
+  //WLEDMM: store netDebug, also if not WLED_DEBUG
   #if defined(WLED_DEBUG_HOST)
   bool oldValue = netDebugEnabled;
   netDebugEnabled = root[F("netDebug")] | netDebugEnabled;
@@ -449,14 +475,16 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   }
   #endif
 
-  bool onBefore = bri;
-  getVal(root["bri"], &bri);
+  bool onBefore = bri > 0;
+  //if (onBefore && briLast == 0) briLast = bri;
+  (void) getVal(root["bri"], &bri);
 
   bool on = root["on"] | (bri > 0);
   if (!on != !bri) toggleOnOff();
 
   if (root["on"].is<const char*>() && root["on"].as<const char*>()[0] == 't') {
-    if (onBefore || !bri) toggleOnOff(); // do not toggle off again if just turned on by bri (makes e.g. "{"on":"t","bri":32}" work)
+    // WLEDMM bugfix: do not toggle twice when bri > 0
+    if (onBefore && !bri) toggleOnOff(); // do not toggle off again if just turned on by bri (makes e.g. "{"on":"t","bri":32}" work)
   }
 
   if (bri && !onBefore) { // unfreeze all segments when turning on
@@ -479,16 +507,15 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     }
   }
 
-#ifdef ARDUINO_ARCH_ESP32
-  delay(2); // WLEDMM experimental - de-serialize takes time, so allow other tasks to run
-#endif
-
+  // esp32: suspendStripService is deferred until the first segment operation
+#ifndef ARDUINO_ARCH_ESP32
   // WLEDMM: before changing strip, make sure our strip is _not_ servicing effects in parallel
   suspendStripService = true; // temporarily lock out strip updates
   if (strip.isServicing()) {
     USER_PRINTLN(F("deserializeState(): strip is still drawing effects."));
     strip.waitUntilIdle();
   }
+#endif
 
   // temporary transition (applies only once)
   tr = root[F("tt")] | -1;
@@ -524,7 +551,18 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
 
   if (root[F("psave")].isNull()) doReboot = root[F("rb")] | doReboot;
 
+#ifdef ARDUINO_ARCH_ESP32
+  // WLEDMM: Acquire strip lock right before segment operations (deferred for better UX)
+  suspendStripService = true; // temporarily lock out strip updates
+  vTaskDelay(pdMS_TO_TICKS(2)); // WLEDMM trigger a short task context switch
+  if (strip.isServicing()) {
+    DEBUG_PRINTLN(F("deserializeState(): strip is still drawing effects."));
+    strip.waitUntilIdle();
+  }
+#endif
+
   // do not allow changing main segment while in realtime mode (may get odd results else)
+  // esp32: safe to change MainSegment without having segmentMux - strip.service() is already suspended
   if (!realtimeMode) strip.setMainSegmentId(root[F("mainseg")] | strip.getMainSegmentId()); // must be before realtimeLock() if "live"
 
   realtimeOverride = root[F("lor")] | realtimeOverride;
@@ -537,7 +575,13 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     if (root["live"].as<bool>()) {
       transitionDelayTemp = 0;
       jsonTransitionOnce = true;
+#ifdef WLED_ENABLE_JSONLIVE
+      // infinite timeout only when JSON LIVE leds preview is enabled
       realtimeLock(65000);
+#else
+      // more meaningful timeout : use configurable timeout; *3 for some safety margin without staying "live" forever
+      realtimeLock(realtimeTimeoutMs *3);  // Use configurable timeout like other protocols
+#endif
     } else {
       exitRealtime();
     }
@@ -624,6 +668,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     //do not notify here, because the first playlist entry will do
     if (root["on"].isNull()) callMode = CALL_MODE_NO_NOTIFY;
     else callMode = CALL_MODE_DIRECT_CHANGE;  // possible bugfix for playlist only containing HTTP API preset FX=~
+    stateChanged = false; // WLEDMM: prevent premature LED update, let first preset handle it
   }
 
   if (root.containsKey(F("rmcpal")) && root[F("rmcpal")].as<bool>()) {
@@ -637,10 +682,12 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
 
   doAdvancePlaylist = root[F("np")] | doAdvancePlaylist; //advances to next preset in playlist when true
   
+  // WLEDMM: Release suspendStripService before stateUpdated() to avoid timeout
+  if (iAmGroot) suspendStripService = false;
+
   stateUpdated(callMode);
   if (presetToRestore) currentPreset = presetToRestore;
 
-  if (iAmGroot) suspendStripService = false; // WLEDMM release lock
   return stateResponse;
 }
 
@@ -719,9 +766,11 @@ void serializeSegment(JsonObject& root, Segment& seg, byte id, bool forPreset, b
 void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segmentBounds, bool selectedSegmentsOnly)
 {
   //WLEDMM add DEBUG_PRINT (not USER_PRINT)
+  #ifdef WLED_DEBUG
   String temp;
   serializeJson(root, temp);
   DEBUG_PRINTF("serializeState %d %s\n", forPreset, temp.c_str());
+  #endif
 
   if (includeBri) {
     root["on"] = (bri > 0);
@@ -730,15 +779,27 @@ void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segme
   }
 
   if (!forPreset) {
-    //WLEDMM: store netDebug 
+    //WLEDMM: store netDebug
     #if defined(WLED_DEBUG_HOST)
       root[F("netDebug")] = netDebugEnabled;
     // USER_PRINTF("serializeState %d\n", netDebugEnabled);
     #endif
 
+    constexpr unsigned ERROR_HOLD_MILLIS = 15000;  // minimum hold time for any error code
+    static byte lastErrorFlag = ERR_NONE;  // last error seen
+    static unsigned lastErrorTime = 0;
+
     // WLEDMM print error message to netDebug - esp32 only, as 8266 flash is very limited
-    if (errorFlag) { USER_PRINT(F("\nWLED error code = ")); USER_PRINTLN(errorFlag); }
-    if (errorFlag) {root[F("error")] = errorFlag; errorFlag = ERR_NONE;} //prevent error message to persist on screen
+    if (errorFlag && (errorFlag != lastErrorFlag)) { // only print each error code once
+      USER_PRINT(F("\nWLED-MM error code = ")); USER_PRINTLN(errorFlag); USER_FLUSH();
+      lastErrorTime = millis();
+    }
+    if (errorFlag) {
+      root[F("error")] = errorFlag; 
+      if (    (millis() > 60000) && (millis() - lastErrorTime > ERROR_HOLD_MILLIS)
+           && (errorFlag < ERR_PERSISTENT)) errorFlag = ERR_NONE; // prevent error message to stay on screen forever - hold them for 60 seconds after startup, persist "please reboot"
+    }
+    lastErrorFlag = errorFlag;
 
     root["ps"] = (currentPreset > 0) ? currentPreset : -1;
     root[F("pl")] = currentPlaylist;
@@ -842,7 +903,7 @@ String resetCode2Info(int reason) {
     // unknown reason code
     case 0:
       return F(""); break;
-    default: 
+    default:
       return F("unknown"); break;
   }
 }
@@ -920,7 +981,7 @@ void serializeInfo(JsonObject root)
   //root[F("cn")] = F(WLED_CODENAME);    //WLEDMM removed
   root[F("release")] = FPSTR(releaseString);
   root[F("rel")] = FPSTR(releaseString); //WLEDMM to add bin name
-  //root[F("repo")] = repoString;        // WLEDMM not availeable
+  root[F("repo")] = repoString;
   root[F("deviceId")] = getDeviceId();
 
   JsonObject leds = root.createNestedObject("leds");
@@ -1021,13 +1082,17 @@ void serializeInfo(JsonObject root)
     outputs.add(busses.getBus(b)->getLength());
   }
 
-  JsonObject wifi_info = root.createNestedObject("wifi");
+  JsonObject wifi_info = root.createNestedObject(F("wifi"));
   wifi_info[F("bssid")] = WiFi.BSSIDstr();
   int qrssi = WiFi.RSSI();
   wifi_info[F("rssi")] = qrssi;
   wifi_info[F("signal")] = getSignalQuality(qrssi);
   wifi_info[F("channel")] = WiFi.channel();
+  wifi_info[F("ap")] = apActive;
 
+#if defined(ARDUINO_ARCH_ESP32) && !defined(WLEDMM_FILEWAIT)
+  updateFSInfo(); // refresh flash usage info - may cause flicker unless we have the RMTHI driver
+#endif
   JsonObject fs_info = root.createNestedObject("fs");
   fs_info["u"] = fsBytesUsed / 1000;
   fs_info["t"] = fsBytesTotal / 1000;
@@ -1086,25 +1151,27 @@ void serializeInfo(JsonObject root)
   #if defined(ARDUINO_ARCH_ESP32)
     root[F("freestack")] = uxTaskGetStackHighWaterMark(NULL); //WLEDMM
     root[F("minfreeheap")] = ESP.getMinFreeHeap();
+    auto maxFreeBlock = getContiguousFreeHeap();
+    root[F("maxalloc")] = maxFreeBlock;  // for upstream WLED compatibility
   #endif
-  #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+  #if defined(ARDUINO_ARCH_ESP32)
+  #if defined(BOARD_HAS_PSRAM) || (ESP_IDF_VERSION_MAJOR > 3) // V4 can auto-detect PSRAM
   if (psramFound()) {
     root[F("tpsram")] = ESP.getPsramSize(); //WLEDMM
     root[F("psram")] = ESP.getFreePsram();
     root[F("psusedram")] = ESP.getMinFreePsram();
-    #if CONFIG_ESP32S3_SPIRAM_SUPPORT  // WLEDMM -S3 has "qspi" or "opi" PSRAM mode
+    // WLEDMM -S3 has "qspi" or "opi" PSRAM mode, -P4 has "hex"
     #if CONFIG_SPIRAM_MODE_OCT
       root[F("psrmode")]  = F("🚀 OPI");
     #elif CONFIG_SPIRAM_MODE_QUAD
       root[F("psrmode")]  = F("qspi");
-    #endif
+    #elif CONFIG_SPIRAM_MODE_HEX
+      root[F("psrmode")]  = F("🚀🚀 HEX");
+    #else
+      root[F("psrmode")]  = F("dio");
     #endif
   }
-  #else
-  // for testing
-  //  root[F("tpsram")] = 4194304; //WLEDMM
-  //  root[F("psram")] = 4193000;
-  //  root[F("psusedram")] = 3083000;
+  #endif
   #endif
 
   // begin WLEDMM
@@ -1123,8 +1190,8 @@ void serializeInfo(JsonObject root)
   // use the full revision if we can
     esp_chip_info_t chip_info;
     esp_chip_info(&chip_info);
-    snprintf(msgbuf, sizeof(msgbuf)-1, "%s v%u.%u", 
-        ESP.getChipModel(), 
+    snprintf(msgbuf, sizeof(msgbuf)-1, "%s v%u.%u",
+        ESP.getChipModel(),
         unsigned(chip_info.full_revision / 100),   // full revision is in (major * 100 + minor) format
         unsigned(chip_info.full_revision % 100));
 #else
@@ -1142,8 +1209,10 @@ void serializeInfo(JsonObject root)
     case FM_QOUT: root[F("e32flashtext")] = F(" (QOUT)");break;
     case FM_DIO:  root[F("e32flashtext")] = F(" (DIO)"); break;
     case FM_DOUT: root[F("e32flashtext")] = F(" (DOUT or other)");break;
-    #if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_ESPTOOLPY_FLASHMODE_OPI
+    #if CONFIG_ESPTOOLPY_FLASHMODE_OPI
       case FM_FAST_READ: root[F("e32flashtext")] = F(" (🚀OPI)");break;
+    #elif CONFIG_ESPTOOLPY_FLASHMODE_HEX
+      case FM_FAST_READ: root[F("e32flashtext")] = F(" (🚀🚀HEX)");break;
     #else
       case FM_FAST_READ: root[F("e32flashtext")] = F(" (fast_read)");break;
     #endif
@@ -1178,6 +1247,9 @@ void serializeInfo(JsonObject root)
   // end WLEDMM
 
   root[F("uptime")] = millis()/1000 + rolloverMillis*4294967;
+  char time[48];
+  getTimeString(time);
+  root[F("time")] = time;
 
   usermods.addToJsonInfo(root);
 
@@ -1372,7 +1444,7 @@ void serializePalettes(JsonObject root, AsyncWebServerRequest* request)
           // WLEDMM workaround for palettes index overflow at i=74 -> gGradientPalettes index=61 out of bounds.
           int palIndex = i-13;
           constexpr int palMax = sizeof(gGradientPalettes)/sizeof(gGradientPalettes[0]) -1;
-          if ((palIndex < 0) || (palIndex > palMax)) { 
+          if ((palIndex < 0) || (palIndex > palMax)) {
             DEBUG_PRINTF("WARNING gGradientPalettes[%d] is out of bounds! max=%d. (json.cpp)\n", palIndex, palMax);
             palIndex = palMax;  // use last valid array item
           }
@@ -1604,7 +1676,7 @@ bool serveLiveLeds(AsyncWebServerRequest* request, uint32_t wsClient)
   }
 #endif
 
-  DynamicBuffer buffer(9 + (9*MAX_LIVE_LEDS) + 7 + 5 + 6 + 5 + 6 + 5 + 2);  
+  DynamicBuffer buffer(9 + (9*MAX_LIVE_LEDS) + 7 + 5 + 6 + 5 + 6 + 5 + 2);
   char* buf = buffer.data();      // assign buffer for oappnd() functions
   strncpy_P(buffer.data(), PSTR("{\"leds\":["), buffer.size());
   buf += 9; // sizeof(PSTR()) from last line

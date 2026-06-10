@@ -2562,14 +2562,24 @@ public:
 
     //open programFile
     char * programText = nullptr;
-    uint16_t programFileSize;
+    size_t programFileSize;
     #if ARTI_PLATFORM == ARTI_ARDUINO
       programFileSize = programFile.size();
-      programText = (char *)malloc(programFileSize+1);
+      programText = (char *)d_malloc(programFileSize+1);
+      if (programText == nullptr) {
+        ERROR_ARTI("ARTI-FX: Failed to allocate memory for program file (%u bytes)\n", programFileSize+1);
+        programFile.close();
+        return false;
+      }
       programFile.read((byte *)programText, programFileSize);
       programText[programFileSize] = '\0';
     #else
-      programText = (char *)malloc(programTextSize);
+      programText = (char *)malloc(programTextSize+1);
+      if (programText == nullptr) {
+        ERROR_ARTI("ARTI-FX: Failed to allocate memory for program file (%u bytes)\n", programTextSize);
+        programFile.close();
+        return false;
+      }
       programFile.read(programText, programTextSize);
       DEBUG_ARTI("programFile size %lu bytes\n", programFile.gcount());
       programText[programFile.gcount()] = '\0';
@@ -2607,7 +2617,13 @@ public:
     #endif
 
     if (stages < 1) {
-      if (nullptr != programText) free(programText);  // softhack007 prevent memory leak
+      // softhack007 prevent memory leak
+      #if ARTI_PLATFORM == ARTI_ARDUINO
+        if (nullptr != programText) d_free(programText);
+      #else
+        if (nullptr != programText) free(programText);
+      #endif
+      programText = nullptr;
       close(); 
       return true;
     }
@@ -2666,8 +2682,11 @@ public:
       #endif
     }
     #if ARTI_PLATFORM == ARTI_ARDUINO //not on windows as cause crash???
+      d_free(programText); 
+    #else
       free(programText);
     #endif
+    programText = nullptr;
 
     if (stages >= 3)
     {

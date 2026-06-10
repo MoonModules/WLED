@@ -65,12 +65,15 @@ constexpr i2s_port_t AR_I2S_PORT = I2S_NUM_0;       // I2S port to use (do not c
 // data type requested from the I2S driver - currently we always use 32bit
 //#define I2S_USE_16BIT_SAMPLES   // (experimental) define this to request 16bit - more efficient but possibly less compatible
 
-#if defined(WLED_ENABLE_HUB75MATRIX) && defined(CONFIG_IDF_TARGET_ESP32)
-  // this is bitter, but necessary to survive
-  #define I2S_USE_16BIT_SAMPLES
-#endif
+//#if defined(WLED_ENABLE_HUB75MATRIX) && defined(CONFIG_IDF_TARGET_ESP32)
+//  // this is bitter, but necessary to survive // disabled - does not work!!
+//  #define I2S_USE_16BIT_SAMPLES
+//#endif
 
 #ifdef I2S_USE_16BIT_SAMPLES
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 2, 0)) // see https://github.com/MoonModules/WLED-MM/issues/333#issuecomment-3910779668
+#error "16bit sampling currently does not work with newer framework versions. Please build without I2S_USE_16BIT_SAMPLES"
+#endif
 #define I2S_SAMPLE_RESOLUTION I2S_BITS_PER_SAMPLE_16BIT
 #define I2S_datatype int16_t
 #define I2S_unsigned_datatype uint16_t
@@ -295,11 +298,11 @@ class I2SSource : public AudioSource {
         // S3: not supported; S2: supported; C3: not supported
         _config.use_apll = false; // APLL not supported on this MCU
       #endif
-      #if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+      #if defined(CONFIG_IDF_TARGET_ESP32)
       if (ESP.getChipRevision() == 0) _config.use_apll = false; // APLL is broken on ESP32 revision 0
       #endif
-      #if defined(WLED_ENABLE_HUB75MATRIX)
-        _config.use_apll = false; // APLL needed for HUB75 DMA driver ?
+      #if defined(WLED_USE_ETHERNET) || defined(WLED_ENABLE_HUB75MATRIX)
+        _config.use_apll = false; // APLL is needed for Ethernet, and possibly for HUB75, too
       #endif
 #endif
 

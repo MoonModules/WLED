@@ -12,12 +12,16 @@
 #if defined(__AVR__)
 #include <avr/pgmspace.h>
 #else
+#if defined(ARDUINO_ARCH_ESP32)
+#include <pgmspace.h>
+#else
 // for compatiblity with Arduino Due and Teensy 3.0 and maybe others?
 #define PROGMEM
 #define PGM_P  const char *
 #define pgm_read_byte(addr) (*(const unsigned char *)(addr))
 #define pgm_read_word(addr) (*(const unsigned char **)(addr))
 #define strcpy_P(dest, src) strcpy((dest), (src))
+#endif
 #endif
 #include <string.h> // for strcpy_P or strcpy
 #include "TimeLib.h"
@@ -27,43 +31,43 @@
 
 static char buffer[dt_MAX_STRING_LEN+1];  // must be big enough for longest string and the terminating null
 
-const char monthStr0[] PROGMEM = "";
-const char monthStr1[] PROGMEM = "January";
-const char monthStr2[] PROGMEM = "February";
-const char monthStr3[] PROGMEM = "March";
-const char monthStr4[] PROGMEM = "April";
-const char monthStr5[] PROGMEM = "May";
-const char monthStr6[] PROGMEM = "June";
-const char monthStr7[] PROGMEM = "July";
-const char monthStr8[] PROGMEM = "August";
-const char monthStr9[] PROGMEM = "September";
-const char monthStr10[] PROGMEM = "October";
-const char monthStr11[] PROGMEM = "November";
-const char monthStr12[] PROGMEM = "December";
+static const char monthStr0[] PROGMEM = "";
+static const char monthStr1[] PROGMEM = "January";
+static const char monthStr2[] PROGMEM = "February";
+static const char monthStr3[] PROGMEM = "March";
+static const char monthStr4[] PROGMEM = "April";
+static const char monthStr5[] PROGMEM = "May";
+static const char monthStr6[] PROGMEM = "June";
+static const char monthStr7[] PROGMEM = "July";
+static const char monthStr8[] PROGMEM = "August";
+static const char monthStr9[] PROGMEM = "September";
+static const char monthStr10[] PROGMEM = "October";
+static const char monthStr11[] PROGMEM = "November";
+static const char monthStr12[] PROGMEM = "December";
 
-const PROGMEM char * const PROGMEM monthNames_P[] =
+static const PROGMEM char * const PROGMEM monthNames_P[] =
 {
     monthStr0,monthStr1,monthStr2,monthStr3,monthStr4,monthStr5,monthStr6,
     monthStr7,monthStr8,monthStr9,monthStr10,monthStr11,monthStr12
 };
 
-const char monthShortNames_P[] PROGMEM = "ErrJanFebMarAprMayJunJulAugSepOctNovDec";
+static const char monthShortNames_P[] PROGMEM = "ErrJanFebMarAprMayJunJulAugSepOctNovDec";
 
-const char dayStr0[] PROGMEM = "Err";
-const char dayStr1[] PROGMEM = "Sunday";
-const char dayStr2[] PROGMEM = "Monday";
-const char dayStr3[] PROGMEM = "Tuesday";
-const char dayStr4[] PROGMEM = "Wednesday";
-const char dayStr5[] PROGMEM = "Thursday";
-const char dayStr6[] PROGMEM = "Friday";
-const char dayStr7[] PROGMEM = "Saturday";
+static const char dayStr0[] PROGMEM = "Err";
+static const char dayStr1[] PROGMEM = "Sunday";
+static const char dayStr2[] PROGMEM = "Monday";
+static const char dayStr3[] PROGMEM = "Tuesday";
+static const char dayStr4[] PROGMEM = "Wednesday";
+static const char dayStr5[] PROGMEM = "Thursday";
+static const char dayStr6[] PROGMEM = "Friday";
+static const char dayStr7[] PROGMEM = "Saturday";
 
-const PROGMEM char * const PROGMEM dayNames_P[] =
+static const PROGMEM char * const PROGMEM dayNames_P[] =
 {
    dayStr0,dayStr1,dayStr2,dayStr3,dayStr4,dayStr5,dayStr6,dayStr7
 };
 
-const char dayShortNames_P[] PROGMEM = "ErrSunMonTueWedThuFriSat";
+static const char dayShortNames_P[] PROGMEM = "ErrSunMonTueWedThuFriSat";
 
 /* functions to return date strings */
 

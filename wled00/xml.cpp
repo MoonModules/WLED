@@ -112,7 +112,7 @@ void URL_response(AsyncWebServerRequest *request)
   obuf = sbuf;
   olen = 0;
 
-  oappend(SET_F("<html><body><a href=\""));
+  oappend(SET_F("<html lang=\"en\"><body><a href=\""));
   oappend(s2buf);
   oappend(SET_F("\" target=\"_blank\">"));
   oappend(s2buf);
@@ -232,8 +232,12 @@ void appendGPIOinfo() {
   //Note: Using pin 3 (RX) disables Adalight / Serial JSON
 
   #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(CONFIG_IDF_TARGET_ESP32C3)
-    if (psramFound()) oappend(SET_F(",16,17")); // GPIO16 & GPIO17 reserved for SPI RAM on ESP32 (not on S2, S3 or C3)
+    #if defined(CONFIG_IDF_TARGET_ESP32) // classic esp32
+    if (strncmp_P(PSTR("ESP32-D0WDR2-V3"), ESP.getChipModel(), 15) == 0) {
+      if (psramFound()) oappend(SET_F(",16")); // GPIO16 reserved for SPI RAM on ESP32-D0WDR2-V3
+    } else {
+      if (psramFound()) oappend(SET_F(",16,17")); // GPIO16 & GPIO17 reserved for SPI RAM on ESP32 (not on S2, S3 or C3)
+    }
     #elif defined(CONFIG_IDF_TARGET_ESP32S3)
     if (psramFound()) oappend(SET_F(",33,34,35,36,37")); // in use for "octal" PSRAM or "octal" FLASH -seems that octal PSRAM is very common on S3.
     #endif
@@ -287,6 +291,30 @@ void appendGPIOinfo() {
   char a_pins[64]  = { '\0' }; // fix warning: output 45 bytes into a destination of size 30
   snprintf(a_pins, 64, "d.a_pins=[%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d];", pinManager.getADCPin(PM_ADC1, 0), pinManager.getADCPin(PM_ADC1, 1), pinManager.getADCPin(PM_ADC1, 2), pinManager.getADCPin(PM_ADC1, 3), pinManager.getADCPin(PM_ADC1, 4), pinManager.getADCPin(PM_ADC1, 5), pinManager.getADCPin(PM_ADC1, 6), pinManager.getADCPin(PM_ADC1, 7), pinManager.getADCPin(PM_ADC1, 8), pinManager.getADCPin(PM_ADC1, 9), pinManager.getADCPin(PM_ADC1, 10));
   oappend(a_pins);
+
+  // WLEDMM add HUB75 pins, as they are not stored directly in cfg.json
+  strcpy(ro_gpio, "d.h_pins=["); // WLEDMM we re-use this array, instead of creating an addition one; 140 bytes is more than enough for 14 pins.
+  bool isFirstPin = true;
+  for(int pinNr = 0; pinNr < WLED_NUM_PINS; pinNr++) {
+    if ((pinManager.isPinOk(pinNr)) && (pinManager.getPinOwner(pinNr) == PinOwner::HUB75)) {
+      sprintf(pinString, "%s%d", isFirstPin ? "" : ",", pinNr);
+      strcat(ro_gpio, pinString); isFirstPin = false;
+    }
+  }
+  oappend(ro_gpio);
+  oappend(SET_F("];"));
+
+  // WLEDMM same procedure for DMX pins
+  strcpy(ro_gpio, "d.x_pins=["); // WLEDMM we re-use this array, instead of creating an addition one; 140 bytes is more than enough for max 4 pins.
+  isFirstPin = true;
+  for(int pinNr = 0; pinNr < WLED_NUM_PINS; pinNr++) {
+    if ((pinManager.isPinOk(pinNr)) && (pinManager.getPinOwner(pinNr) == PinOwner::DMX || pinManager.getPinOwner(pinNr) == PinOwner::DMX_INPUT)) {
+      sprintf(pinString, "%s%d", isFirstPin ? "" : ",", pinNr);
+      strcat(ro_gpio, pinString); isFirstPin = false;
+    }
+  }
+  oappend(ro_gpio);
+  oappend(SET_F("];"));
 }
 
 //get values for settings form in javascript
@@ -308,6 +336,17 @@ void getSettingsJS(AsyncWebServerRequest* request, byte subPage, char* dest) //W
   #ifdef WLED_ENABLE_DMX // include only if DMX is enabled
     oappend(PSTR("gId('dmxbtn').style.display='';"));
   #endif
+
+  #ifdef WLED_ENABLE_PIXART // include only if PixelArt tool is enabled
+    oappend(PSTR("gId('pixbtn').style.display='';"));
+  #endif
+  #if defined(WLED_ENABLE_PXMAGIC) && !defined(WLED_ENABLE_PIXART) // include only if PixelMagic tool is enabled - only when PixelArt is not enabled
+    oappend(PSTR("gId('pxmbtn').style.display='';"));
+  #endif
+  #if defined(WLED_ENABLE_PIXELFORGE) && !defined(WLED_DISABLE_PIXELFORGE) // include only if PixelForge is enabled
+    oappend(PSTR("gId('forgebtn').style.display='';"));
+  #endif
+
   }
 
   if (subPage == 1)

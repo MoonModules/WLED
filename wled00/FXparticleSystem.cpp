@@ -1470,7 +1470,7 @@ void ParticleSystem1D::render() {
   // add background color
   uint32_t bg_color = SEGCOLOR(1);
   if (bg_color > 0) { //if not black
-    CRGB bg_color_crgb = bg_color; // convert to CRGB
+    [[maybe_unused]] CRGB bg_color_crgb = bg_color; // convert to CRGB
     for (int32_t i = 0; i <= maxXpixel; i++) {
       #ifdef ESP8266 // no local buffer on ESP8266
       SEGMENT.addPixelColor(i, bg_color, true);

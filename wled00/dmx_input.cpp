@@ -1,7 +1,7 @@
 #include "wled.h"
 
 #ifdef WLED_ENABLE_DMX_INPUT
-#pragma message "DMX physical input driver enabled"
+#pragma message "DMX physical input driver (esp-dmx) enabled"
 
 #ifdef ESP8266
 #error DMX input is only supported on ESP32
@@ -56,8 +56,8 @@ static dmx_config_t createConfig()
   config.software_version_id = VERSION;
   strcpy(config.device_label, "WLED_MM");
 
-  const std::string versionString = "WLED_V" + std::to_string(VERSION);
-  strncpy(config.software_version_label, versionString.c_str(), 32);
+  const std::string dmxWledVersionString = "WLED_V" + std::to_string(VERSION);
+  strncpy(config.software_version_label, dmxWledVersionString.c_str(), 32);
   config.software_version_label[32] = '\0'; // zero termination in case versionString string was longer than 32 chars
 
   config.personalities[0].description = "SINGLE_RGB";

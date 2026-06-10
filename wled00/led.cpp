@@ -28,22 +28,40 @@ void setValuesFromSegment(uint8_t s)
 // problem: if the first selected segment already has the value to be set, other selected segments are not updated
 void applyValuesToSelectedSegs()
 {
+  // WLEDMM first get segments mutex, to avoid changing actively drawing segments
+  if (esp32SemTake(segmentMux, 600) != pdTRUE) {
+    // failed - do nothing
+    USER_PRINTLN("applyValuesToSelectedSegs() failed to acquire segments mutex");
+    return;
+  }
+
   // copy of first selected segment to tell if value was updated
   uint8_t firstSel = strip.getFirstSelectedSegId();
-  Segment selsegPrev = strip.getSegment(firstSel);
+  //Segment selsegPrev = strip.getSegment(firstSel);
+  Segment& selsegRef = strip.getSegment(firstSel);   // WLEDMM avoid copying segments as this could cause large memory allocations
+  auto pre_speed = selsegRef.speed;
+  auto pre_inten = selsegRef.intensity;
+  auto pre_pal   = selsegRef.palette;
+  auto pre_mode  = selsegRef.mode;
+  auto pre_col0  = selsegRef.colors[0];
+  auto pre_col1  = selsegRef.colors[1];
+  // [[maybe_unused]] auto pre_col2  = selsegRef.colors[2];
+
   for (uint8_t i = 0; i < strip.getSegmentsNum(); i++) {
     Segment& seg = strip.getSegment(i);
     if (i != firstSel && (!seg.isActive() || !seg.isSelected())) continue;
 
-    if (effectSpeed     != selsegPrev.speed)     {seg.speed     = effectSpeed;     stateChanged = true;}
-    if (effectIntensity != selsegPrev.intensity) {seg.intensity = effectIntensity; stateChanged = true;}
-    if (effectPalette   != selsegPrev.palette)   {seg.palette   = effectPalette;   stateChanged = true;}
-    if (effectCurrent   != selsegPrev.mode)      {strip.setMode(i, effectCurrent); stateChanged = true;}
+    if (effectSpeed     != pre_speed)     {seg.speed     = effectSpeed;     stateChanged = true;}
+    if (effectIntensity != pre_inten)     {seg.intensity = effectIntensity; stateChanged = true;}
+    if (effectPalette   != pre_pal)       {seg.palette   = effectPalette;   stateChanged = true;}
+    if (effectCurrent   != pre_mode)      {strip.setMode(i, effectCurrent); stateChanged = true;}
     uint32_t col0 = RGBW32(   col[0],    col[1],    col[2],    col[3]);
     uint32_t col1 = RGBW32(colSec[0], colSec[1], colSec[2], colSec[3]);
-    if (col0 != selsegPrev.colors[0])            {seg.setColor(0, col0);           stateChanged = true;}
-    if (col1 != selsegPrev.colors[1])            {seg.setColor(1, col1);           stateChanged = true;}
+    if (col0 != pre_col0)                 {seg.setColor(0, col0);           stateChanged = true;}
+    if (col1 != pre_col1)                 {seg.setColor(1, col1);           stateChanged = true;}
   }
+
+  esp32SemGive(segmentMux);
 }
 
 

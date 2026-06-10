@@ -12,8 +12,10 @@ static volatile byte presetToApply = 0;
 static volatile byte callModeToApply = 0;
 static volatile byte presetToSave = 0;
 static volatile int8_t saveLedmap = -1;
-static char quickLoad[12]; // WLEDMM 9->12 to prevent crashing with unicode
-static char saveName[33];
+#define QLOAD_BUFFER 12 // string needed for quickload // WLEDMM 9->12 to prevent crashing with unicode
+#define FNAME_BUFFER 32 // string needed for saveName
+static char quickLoad[QLOAD_BUFFER+1] = {'\0'}; // 1 extra byte for '\0'
+static char saveName[FNAME_BUFFER+1]  = {'\0'}; // 1 extra byte for '\0'
 static bool includeBri = true, segBounds = true, selectedOnly = false, playlistSave = false;
 
 static const char *getFileName(bool persist = true) {
@@ -38,7 +40,20 @@ static void doSaveState() {
   bool persist = (presetToSave < 251);
   const char *filename = getFileName(persist);
 
-  if (!requestJSONBufferLock(10)) return; // will set fileDoc
+  if (!requestJSONBufferLock(10)) return; // will set fileDoc // async write
+
+  // WLEDMM Acquire file mutex before writing presets.json or tmp.json
+  if (esp32SemTake(presetFileMux, 2500) != pdTRUE) {
+    USER_PRINTLN(F("doSaveState(): preset file busy, cannot write"));
+    releaseJSONBufferLock();
+    return;
+  }
+
+  // wait for strip to finish updating, accessing FS during sendout causes glitches
+  #ifdef ARDUINO_ARCH_ESP32
+  unsigned wait_start = millis();
+  while (strip.isUpdating() && (millis() - wait_start < 40)) delay(1); // wait max 40ms
+  #endif
 
   initPresetsFile(); // just in case if someone deleted presets.json using /edit
   JsonObject sObj = doc.to<JsonObject>();
@@ -62,16 +77,11 @@ static void doSaveState() {
 */
   #if defined(ARDUINO_ARCH_ESP32)
   if (!persist) {
-    if (tmpRAMbuffer!=nullptr) free(tmpRAMbuffer);
+    if (tmpRAMbuffer!=nullptr) p_free(tmpRAMbuffer);
     size_t len = measureJson(*fileDoc) + 1;
     DEBUG_PRINTLN(len);
     // if possible use SPI RAM on ESP32
-    #if defined(BOARD_HAS_PSRAM) && (defined(WLED_USE_PSRAM) || defined(WLED_USE_PSRAM_JSON))        // WLEDMM
-    if (psramFound())
-      tmpRAMbuffer = (char*) ps_malloc(len);
-    else
-    #endif
-      tmpRAMbuffer = (char*) malloc(len);
+    tmpRAMbuffer = (char*) p_malloc(len);
     if (tmpRAMbuffer!=nullptr) {
       serializeJson(*fileDoc, tmpRAMbuffer, len);
     } else {
@@ -82,6 +92,8 @@ static void doSaveState() {
   writeObjectToFileUsingId(filename, presetToSave, fileDoc);
 
   if (persist) presetsModifiedTime = toki.second(); //unix time
+
+  esp32SemGive(presetFileMux);  // Release file mutex
   releaseJSONBufferLock();
   updateFSInfo();
 
@@ -111,7 +123,15 @@ bool getPresetName(byte index, String& name)
 
 void initPresetsFile()
 {
-  if (WLED_FS.exists(getFileName())) return;
+  if (WLED_FS.exists(getFileName())) {
+    // treat an empty JSON file (e.g. "{}", "{ }") the same as a missing file:
+    // f.size() < 4 is the same threshold used in appendObjectToFile() to detect an uninitialized file
+    File f = WLED_FS.open(getFileName(), "r");
+    bool empty = f && f.size() < 4;             // file does exist due to previous "if"
+    if (f) f.close();
+    if (empty) WLED_FS.remove(getFileName());   // remove the empty file so it can be recreated below
+    else return;                                // file not empty -> keep (nothing to init)
+  }
 
   StaticJsonDocument<64> doc;
   JsonObject sObj = doc.to<JsonObject>();
@@ -241,7 +261,7 @@ void handlePresets()
   unsigned long waitstart = millis();
   while (strip.isServicing() && millis() - waitstart < FRAMETIME_FIXED) delay(1); // wait for effects to finish updating
 
-  strip.fill(BLACK); strip.show(); // experimental: set LEDs to black while new preset loads (instead of freezing effects)
+  strip.fill(BLACK); strip.trigger(); // experimental: set LEDs to black while new preset loads (shortly freezing effects, but starts clean. Still better than a short black-out.)
 
   unsigned long start = millis();
   while (strip.isUpdating() && millis() - start < FRAMETIME_FIXED) delay(1); // wait for strip to finish updating, accessing FS during sendout causes glitches // WLEDMM delay instead of yield
@@ -281,7 +301,7 @@ void handlePresets()
   #if defined(ARDUINO_ARCH_ESP32)
   //Aircoookie recommended not to delete buffer
   if (tmpPreset==255 && tmpRAMbuffer!=nullptr) {
-    free(tmpRAMbuffer);
+    p_free(tmpRAMbuffer);
     tmpRAMbuffer = nullptr;
   }
   #endif
@@ -296,13 +316,17 @@ void handlePresets()
 void savePreset(byte index, const char* pname, JsonObject sObj)
 {
   if (index == 0 || (index > 250 && index < 255)) return;
-  if (pname) strlcpy(saveName, pname, 33);
+  if (pname) strlcpy(saveName, pname, FNAME_BUFFER+1);
   else {
-    if (sObj["n"].is<const char*>()) strlcpy(saveName, sObj["n"].as<const char*>(), 33);
+    if (sObj["n"].is<const char*>()) strlcpy(saveName, sObj["n"].as<const char*>(), FNAME_BUFFER+1);
     else                             sprintf_P(saveName, PSTR("Preset %d"), index);
   }
 
   DEBUG_PRINT(F("Saving preset (")); DEBUG_PRINT(index); DEBUG_PRINT(F(") ")); DEBUG_PRINTLN(saveName);
+  auto oldpresetToSave = presetToSave; // for recovery in case that esp32SemTake(presetFileMux) fails
+  auto oldplaylistSave = playlistSave;
+  char oldQuickLoad[QLOAD_BUFFER+1];
+  strlcpy(oldQuickLoad, quickLoad, sizeof(oldQuickLoad));
 
   presetToSave = index;
   playlistSave = false;
@@ -316,17 +340,42 @@ void savePreset(byte index, const char* pname, JsonObject sObj)
   } else {
     // this is a playlist or API call
     if (sObj[F("playlist")].isNull()) {
-      // we will save API call immediately (often causes presets.json corruption)
+      // we will save API call immediately (often causes presets.json corruption in the past)
+
+      // WLEDMM Acquire file mutex before writing presets.json, to prevent presets.json corruption
+      if (esp32SemTake(presetFileMux, 2500) != pdTRUE) {
+          USER_PRINTLN(F("savePreset(): preset file busy, cannot write"));
+          presetToSave = oldpresetToSave;
+          playlistSave = oldplaylistSave;
+          strlcpy(quickLoad, oldQuickLoad, sizeof(quickLoad));
+          return; // early exit, no change
+      }
+
       presetToSave = 0;
-      if (index > 250 || !fileDoc) return; // cannot save API calls to temporary preset (255)
+      if (index > 250 || !fileDoc) {
+        esp32SemGive(presetFileMux);  // Release file mutex
+        presetToSave = oldpresetToSave; // bugfix: restore previous state on error exit
+        playlistSave = oldplaylistSave;
+        strlcpy(quickLoad, oldQuickLoad, sizeof(quickLoad));
+        return; // cannot save API calls to temporary preset (255)
+      }
       sObj.remove("o");
       sObj.remove("v");
       sObj.remove("time");
       sObj.remove(F("error"));
       sObj.remove(F("psave"));
       if (sObj["n"].isNull()) sObj["n"] = saveName;
+
+      // wait for strip to finish updating, accessing FS during sendout causes glitches
+      #ifdef ARDUINO_ARCH_ESP32
+      unsigned wait_start = millis();
+      while (strip.isUpdating() && (millis() - wait_start < 40)) delay(1); // wait max 40ms
+      #endif
+
       initPresetsFile(); // just in case if someone deleted presets.json using /edit
       writeObjectToFileUsingId(getFileName(index<255), index, fileDoc);
+
+      esp32SemGive(presetFileMux);  // Release file mutex
       presetsModifiedTime = toki.second(); //unix time
       updateFSInfo();
     } else {
@@ -339,8 +388,16 @@ void savePreset(byte index, const char* pname, JsonObject sObj)
 }
 
 void deletePreset(byte index) {
+  // WLEDMM Acquire file mutex before writing presets.json, to prevent presets.json corruption
+  if (esp32SemTake(presetFileMux, 2500) != pdTRUE) {
+    USER_PRINTLN(F("deletePreset(): preset file busy, cannot write"));
+    return; // early exit, no change
+  }
+
   StaticJsonDocument<24> empty;
   writeObjectToFileUsingId(getFileName(), index, &empty);
+
+  esp32SemGive(presetFileMux);  // Release file mutex
   presetsModifiedTime = toki.second(); //unix time
   updateFSInfo();
 }

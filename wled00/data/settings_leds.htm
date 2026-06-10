@@ -17,6 +17,7 @@
 		function gId(n){return d.getElementById(n);}
 		function hideNoIR(){gId("irOnOff2").style.display="none";} //WLEDMM
 		function hideHub75() {
+			window.hub75Hidden = true; // Track that Hub75 should be hidden
 			var s = d.getElementsByTagName("select");
 			for (i=0; i<s.length; i++) {
 				// is the field a LED type?
@@ -219,10 +220,11 @@
 					if (change) {
 						gId("rf"+n).checked = (gId("rf"+n).checked || t == 31); // LEDs require data in off state
 						if (t > 31 && t < 48) d.getElementsByName("LC"+n)[0].value = 1; // for sanity change analog count just to 1 LED
+						if (t >= 100 && t < 110) d.getElementsByName("CO"+n)[0].value = 1; // default to RGB color order for HUB75
 					}
 					gId("rf"+n).onclick = (t == 31) ? (()=>{return false}) : (()=>{});  // prevent change for TM1814
 					gRGBW |= isRGBW = ((t > 17 && t < 22) || (t > 28 && t < 32) || (t > 40 && t < 46 && t != 43) || t == 88); // RGBW checkbox, TYPE_xxxx values from const.h
-					gId("co"+n).style.display = ((t >= 83 && t < 96) || (t >= 40 && t < 48)||(t >= 100 && t < 110)) ? "none":"inline";  // hide color order for PWM
+					gId("co"+n).style.display = ((t >= 83 && t < 96) || (t >= 40 && t < 48)) ? "none":"inline";  // hide color order for PWM/analog (not HUB75)
 					gId("dig"+n+"w").style.display = (t > 28 && t < 32) ? "inline":"none";  // show swap channels dropdown
 					gId("dig"+n+"O").style.display = (t == 82 || t == 83) ? "inline":"none";  // show Art-Net output number
 					gId("dig"+n+"L").style.display = (t == 82 || t == 83) ? "inline":"none";  // show Art-Net LEDs per output
@@ -464,6 +466,7 @@ ${i+1}:
 <div id="dig${i}a" style="display:inline"><br>Auto-calculate white channel from RGB:<br><select name="AW${i}"><option value=0>None</option><option value=1>Brighter</option><option value=2>Accurate</option><option value=3>Dual</option><option value=4>Max</option></select>&nbsp;</div>
 </div>`;
 				f.insertAdjacentHTML("beforeend", cn);
+				if (window.hub75Hidden) hideHub75(); // remove Hub75 options if not supported
 			}
 			if (n==-1) {
 				o[--i].remove();--i;

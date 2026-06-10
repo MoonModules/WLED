@@ -25,10 +25,14 @@ void endImagePlayback(Segment *seg);            // implemented in image_loader.c
 #define USE_GET_MILLISECOND_TIMER
 #include "FastLED.h"
 
+#include "colors.h" // include CHSV32 class by @dedehai
+
  // WLEDMM strip.sPC() needs to know "busses", so we pull in the declarition
 #include "pin_manager.h"  // BusManager needs to know pinManager
 #include "bus_manager.h"
 extern BusManager busses; // same as wled.h
+
+static uint8_t strip_getPaletteBlend();  // forward declaration: little helper to access strip.paletteBlend
 
 #define DEFAULT_BRIGHTNESS (uint8_t)127
 #define DEFAULT_MODE       (uint8_t)0
@@ -49,6 +53,12 @@ extern BusManager busses; // same as wled.h
 //color mangling macros
 #ifndef RGBW32
 #define RGBW32(r,g,b,w) (uint32_t((byte(w) << 24) | (byte(r) << 16) | (byte(g) << 8) | (byte(b))))
+#endif
+#ifndef W
+#define R(c) (byte((c) >> 16))
+#define G(c) (byte((c) >> 8))
+#define B(c) (byte(c))
+#define W(c) (byte((c) >> 24))
 #endif
 
 /* Not used in all effects yet */
@@ -387,8 +397,10 @@ extern BusManager busses; // same as wled.h
 #define FX_MODE_PS1DSONICSTREAM        225
 #define FX_MODE_PS1DSONICBOOM          226
 #define FX_MODE_PS1DSPRINGY            227
+#define FX_MODE_PARTICLEGALAXY         228
 
-#define MODE_COUNT                     228
+#define FX_MODE_COLORCLOUDS            229
+#define MODE_COUNT                     230
 
 typedef enum mapping1D2D {
   M12_Pixels = 0,
@@ -600,7 +612,7 @@ typedef struct Segment {
       endImagePlayback(this);
       #endif
 
-      if ((Segment::_globalLeds == nullptr) && !strip_uses_global_leds() && (ledsrgb != nullptr)) {free(ledsrgb); ledsrgb = nullptr;}  // WLEDMM we need "!strip_uses_global_leds()" to avoid crashes (#104)
+      if ((Segment::_globalLeds == nullptr) && !strip_uses_global_leds() && (ledsrgb != nullptr)) {d_free(ledsrgb); ledsrgb = nullptr;}  // WLEDMM we need "!strip_uses_global_leds()" to avoid crashes (#104)
       if (name) { delete[] name; name = nullptr; }
       if (_t)   { transitional = false; delete _t; _t = nullptr; }
       deallocateData();
@@ -681,7 +693,10 @@ typedef struct Segment {
     }
 
     uint8_t  currentMode(uint8_t modeNew);
-    uint32_t currentColor(uint8_t slot, uint32_t colorNew);
+    inline uint32_t currentColor(uint8_t slot, uint32_t colorNew) const {  // WLEDMM moved here from FX_fcn.cpp
+      return transitional && _t ? color_blend(_t->_colorT[min(slot, uint8_t(2))], colorNew, progress(), true) : colorNew;  // WLEDMM prevent array bounds violation - only 3 color slots allowed
+    }
+
     CRGBPalette16 &loadPalette(CRGBPalette16 &tgt, uint8_t pal) const;
     void     setCurrentPalette(void);
 
@@ -711,8 +726,40 @@ typedef struct Segment {
     inline void addPixelColor(int n, CRGB c, bool fast = false)          { addPixelColor(n, uint32_t(c) & 0x00FFFFFF, fast); } // automatically inline
     void fadePixelColor(uint16_t n, uint8_t fade);
     uint8_t get_random_wheel_index(uint8_t pos)  const;
-	  uint32_t __attribute__((pure)) color_from_palette(uint_fast16_t, bool mapping, bool wrap, uint8_t mcol, uint8_t pbri = 255);
-    uint32_t __attribute__((pure)) color_wheel(uint8_t pos);
+
+    // WLEDMM function moved here (from FX_fcn.cpp) for better optimization by the compiler
+    inline uint32_t __attribute__((hot)) color_from_palette(uint_fast16_t i, bool mapping, bool wrap, uint8_t mcol=0, uint8_t pbri = 255) const {
+      uint32_t color = currentColor(mcol, colors[min(mcol, uint8_t(2))]);     // WLEDMM prevent array bounds violation - only 3 color slots allowed
+      // default palette or no RGB support on segment
+      if ((palette == 0 && mcol < NUM_COLORS) || !_isRGB) {
+        color = gamma32(color);
+        if (pbri == 255) return color;
+        else return RGBW32(scale8_video(R(color),pbri), scale8_video(G(color),pbri), scale8_video(B(color),pbri), scale8_video(W(color),pbri));
+      }
+      uint8_t paletteIndex = i;
+      uint_fast16_t vLen = mapping ? virtualLength() : 1;
+      if (mapping && vLen > 1) paletteIndex = (i*255)/(vLen -1);
+      if (!wrap) paletteIndex = scale8(paletteIndex, 240); //cut off blend at palette "end"
+      CRGB fastled_col = ColorFromPaletteWLED(_currentPalette, paletteIndex, pbri, (strip_getPaletteBlend() == 3)? NOBLEND:LINEARBLEND); // NOTE: paletteBlend should be global
+      uint8_t w = gamma8(W(color)); // extract white channel
+      return RGBW32(fastled_col.r, fastled_col.g, fastled_col.b, w);
+    }
+
+    // WLEDMM function moved here (from FX_fcn.cpp) for better optimization by the compiler
+    inline uint32_t color_wheel(uint8_t pos) const {
+      if (palette) return color_from_palette(pos, false, true, 0);
+      uint8_t w = gamma8(W(currentColor(0, colors[0]))); // extract white channel
+      pos = 255 - pos;
+      if (pos < 85) {
+        return RGBW32((255 - pos * 3), 0, (pos * 3), w);
+      } else if(pos < 170) {
+        pos -= 85;
+        return RGBW32(0, (pos * 3), (255 - pos * 3), w);
+      } else {
+        pos -= 170;
+        return RGBW32((pos * 3), (255 - pos * 3), 0, w);
+      }
+    }
 
     // 2D Blur: shortcuts for bluring columns or rows only (50% faster than full 2D blur)
     inline void blurCols(fract8 blur_amount, bool smear = false) { // blur all columns
@@ -966,7 +1013,7 @@ class WS2812FX {  // 96 bytes
       #ifdef WLED_DEBUG
       if (Serial) Serial.println(F("~WS2812FX destroying strip.")); // WLEDMM can't use DEBUG_PRINTLN here
       #endif
-      if (customMappingTable) delete[] customMappingTable;
+      if (customMappingTable) d_free(customMappingTable); customMappingTable = nullptr;
       _mode.clear();
       _modeData.clear();
       _segments.clear();
@@ -974,7 +1021,7 @@ class WS2812FX {  // 96 bytes
       panel.clear();
 #endif
       customPalettes.clear();
-      if (useLedsArray && Segment::_globalLeds) free(Segment::_globalLeds);
+      if (useLedsArray && Segment::_globalLeds) d_free(Segment::_globalLeds);
     }
 
     static WS2812FX* getInstance(void) { return instance; }
@@ -984,7 +1031,7 @@ class WS2812FX {  // 96 bytes
       printSize(),
 #endif
       finalizeInit(),
-      waitUntilIdle(void),   // WLEDMM
+      waitUntilIdle(unsigned timeout = 0),   // WLEDMM
       service(void),
       setMode(uint8_t segid, uint8_t m),
       setColor(uint8_t slot, uint32_t c),
@@ -1037,8 +1084,8 @@ class WS2812FX {  // 96 bytes
       getActiveSegmentsNum(void)  const,
       __attribute__((pure)) getFirstSelectedSegId(void),
       getLastActiveSegmentId(void) const,
-      __attribute__((pure)) getActiveSegsLightCapabilities(bool selectedOnly = false),
-      setPixelSegment(uint8_t n);
+      __attribute__((pure)) getActiveSegsLightCapabilities(bool selectedOnly = false);
+      //setPixelSegment(uint8_t n);
 
     inline uint8_t getBrightness(void)  const { return _brightness; }
     inline uint8_t getSegmentsNum(void)  const { return _segments.size(); }  // returns currently present segments
@@ -1248,11 +1295,13 @@ class WS2812FX {  // 96 bytes
 
     // will require only 1 byte
     struct {
-      bool _isServicing          : 1;
+      bool _isServicing          : 1; // can stay inside the bitfield - not critical any more since we have a mutex 
       bool _isOffRefreshRequired : 1; //periodic refresh is required for the strip to remain off.
       bool _hasWhiteChannel      : 1;
-      bool _triggered            : 1;
+      //bool _triggered            : 1;
+      bool unusedBit             : 1;
     };
+    volatile bool _triggered;   // WLEDMM moved out of struct, so the flag can be updated in one atomic access
 
     uint8_t                  _modeCount;
     std::vector<mode_ptr>    _mode;     // SRAM footprint: 4 bytes per element
@@ -1273,6 +1322,9 @@ class WS2812FX {  // 96 bytes
     void
       estimateCurrentAndLimitBri(void);
 };
+
+extern WS2812FX strip;    // same as wled.h
+inline uint8_t strip_getPaletteBlend() { return strip.paletteBlend; } // little helper for segment::color_from_palette()
 
 extern const char JSON_mode_names[];
 extern const char JSON_palette_names[];

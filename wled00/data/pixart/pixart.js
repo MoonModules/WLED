@@ -288,7 +288,7 @@ function generateSegmentOptions(array) {
 
 // Get segments from device
 async function getSegments() {
-  cv = gurl.value;
+  const cv = gurl.value;
   if (cv.length > 0 ){
     try {
       var arr = [];

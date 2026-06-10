@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 	<meta content='width=device-width' name='viewport'>
 	<title>WLED Update</title>
@@ -17,7 +17,7 @@
 	<h2>MoonMod WLED Software Update</h2>
 	<form method='POST' action='/update' id='uf' enctype='multipart/form-data' onsubmit="U()">
 		Installed version: <span class="sip">WLEDMM ##VERSION##</span><br> <!--WLEDMM: show bin name-->
-		Download the latest release: <a href="https://github.com/MoonModules/WLED-MM/releases" target="_blank">
+		Download the latest release: <a href="https://github.com/MoonModules/WLED-MM/releases/latest" target="_blank" rel="noopener noreferrer">
 		<img src="https://img.shields.io/github/release/MoonModules/WLED-MM.svg?style=flat-square"></a><br>
 		<input type='file' name='update' required><br> <!--should have accept='.bin', but it prevents file upload from android app-->
 		<button type="submit">Update!</button><br>

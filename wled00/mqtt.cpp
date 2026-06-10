@@ -53,8 +53,8 @@ void onMqttConnect(bool sessionPresent)
 
 
 void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
-  static char *payloadStr;
-
+  static char *payloadStr = nullptr;
+  static size_t payloadAlloc = 0;  // WLEDMM protect against buffer overrun
   DEBUG_PRINT(F("MQTT msg: "));
   DEBUG_PRINTLN(topic);
 
@@ -67,13 +67,19 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
   if (index == 0) {                       // start (1st partial packet or the only packet)
     if (payloadStr) delete[] payloadStr;  // fail-safe: release buffer
     payloadStr = new char[total+1];       // allocate new buffer
+    payloadAlloc = payloadStr ? total : 0;
   }
   if (payloadStr == nullptr) return;      // buffer not allocated
+  if ((index > total) || (total > payloadAlloc)) { // WLED-MM Reject impossible chunk metadata - prevent buffer overrun
+    delete[] payloadStr; payloadStr = nullptr;
+    payloadAlloc = 0;
+    return;
+  }
 
   // copy (partial) packet to buffer and 0-terminate it if it is last packet
   char* buff = payloadStr + index;
-  memcpy(buff, payload, len);
-  if (index + len >= total) { // at end
+  memcpy(buff, payload, min(len, payloadAlloc - index));
+  if (len >= total - index) { // at end
     payloadStr[total] = '\0'; // terminate c style string
   } else {
     DEBUG_PRINTLN(F("Partial packet received."));
@@ -93,6 +99,7 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
       usermods.onMqttMessage(topic, payloadStr);
       delete[] payloadStr;
       payloadStr = nullptr;
+      payloadAlloc = 0;
       return;
     }
   }
@@ -106,14 +113,18 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
     if (!requestJSONBufferLock(15)) {
       delete[] payloadStr;
       payloadStr = nullptr;
+      payloadAlloc = 0;
       return;
     }
     if (payloadStr[0] == '{') { //JSON API
       deserializeJson(doc, payloadStr);
       deserializeState(doc.as<JsonObject>());
     } else { //HTTP API
-      String apireq = "win"; apireq += '&'; // reduce flash string usage
-      apireq += payloadStr;
+      size_t payloadLen = strlen(payloadStr);
+      String apireq;
+      apireq.reserve(payloadLen + 4); // WLEDMM "win&" + payload + null terminator handled internally
+      apireq = "win&"; // reduce flash string usage
+      apireq.concat(payloadStr);
       handleSet(nullptr, apireq);
     }
     releaseJSONBufferLock();
@@ -126,6 +137,7 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
   }
   delete[] payloadStr;
   payloadStr = nullptr;
+  payloadAlloc = 0;
 }
 
 
@@ -136,8 +148,8 @@ void publishMqtt()
   DEBUG_PRINTLN(F("Publish MQTT"));
 
   #ifndef USERMOD_SMARTNEST
-  char s[10];
-  char subuf[38];
+  char s[12];
+  char subuf[42]; // WLEDMM 33 + "/status" = 40
 
   sprintf_P(s, PSTR("%u"), bri);
   strlcpy(subuf, mqttDeviceTopic, 33);

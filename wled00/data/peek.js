@@ -30,13 +30,15 @@ function peek(c) {
 					ctx.clearRect(0, 0, c.width, c.height); //WLEDMM
 					function colorAmp(color) {
 						if (color == 0) return 0;
-						return 25+225*color/255;
+						//return color; // no enhancement
+						//return 25+225*color/255; // legacy WLEDMM. problem: strong jump from 0 to 25 -> wrong colors
+						return Math.sqrt(color/255) * 255; // Square root provides gentle and jump-free enhancement of lower brightness pixels
 					} //WLEDMM in range 55 - 205
 					for (y=0.5;y<mH;y++) for (x=0.5; x<mW; x++) {
 						if (leds[i]!= 0 || leds[i+1]!= 0 || leds[i+2]!= 0) { //WLEDMM: do not show blacks
 							ctx.fillStyle = `rgb(${colorAmp(leds[i])},${colorAmp(leds[i+1])},${colorAmp(leds[i+2])})`;
 							ctx.beginPath();
-							ctx.arc(x*pPL+lOf, y*pPL, pPL*0.4, 0, 2 * Math.PI);
+							ctx.arc(x*pPL+lOf, y*pPL, pPL*0.45, 0, 2 * Math.PI); // WLEDMM legacy radius was 0.4 -> 0.45
 							ctx.fill();
 						}
 						i+=3;

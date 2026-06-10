@@ -32,6 +32,28 @@ bool getBitFromArray(const uint8_t* byteArray, size_t position)  __attribute__((
 size_t getBitArrayBytes(size_t num_bits) __attribute__((const)); // number of bytes needed for an array with num_bits bits
 void setBitArray(uint8_t* byteArray, size_t numBits, bool value);  // set all bits to same value
 
+/**
+ * fast color fading / scaling - based on upstream color_fade() and color_scale() by @DedeHai
+ */
+
+// fast color fade without "video" option - fades color toward black
+static inline uint32_t color_fade_fast(uint32_t c1, uint_fast8_t amount) {
+  if (c1 == 0 || amount == 0) return 0; // black or no change
+  if (amount == 255) return c1;
+  constexpr uint32_t TWO_CHANNEL_MASK = 0x00FF00FF;
+  uint32_t rb = c1 & TWO_CHANNEL_MASK;        // extract R and B channels
+  uint32_t wg = (c1 >> 8) & TWO_CHANNEL_MASK; // extract W and G channels (shifted for multiplication)
+  uint32_t rb_scaled = ((rb * (amount + 1)) >> 8) & TWO_CHANNEL_MASK; // scale red and blue
+  uint32_t  wg_scaled = ((wg * (amount + 1)) & ~TWO_CHANNEL_MASK);    // scale white and green
+  return (rb_scaled | wg_scaled);
+}
+// faster than fastled color scaling as it does in place scaling
+static inline void CRGB_scale_fast(CRGB &c, const uint8_t scale) {
+  c.r = ((c.r * scale) >> 8);
+  c.g = ((c.g * scale) >> 8);
+  c.b = ((c.b * scale) >> 8);
+}
+
 
 #define GET_BIT(var,bit)    (((var)>>(bit))&0x01)
 #define SET_BIT(var,bit)    ((var)|=(uint16_t)(0x0001<<(bit)))
@@ -72,7 +94,8 @@ struct BusConfig {
     for (uint8_t i = 0; i < min(unsigned(nPins), sizeof(pins)/sizeof(pins[0])); i++) pins[i] = ppins[i];   //softhack007 fix for potential array out-of-bounds access
   }
 
-  //validates start and length and extends total if needed // WLEDMM this function is not used anywhere
+  //validates start and length and extends total if needed 
+  #if 0  // WLEDMM this function is not used anywhere
   bool adjustBounds(uint16_t& total) {
     if (!count) count = 1;
     if (count > MAX_LEDS_PER_BUS) count = MAX_LEDS_PER_BUS;
@@ -83,6 +106,7 @@ struct BusConfig {
     if (start + count > total) total = start + count;
     return true;
   }
+#endif
 };
 
 // Defines an LED Strip and its color ordering.
@@ -105,9 +129,7 @@ struct ColorOrderMap {
     }
 
     const ColorOrderMapEntry* get(uint8_t n) const {
-      if (n > _count) {
-        return nullptr;
-      }
+      if (n >= count()) return nullptr;
       return &(_mappings[n]);
     }
 
@@ -373,7 +395,7 @@ class BusNetwork : public Bus {
       return _artnet_leds_per_output;
     }
 
-    void setColorOrder(uint8_t colorOrder);
+    void setColorOrder(uint8_t colorOrder); // ??? not implemented???
 
     uint8_t getColorOrder() const override {
       return _colorOrder;
@@ -426,12 +448,15 @@ class BusHub75Matrix : public Bus {
 
     void cleanup(void) override;
 
+    uint8_t getColorOrder() const override { return _colorOrder; }
+
     ~BusHub75Matrix() {
       cleanup();
     }
 
   private:
     unsigned _panelWidth = 0;
+    uint8_t  _colorOrder = COL_ORDER_RGB;
     CRGB *_ledBuffer = nullptr;
     byte *_ledsDirty = nullptr;
     // C++ dirty trick: private static variables are actually _not_ part of the class (however only visibile to class instances). 
@@ -464,7 +489,7 @@ class BusManager {
       lastBus = nullptr;
       laststart = 0;
       lastlen= 0;
-      slowMode = isRTMode;
+      if (isRTMode || !overlappingBusses) slowMode = isRTMode; // don't reset slowMode if we have overlaping busses
     }
 
     void setStatusPixel(uint32_t c);
@@ -507,6 +532,7 @@ class BusManager {
     unsigned laststart = 0;
     unsigned lastlen = 0;
     bool slowMode = false; // WLEDMM not sure why we need this. But its necessary.
+    bool overlappingBusses = false; // WLEDMM needed to enforce "slowMode" when busses overlap (=custom bus start indices)
 
     inline uint8_t getNumVirtualBusses() const {
       int j = 0;

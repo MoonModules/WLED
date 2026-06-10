@@ -34,7 +34,7 @@ void WS2812FX::setUpMatrix() {
     // safety check 
     // WLEDMM no check on Segment::maxWidth * Segment::maxHeight > MAX_LEDS || 
     if (Segment::maxWidth <= 1 || Segment::maxHeight <= 1) {
-      DEBUG_PRINTF("2D Bounds error. %d x %d\n", Segment::maxWidth, Segment::maxHeight);
+      USER_PRINTF("Matrix 2D bounds (%d x %d) invalid.\n", Segment::maxWidth, Segment::maxHeight);
       isMatrix = false;
       Segment::maxWidth = _length;
       Segment::maxHeight = 1;
@@ -48,8 +48,7 @@ void WS2812FX::setUpMatrix() {
     
     // WLEDMM check if mapping table is necessary (avoiding heap fragmentation)
 //#if defined(WLED_ENABLE_HUB75MATRIX)
-    bool needLedMap = (loadedLedmap >0);              // ledmap loaded
-    needLedMap |= WLED_FS.exists(F("/2d-gaps.json")); // gapFile found
+   bool needLedMap = (loadedLedmap >0);              // ledmap loaded
     needLedMap |= panel.size() > 1;                   // 2D config: more than one panel
     if (panel.size() == 1) {
       Panel &p = panel[0];
@@ -57,6 +56,11 @@ void WS2812FX::setUpMatrix() {
       needLedMap |= p.vertical;                          // panel not horizotal
       needLedMap |= p.bottomStart | p.rightStart;        // panel not top left, or not left->light
       needLedMap |= (p.xOffset > 0) || (p.yOffset > 0);  // panel does not start at (0,0)
+    }
+    needLedMap |= (ledMaps >1) && (loadedLedmap >0);     // ledmap1...10 loaded
+    if (!needLedMap) { // only perform file cheking if we must (may cause flicker)
+      needLedMap |= WLED_FS.exists(F("/2d-gaps.json"));  // gapFile found
+      needLedMap |= WLED_FS.exists(F("/ledmap.json"));   // global ledmap found
     }
 //#else
 //    bool needLedMap = true;                              // un-comment to always use ledMaps on non-HUB75 builds
@@ -72,11 +76,12 @@ void WS2812FX::setUpMatrix() {
 
       // don't use new / delete
       if ((size > 0) && (customMappingTable != nullptr)) {  // resize
-        customMappingTable = (uint16_t*) reallocf(customMappingTable, sizeof(uint16_t) * size); // reallocf will free memory if it cannot resize
+        //customMappingTable = (uint16_t*) reallocf(customMappingTable, sizeof(uint16_t) * size); // reallocf will free memory if it cannot resize
+        customMappingTable = (uint16_t*) d_realloc_malloc(customMappingTable, sizeof(uint16_t) * size); // will free memory if it cannot resize
       }
       if ((size > 0) && (customMappingTable == nullptr)) { // second try
         DEBUG_PRINTLN("setUpMatrix: trying to get fresh memory block.");
-        customMappingTable = (uint16_t*) calloc(size, sizeof(uint16_t));
+        customMappingTable = (uint16_t*) d_calloc(size, sizeof(uint16_t));
         if (customMappingTable == nullptr) { 
           USER_PRINTLN("setUpMatrix: alloc failed");
           errorFlag = ERR_LOW_MEM; // WLEDMM raise errorflag
@@ -118,7 +123,7 @@ void WS2812FX::setUpMatrix() {
           JsonArray map = doc.as<JsonArray>();
           gapSize = map.size();
           if (!map.isNull() && (gapSize > 0) && gapSize >= customMappingSize) { // not an empty map //softhack also check gapSize>0 
-            gapTable = new(std::nothrow) int8_t[gapSize];
+            gapTable = static_cast<int8_t*>(p_malloc(gapSize));
             if (gapTable) for (size_t i = 0; i < gapSize; i++) {
               gapTable[i] = constrain(map[i], -1, 1);
             }
@@ -148,7 +153,7 @@ void WS2812FX::setUpMatrix() {
       }
 
       // delete gap array as we no longer need it
-      if (gapTable) {delete[] gapTable; gapTable=nullptr;}   // softhack prevent dangling pointer
+      if (gapTable) {p_free(gapTable); gapTable=nullptr;}   // softhack prevent dangling pointer
 
       #ifdef WLED_DEBUG_MAPS
       DEBUG_PRINTF("Matrix ledmap: \n");
@@ -172,6 +177,7 @@ void WS2812FX::setUpMatrix() {
     }
   }
 
+#if 0 // WLEDMM this test is too early - ledmap will be loaded later
 #ifdef WLED_ENABLE_HUB75MATRIX
   // softhack007 hack: delete mapping table in case it only contains "identity"
   if (customMappingTable != nullptr && customMappingTableSize > 0) {
@@ -180,13 +186,14 @@ void WS2812FX::setUpMatrix() {
       if (customMappingTable[i] != (uint16_t)i ) isIdentity = false;
     }
     if (isIdentity) {
-      free(customMappingTable); customMappingTable = nullptr;      
+      d_free(customMappingTable); customMappingTable = nullptr;      
       USER_PRINTF("!setupmatrix: customMappingTable is not needed. Dropping %d bytes.\n", customMappingTableSize * sizeof(uint16_t));
       customMappingTableSize = 0;
       customMappingSize = 0;
       loadedLedmap = 0; //WLEDMM
     }
   }
+#endif
 #endif
 
 #else
@@ -240,7 +247,7 @@ void Segment::startFrame(void) {
 void IRAM_ATTR __attribute__((hot)) Segment::setPixelColorXY_fast(int x, int y, uint32_t col, uint32_t scaled_col, int cols, int rows) const //WLEDMM
 {
   unsigned i = UINT_MAX;
-  bool sameColor = false;
+  [[maybe_unused]] bool sameColor = false;
   if (ledsrgb) { // WLEDMM small optimization
     i = x + y*cols; // avoid error checking done by XY() - be optimistic about ranges of x and y
     CRGB fastled_col = CRGB(col);
@@ -297,7 +304,7 @@ void IRAM_ATTR_YN Segment::setPixelColorXY(int x, int y, uint32_t col) //WLEDMM:
   if (x<0 || y<0 || x >= cols || y >= rows) return;  // if pixel would fall out of virtual segment just exit
 
   unsigned i = UINT_MAX;
-  bool sameColor = false;
+  [[maybe_unused]] bool sameColor = false;
   if (ledsrgb) { // WLEDMM small optimization
     i = XY(x,y);
     CRGB fastled_col = CRGB(col);
@@ -362,7 +369,7 @@ void IRAM_ATTR_YN Segment::setPixelColorXY(int x, int y, uint32_t col) //WLEDMM:
 
 // WLEDMM setPixelColorXY(float x, float y, uint32_t col, ..) is depricated. use wu_pixel(x,y,col) instead.
 // anti-aliased version of setPixelColorXY()
-void Segment::setPixelColorXY(float x, float y, uint32_t col, bool aa, bool fast) // WLEDMM some speedups due to fast int and faster sqrt16
+void Segment::setPixelColorXY(float x, float y, uint32_t col, bool aa, bool fast) // WLEDMM some speedups due to fast int and faster sqrt32_bw
 {
   if (Segment::maxHeight==1) return; // not a matrix set-up
   if (x<0.0f || x>1.0f || y<0.0f || y>1.0f) return; // not normalized
@@ -394,10 +401,10 @@ void Segment::setPixelColorXY(float x, float y, uint32_t col, bool aa, bool fast
         setPixelColorXY(xL, yB, color_blend(col, cXLYB, uint8_t(sqrtf(dL*dB)*255.0f))); // blend BL pixel
         setPixelColorXY(xR, yB, color_blend(col, cXRYB, uint8_t(sqrtf(dR*dB)*255.0f))); // blend BR pixel
       } else {
-        setPixelColorXY(xL, yT, color_blend(col, cXLYT, uint8_t(sqrt16(dL*dT*65025.0f)))); // blend TL pixel     // WLEDMM: use faster sqrt16 for integer; perform multiplication by 255^2 before sqrt
-        setPixelColorXY(xR, yT, color_blend(col, cXRYT, uint8_t(sqrt16(dR*dT*65025.0f)))); // blend TR pixel     //         this is possible because sqrt(a) * sqrt(b)  =  sqrt(a * b)
-        setPixelColorXY(xL, yB, color_blend(col, cXLYB, uint8_t(sqrt16(dL*dB*65025.0f)))); // blend BL pixel
-        setPixelColorXY(xR, yB, color_blend(col, cXRYB, uint8_t(sqrt16(dR*dB*65025.0f)))); // blend BR pixel
+        setPixelColorXY(xL, yT, color_blend(col, cXLYT, uint8_t(sqrt32_bw(dL*dT*65025.0f)))); // blend TL pixel     // WLEDMM: use faster sqrt32_bw for integer; perform multiplication by 255^2 before sqrt
+        setPixelColorXY(xR, yT, color_blend(col, cXRYT, uint8_t(sqrt32_bw(dR*dT*65025.0f)))); // blend TR pixel     //         this is possible because sqrt(a) * sqrt(b)  =  sqrt(a * b)
+        setPixelColorXY(xL, yB, color_blend(col, cXLYB, uint8_t(sqrt32_bw(dL*dB*65025.0f)))); // blend BL pixel
+        setPixelColorXY(xR, yB, color_blend(col, cXRYB, uint8_t(sqrt32_bw(dR*dB*65025.0f)))); // blend BR pixel
       }
     } else if (xR!=xL && yT==yB) {
       setPixelColorXY(xR, yT, color_blend(col, cXLYT, uint8_t(dL*255.0f))); // blend L pixel
@@ -907,7 +914,7 @@ void Segment::drawText(const unsigned char* text, size_t maxLen, int16_t x, int1
   size_t textLength = min(strnlen((char*)text, maxLen), numberOfChars);
 #endif
   // pass characters to drawCharacter()
-  for (int i = 0; i < textLength; i++) {
+  for (size_t i = 0; i < textLength; i++) {
     SEGMENT.drawCharacter((unsigned char) decoded_text[i], x + w*i, y, w, h, color, col2, drawShadow);
   }
 }

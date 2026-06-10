@@ -463,6 +463,7 @@ public:
     configComplete &= getJsonValue(top[F("UseCelsius")], UseCelsius, true);
     configComplete &= getJsonValue(top[F("HomeAssistantDiscovery")], HomeAssistantDiscovery, false);
     for (byte i=0; i<2; i++) configComplete &= getJsonValue(top[F("pin")][i], newPin[i], ioPin[i]);
+    tempScale = UseCelsius ? "°C" : "°F";
 
     DEBUG_PRINT(FPSTR(_name));
     if (!initDone) {

@@ -308,6 +308,9 @@ function handleLocationHash() {
 }
 
 var timeout;
+var lastUiErrorCode = 0;
+var lastUiErrorAt = 0;
+const UI_ERROR_DEDUPE_MS = 3000; // de-duplicate same error when arriving within 3secs
 function showToast(text, error = false)
 {
 	if (error) gId('connind').style.backgroundColor = "var(--c-r)";
@@ -317,13 +320,23 @@ function showToast(text, error = false)
 	x.classList.add(error ? 'error':'show');
 	clearTimeout(timeout);
 	x.style.animation = 'none';
-	timeout = setTimeout(()=>{ x.classList.remove('show'); }, 2900);
+	timeout = setTimeout(()=>{ x.classList.remove('show'); }, 3900); // WLEDMM increased timeout from 2900 to 3900
 	if (error) console.log(text);
 }
 
-function showErrorToast()
+function showErrorToast(ereason=0)
 {
-	showToast('Connection to light failed!', true);
+	var etext = 'Connection to light failed!';
+	switch(ereason) {
+	case 1: etext = '(loadPalettes) ' + etext; break;
+	case 2: etext = '(loadFX) ' + etext; break;
+	case 3: etext = '(loadFXData) ' + etext; break;
+	case 4: etext = '(requestJson) ' + etext; break;
+	case 5: etext = '(requestJson urlfetch) ' + etext; break;
+	case 6: etext = '(getPalettesData) ' + etext; break;
+	default: break;
+	}
+	showToast(etext,true);
 }
 
 function clearErrorToast(n=5000)
@@ -487,7 +500,7 @@ function loadPalettes(callback = null)
 		method: 'get'
 	})
 	.then((res)=>{
-		if (!res.ok) showErrorToast();
+		if (!res.ok) showErrorToast(1);
 		return res.json();
 	})
 	.then((json)=>{
@@ -511,7 +524,7 @@ function loadFX(callback = null)
 		method: 'get'
 	})
 	.then((res)=>{
-		if (!res.ok) showErrorToast();
+		if (!res.ok) showErrorToast(2);
 		return res.json();
 	})
 	.then((json)=>{
@@ -535,7 +548,7 @@ function loadFXData(callback = null)
 		method: 'get'
 	})
 	.then((res)=>{
-		if (!res.ok) showErrorToast();
+		if (!res.ok) showErrorToast(3);
 		return res.json();
 	})
 	.then((json)=>{
@@ -666,7 +679,7 @@ function parseInfo(i) {
 function populateInfo(i)
 {
 	var cn="";
-	var heap = i.freeheap/1000;
+	//var heap = i.freeheap/1000;
 	var heap = Math.round(i.freeheap/100)/10;        // WLEDMM bugfix
 	var theap = (i.totalheap>0)?i.totalheap/1000:-1; //WLEDMM - total heap is not available on 8266
 	var flashsize = i.getflash/1000; //WLEDMM and Athom
@@ -698,7 +711,7 @@ function populateInfo(i)
 	if (i.ver.includes("0.14.3-b")) vcn = "Fried Chicken";
 	if (i.ver.includes("14.5.")) vcn = "Small Step";
 	if (i.ver.includes("14.6.")) vcn = "New Light";
-	if (i.ver.includes("14.7.")) vcn = "Next Step";
+	if ((i.ver.includes("14.7."))||(i.ver.includes("14.8."))) vcn = "Next Step";
 
 	cn += `v${i.ver} &nbsp;<i>"${vcn}"</i><p>(WLEDMM ${i.rel}.bin)</p><p><em>build ${i.vid}</em></p><table>
 ${urows}
@@ -707,11 +720,14 @@ ${i.opt&0x100?inforow("Net Print ☾","<button class=\"btn btn-xs\" onclick=\"re
 ${i.serialOnline?inforow(i.serialOnline,"TX="+i.sTX,"; RX="+i.sRX):""}
 ${i.opt&0x100?'<tr><td colspan=2><hr style="height:1px;border-width:0;color:SeaGreen;background-color:SeaGreen"></td></tr>':''}
 ${inforow("Build",i.vid)}
+${i.leds.count?inforow("Total LEDs",i.leds.count):""}
 ${inforow("Estimated current",pwru)}
 ${inforow("Average FPS",i.leds.fps)}
+<tr><td colspan=2><hr style="height:2px;border-width:0;color:SeaGreen;background-color:SeaGreen"></td></tr>
 ${inforow("Signal strength",i.wifi.signal +"% ("+ i.wifi.rssi, " dBm)")}
 ${inforow("MAC address",i.mac)}
 ${inforow("Uptime",getRuntimeStr(i.uptime))}
+${i.time?inforow("Time",i.time):""}
 <!-- WLEDMM begin--> 
 <tr><td colspan=2><hr style="height:2px;border-width:0;color:SeaGreen;background-color:SeaGreen"></td></tr>
 ${inforow("Filesystem",i.fs.u + "/" + i.fs.t + " kB, " +Math.round(i.fs.u*100/i.fs.t) + "%")}
@@ -724,12 +740,13 @@ ${i.freestack?inforow("Free stack ☾",(i.freestack/1000).toFixed(3)," kB"):""} 
 ${i.tpsram?inforow("PSRAM " + (i.psrmode?"("+i.psrmode+" mode) ":"") + " ☾",(i.tpsram/1024/1024).toFixed(0)," MB"):inforow("NO PSRAM found.", "")}
 ${i.e32flash?inforow("Flash mode "+i.e32flashmode+i.e32flashtext + " ☾",i.e32flash+" MB, "+i.e32flashspeed," Mhz"):""}
 ${i.e32model?inforow(i.e32model + " ☾",i.e32cores +" core(s),"," "+i.e32speed+" Mhz"):""}
-${inforow("Environment",i.arch + " " + i.core + " (" + i.lwip + ")")}
-<tr><td colspan=2><hr style="height:1px;border-width:0;color:SeaGreen;background-color:SeaGreen"></td></tr>
+${inforow("Environment",i.arch + " " + i.core + ( i.lwip ? " (" + i.lwip + ")" : ""))}
+<!-- <tr><td colspan=2><hr style="height:1px;border-width:0;color:SeaGreen;background-color:SeaGreen"></td></tr> -->
 ${i.e32code?inforow("Last ESP Restart ☾",i.e32code+" "+i.e32text):""}
-${i.e32core0code?inforow("Core0 rst reason ☾",i.e32core0code, " "+i.e32core0text):""}
-${i.e32core1code?inforow("Core1 rst reason ☾",i.e32core1code, " "+i.e32core1text):""}
+<!-- ${i.e32core0code?inforow("Core0 rst reason ☾",i.e32core0code, " "+i.e32core0text):""} -->
+<!-- ${i.e32core1code?inforow("Core1 rst reason ☾",i.e32core1code, " "+i.e32core1text):""} -->
 <!-- WLEDMM end--> 
+${i.repo?inforow("GitHub","<a href=\"https://github.com/"+i.repo+"\" target=\"_blank\" rel=\"noopener noreferrer\">" + i.repo + "</a>"):""}
 </table>`;
 	gId('kv').innerHTML = cn;
 	//  update all sliders in Info
@@ -1829,8 +1846,8 @@ function updateSelectedFx()
 		var selectedName = selectedEffect.querySelector(".lstIname").innerText;
 		var segs = gId("segcont").querySelectorAll(`div[data-map="map2D"]`);
 		for (const seg of segs) if (selectedName.indexOf("\u25A6")<0) seg.classList.remove('hide'); else seg.classList.add('hide');
-		var segs = gId("segcont").querySelectorAll(`div[data-snd="si"]`);
-		for (const seg of segs) if (selectedName.indexOf("\u266A")<0 && selectedName.indexOf("\u266B")<0) seg.classList.add('hide'); else seg.classList.remove('hide'); // also "♫ "?
+		var segs2 = gId("segcont").querySelectorAll(`div[data-snd="si"]`);
+		for (const seg2 of segs2) if (selectedName.indexOf("\u266A")<0 && selectedName.indexOf("\u266B")<0) seg2.classList.add('hide'); else seg2.classList.remove('hide'); // also "♫ "?
 	}
 }
 
@@ -2025,14 +2042,23 @@ function readState(s,command=false)
 		case 91:
 			errstr = "Brownout Restart.";
 		  break;
-		case 98:
+		case 98: // legacy value - falls through
+		case 100:
 			errstr = "Please reboot WLED to activate changed settings.";
 		  break;
-		case 99:
+		case 99: // legacy value - falls through
+		case 101:
 			errstr = "Please switch your device off and back on.";
 		  break;
 		}
-	  showToast(((s.error < 33)?'Error ':'Warning ') + s.error + ": " + errstr, (s.error < 35)||(s.error > 90));
+		const now = Date.now();
+		// throttle / de-duplicate same errors within 3 seconds 
+		const shouldShow = (s.error !== lastUiErrorCode) || ((now - lastUiErrorAt) >= UI_ERROR_DEDUPE_MS);
+		if (shouldShow) {
+	  	showToast(((s.error < 33)?'Error ':'Warning ') + s.error + ": " + errstr, (s.error < 35)||(s.error > 90));
+		}
+		lastUiErrorCode = s.error;
+		lastUiErrorAt = now;
 	}
 
 	selectedPal = i.pal;
@@ -2182,7 +2208,7 @@ function requestJson(command=null)
 {
 	gId('connind').style.backgroundColor = "var(--c-y)";
 	if (command && !reqsLegal) return; // stop post requests from chrome onchange event on page restore
-	if (!jsonTimeout) jsonTimeout = setTimeout(()=>{if (ws) ws.close(); ws=null; showErrorToast()}, 3000);
+	if (!jsonTimeout) jsonTimeout = setTimeout(()=>{if (ws) ws.close(); ws=null; showErrorToast(4)}, 3000);
 	var req = null;
 	var url = (loc?`http://${locip}`:'') + '/json/si';
 	var useWs = (ws && ws.readyState === WebSocket.OPEN);
@@ -2198,7 +2224,7 @@ function requestJson(command=null)
 		req = JSON.stringify(command);
 		if (req.length > 1340) useWs = false; // do not send very long requests over websocket
 		if (req.length >  500 && lastinfo && lastinfo.arch == "esp8266") useWs = false; // esp8266 can only handle 500 bytes
-	};
+	}
 
 	if (useWs) {
 		// console.log("requestJson ws.send", command); //WLEDMM Debug
@@ -2217,7 +2243,7 @@ function requestJson(command=null)
 	.then(res => {
 		clearTimeout(jsonTimeout);
 		jsonTimeout = null;
-		if (!res.ok) showErrorToast();
+		if (!res.ok) showErrorToast(5);
 		return res.json();
 	})
 	.then(json => {
@@ -2297,7 +2323,8 @@ function toggleLiveview()
 	if (isM) {
 		//WLEDMM adding liveview2D support on main ui
 		isLv = !isLv;
-		gId("colorGFX").style.display = isLv? "inline":"none"; //WLEDMM: set off if explicitly gfx pushed
+		//WLEDMM: set off if explicitly gfx pushed
+		gId("colorGFX").style.display = "inline"; // always keep colors visible
 		gId("effectGFX").style.display = isLv? "inline":"none";
 		gId("segGFX").style.display = isLv? "inline":"none";
 
@@ -3452,7 +3479,7 @@ function getPalettesData(page, callback)
 		}
 	})
 	.then(res => {
-		if (!res.ok) showErrorToast();
+		if (!res.ok) showErrorToast(6);
 		return res.json();
 	})
 	.then(json => {
@@ -3696,6 +3723,9 @@ function checkVersionUpgrade(info) {
 	if (versionCheckDone) return;
 	versionCheckDone = true;
 
+	// Suppress feature if in AP mode (no internet connection available)
+	if (info.wifi && info.wifi.ap) return;
+
 	// Fetch version-info.json using existing /edit endpoint
 	fetch('/edit?edit=/version-info.json', {
 		method: 'get'
@@ -3722,8 +3752,14 @@ function checkVersionUpgrade(info) {
 			const storedVersion = versionInfo.version || '';
 
 			if (storedVersion && storedVersion !== currentVersion) {
-				// Version has changed, show upgrade prompt
-				showVersionUpgradePrompt(info, storedVersion, currentVersion);
+				// Version has changed
+				if (versionInfo.alwaysReport) {
+					// Automatically report if user opted in for always reporting
+					reportUpgradeEvent(info, storedVersion, true);
+				} else {
+					// Show upgrade prompt
+					showVersionUpgradePrompt(info, storedVersion, currentVersion);
+				}
 			} else if (!storedVersion) {
 				// Empty version in file, show install prompt
 				showVersionUpgradePrompt(info, null, currentVersion);
@@ -3731,76 +3767,92 @@ function checkVersionUpgrade(info) {
 		})
 		.catch(e => {
 			console.log('Failed to load version-info.json', e);
+			// On error, save current version for next time
+			if (info && info.ver) {
+				updateVersionInfo(info.ver, false, false);
+			}
 		});
 }
 
 function showVersionUpgradePrompt(info, oldVersion, newVersion) {
 	// Determine if this is an install or upgrade
 	const isInstall = !oldVersion;
-	
+
 	// Create overlay and dialog
 	const overlay = d.createElement('div');
 	overlay.id = 'versionUpgradeOverlay';
 	overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
-	
+
 	const dialog = d.createElement('div');
 	dialog.style.cssText = 'background:var(--c-1);border-radius:10px;padding:25px;max-width:500px;margin:20px;box-shadow:0 4px 6px rgba(0,0,0,0.3);';
-	
+
 	// Build contextual message based on install vs upgrade
-	const title = isInstall 
+	const title = isInstall
 		? '🎉 Thank you for installing WLED-MM!' 
 		: '🎉 WLED-MM Upgrade Detected!';
 	
 	const description = isInstall
-		? `You are now running WLED-MM <strong>${newVersion}</strong>.`
-		: `Your WLED-MM has been upgraded from <strong>${oldVersion}</strong> to <strong>${newVersion}</strong>.`;
-	
-	const question = 'Would you like to help the WLED development team by reporting your installation? This helps us understand what hardware and versions are being used.'
+		? `You are now running WLED-MM <strong style="text-wrap: nowrap">${newVersion}</strong>.`
+		: `Your WLED-MM has been upgraded from <strong style="text-wrap: nowrap">${oldVersion}</strong> to <strong style="text-wrap: nowrap">${newVersion}</strong>.`;
+
+	const question = 'Help make WLED better by sharing hardware details like chip type and LED count? This helps us understand how WLED is used and prioritize features — we never collect personal data or your activities.'
 
 	dialog.innerHTML = `
 		<h2 style="margin-top:0;color:var(--c-f);">${title}</h2>
 		<p style="color:var(--c-f);">${description}</p>
 		<p style="color:var(--c-f);">${question}</p>
-		<div style="margin-top:20px;">
-			<button id="versionReportYes" class="btn">Yes</button>
-			<button id="versionReportNo" class="btn">Not Now</button>
-			<button id="versionReportNever" class="btn">Never Ask</button>
+		<p style="color:var(--c-f);font-size:0.9em;">
+			<a href="https://kno.wled.ge/about/privacy-policy/" target="_blank" style="color:var(--c-6);">Learn more about what data is collected and why</a>
+		</p>
+		<div style="margin-top:15px;margin-bottom:15px;">
+			<label style="display:flex;align-items:center;gap:8px;color:var(--c-f);cursor:pointer;">
+				<input type="checkbox" id="versionSaveChoice" style="cursor:pointer;">
+				<span>Save my choice for future updates</span>
+			</label>
+		</div>
+		<div style="margin-top:20px;display:flex;flex-wrap:wrap;gap:8px;">
+			<button id="versionReportYes" class="btn">Report update</button>
+			<button id="versionReportNo" class="btn">Skip reporting</button>
 		</div>
 	`;
-	
+
 	overlay.appendChild(dialog);
 	d.body.appendChild(overlay);
-	
+
 	// Add event listeners
 	gId('versionReportYes').addEventListener('click', () => {
-		reportUpgradeEvent(oldVersion, newVersion);
+		const saveChoice = gId('versionSaveChoice').checked;
 		d.body.removeChild(overlay);
+		// Pass saveChoice as alwaysReport parameter
+		reportUpgradeEvent(info, oldVersion, saveChoice);
 	});
-	
+
 	gId('versionReportNo').addEventListener('click', () => {
-		// Don't update version, will ask again on next load
+		const saveChoice = gId('versionSaveChoice').checked;
 		d.body.removeChild(overlay);
-	});
-	
-	gId('versionReportNever').addEventListener('click', () => {
-		updateVersionInfo(newVersion, true);
-		d.body.removeChild(overlay);
-		showToast('You will not be asked again.');
+		if (saveChoice) {
+			// Save "never ask" preference
+			updateVersionInfo(newVersion, true, false);
+			showToast('You will not be asked again.');
+		} else {
+			// Save current version to prevent re-prompting until version changes
+			updateVersionInfo(newVersion, false, false);
+		}
 	});
 }
 
-function reportUpgradeEvent(oldVersion, newVersion) {
+function reportUpgradeEvent(info, oldVersion, alwaysReport) {
 	showToast('Reporting upgrade...');
-	
+
 	// Fetch fresh data from /json/info endpoint as requested
 	fetch('/json/info', {
 		method: 'get'
 	})
-	.then(res => res.json())
-	.then(infoData => {
-		// Map to UpgradeEventRequest structure per OpenAPI spec
-		// Required fields: deviceId, version, previousVersion, releaseName, chip, ledCount, isMatrix, bootloaderSHA256
-		const upgradeData = {
+		.then(res => res.json())
+		.then(infoData => {
+			// Map to UpgradeEventRequest structure per OpenAPI spec
+			// Required fields: deviceId, version, previousVersion, releaseName, chip, ledCount, isMatrix, bootloaderSHA256
+			const upgradeData = {
 				deviceId: infoData.deviceId,                     // Use anonymous unique device ID
 				version: infoData.ver || '',                     // Current version string
 				previousVersion: oldVersion || '',               // Previous version from version-info.json
@@ -3808,63 +3860,72 @@ function reportUpgradeEvent(oldVersion, newVersion) {
 				chip: infoData.arch || '',                       // Chip architecture (esp32, esp8266, etc)
 				ledCount: infoData.leds ? infoData.leds.count : 0,  // Number of LEDs
 				isMatrix: !!(infoData.leds && infoData.leds.matrix),  // Whether it's a 2D matrix setup
-				bootloaderSHA256: infoData.bootloaderSHA256 || '',   // Bootloader SHA256 hash - not yet availeable in WLEDMM
+				bootloaderSHA256: infoData.bootloaderSHA256 || '',   // Bootloader SHA256 hash
 				brand: infoData.brand,                           // Device brand (always present)
 				product: infoData.product,                       // Product name (always present)
-				flashSize: infoData.flash                        // Flash size (always present)
-		};
-		// Add optional fields if available
-		if (infoData.tpsram !== undefined) upgradeData.psramSize = Math.round(infoData.tpsram / (1024 * 1024));  // convert bytes to MB - tpsram is MM specific
-		// Note: partitionSizes not currently available in /json/info endpoint
-		//    it is availeable in WLEDMM => infoData.t = total FS size in bytes
+				flashSize: infoData.flash,                       // Flash size (always present)
+				repo: infoData.repo                              // GitHub repository (always present)
+			};
 
-		// Make AJAX call to postUpgradeEvent API
-		return fetch('https://usage.wled.me/api/usage/upgrade', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify(upgradeData)
+			// Add optional fields if available
+			if (infoData.tpsram !== undefined) upgradeData.psramSize = Math.round(infoData.tpsram / (1024 * 1024));  // convert bytes to MB - tpsram is MM specific
+
+			// Note: partitionSizes not currently available in /json/info endpoint
+
+			// Make AJAX call to postUpgradeEvent API
+			return fetch('https://usage.wled.me/api/usage/upgrade', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(upgradeData)
+			});
+		})
+		.then(res => {
+			if (res.ok) {
+				if (alwaysReport) {
+					showToast('Thank you! Future upgrades will be reported automatically.');
+				} else {
+					showToast('Thank you for reporting!');
+				}
+				updateVersionInfo(info.ver, false, !!alwaysReport);
+			} else {
+				showToast('Report failed. Please try again later.', true);
+				// Do NOT update version info on failure - user will be prompted again
+			}
+			lastUiErrorAt = Date.now(); // WLEDMM overrule UI error toasts to make sure the message stays for at least 3 seconds
+		})
+		.catch(e => {
+			console.log('Failed to report upgrade', e);
+			showToast('Report failed', true);
+			lastUiErrorAt = Date.now(); // WLEDMM overrule UI error toasts to make sure the message stays for at least 3 seconds
+			updateVersionInfo(info.ver, false, !!alwaysReport);
 		});
-	})
-	.then(res => {
-		if (res.ok) {
-			showToast('Thank you for reporting!');
-			updateVersionInfo(newVersion, false);
-		} else {
-			showToast('Report failed. Please try again later.', true);
-			// Do NOT update version info on failure - user will be prompted again
-		}
-	})
-	.catch(e => {
-		console.log('Failed to report upgrade', e);
-		showToast('Report failed. Please try again later.', true);
-		// Do NOT update version info on error - user will be prompted again
-	});
 }
 
-function updateVersionInfo(version, neverAsk) {
+function updateVersionInfo(version, neverAsk, alwaysReport) {
 	const versionInfo = {
 		version: version,
-		neverAsk: neverAsk
+		neverAsk: neverAsk,
+		alwaysReport: !!alwaysReport
 	};
-	
+
 	// Create a Blob with JSON content and use /upload endpoint
-	const blob = new Blob([JSON.stringify(versionInfo)], { type: 'application/json' });
+	const blob = new Blob([JSON.stringify(versionInfo)], {type: 'application/json'});
 	const formData = new FormData();
 	formData.append('data', blob, 'version-info.json');
-	
+
 	fetch('/upload', {
 		method: 'POST',
 		body: formData
 	})
-	.then(res => res.text())
-	.then(data => {
-		console.log('Version info updated', data);
-	})
-	.catch(e => {
-		console.log('Failed to update version-info.json', e);
-	});
+		.then(res => res.text())
+		.then(data => {
+			console.log('Version info updated', data);
+		})
+		.catch(e => {
+			console.log('Failed to update version-info.json', e);
+		});
 }
 
 size();

@@ -10,23 +10,9 @@
 #define UDP_IN_MAXSIZE 1472
 #define PRESUMED_NETWORK_DELAY 3 //how many ms could it take on avg to reach the receiver? This will be added to transmitted times
 
-void notify(byte callMode, bool followUp)
-{
-  if (!udpConnected) return;
-  if (!syncGroups) return;
-  switch (callMode)
-  {
-    case CALL_MODE_INIT:          return;
-    case CALL_MODE_DIRECT_CHANGE: if (!notifyDirect) return; break;
-    case CALL_MODE_BUTTON:        if (!notifyButton) return; break;
-    case CALL_MODE_BUTTON_PRESET: if (!notifyButton) return; break;
-    case CALL_MODE_NIGHTLIGHT:    if (!notifyDirect) return; break;
-    case CALL_MODE_HUE:           if (!notifyHue)    return; break;
-    case CALL_MODE_PRESET_CYCLE:  if (!notifyDirect) return; break;
-    case CALL_MODE_ALEXA:         if (!notifyAlexa)  return; break;
-    default: return;
-  }
-  byte udpOut[WLEDPACKETSIZE];
+static void do_notify(byte callMode, bool followUp) { // WLEDMM split into two functions, to avoid stack smashing - do_notify needs 1200 bytes on stack
+  // DEBUG_PRINTF("[%8u %s]\tnotify(%d, %s)\tmin stack %d\n", millis(), pcTaskGetTaskName(NULL), callMode, followUp?"true ":"false", uxTaskGetStackHighWaterMark(NULL));
+  byte udpOut[WLEDPACKETSIZE] = {0};
   Segment& mainseg = strip.getMainSegment();
   udpOut[0] = 0; //0: wled notifier protocol 1: WARLS protocol
   udpOut[1] = callMode;
@@ -150,6 +136,35 @@ void notify(byte callMode, bool followUp)
   notificationCount = followUp ? notificationCount + 1 : 0;
 }
 
+// WLEDMM wrapper function to avoid stack smashing - do_notify needs 1200 bytes on stack, but its not actually sending anything on most notify() calls
+void notify(byte callMode, bool followUp)
+{
+  if (!udpConnected) return;
+  if (!syncGroups) return;
+  switch (callMode)
+  {
+    case CALL_MODE_INIT:          return;
+    case CALL_MODE_DIRECT_CHANGE: if (!notifyDirect) return; break;
+    case CALL_MODE_BUTTON:        if (!notifyButton) return; break;
+    case CALL_MODE_BUTTON_PRESET: if (!notifyButton) return; break;
+    case CALL_MODE_NIGHTLIGHT:    if (!notifyDirect) return; break;
+    case CALL_MODE_HUE:           if (!notifyHue)    return; break;
+    case CALL_MODE_PRESET_CYCLE:  if (!notifyDirect) return; break;
+    case CALL_MODE_ALEXA:         if (!notifyAlexa)  return; break;
+    default: return;
+  }
+  do_notify(callMode, followUp);
+}
+
+
+// WLEDMM cache current main segment: updated in realtimeLock, reset in exitRealtime, used in setRealTimePixel
+static Segment* theMainSeg = nullptr;
+static int theMainSegLength = 0;
+static int theStripLength = 0;
+#ifdef ARDUINO_ARCH_ESP32
+static portMUX_TYPE critical_lock = portMUX_INITIALIZER_UNLOCKED; // to make cache clearing an atomic operation
+#endif
+
 void realtimeLock(uint32_t timeoutMs, byte md)
 {
   if (!realtimeMode && !realtimeOverride) {
@@ -162,9 +177,8 @@ void realtimeLock(uint32_t timeoutMs, byte md)
 
     if (strip.isServicing()) {
       USER_PRINTLN(F("realtimeLock() entering RTM: strip is still drawing effects."));
-      strip.waitUntilIdle();
+      strip.waitUntilIdle(350);
     }
-    strip.service(); // WLEDMM make sure that all segments are properly initialized
     busses.invalidateCache(true);
     // WLEDMM end
 
@@ -180,7 +194,10 @@ void realtimeLock(uint32_t timeoutMs, byte md)
       stop  = strip.getLengthTotal();
     }
     // clear strip/segment
-    for (size_t i = start; i < stop; i++) strip.setPixelColor(i,BLACK);
+    if (esp32SemTake(busDrawMux, 200) == pdTRUE) { // WLEDMM acquire drawing permission (wait max 200ms) before setting pixels
+      for (size_t i = start; i < stop; i++) strip.setPixelColor(i,BLACK);
+      esp32SemGive(busDrawMux);
+    }
     // if WLED was off and using main segment only, freeze non-main segments so they stay off
     if (useMainSegmentOnly && bri == 0) {
       for (size_t s=0; s < strip.getSegmentsNum(); s++) {
@@ -197,6 +214,30 @@ void realtimeLock(uint32_t timeoutMs, byte md)
     realtimeTimeout = (timeoutMs == 255001 || timeoutMs == 65000) ? UINT32_MAX : millis() + timeoutMs;
   }
   realtimeMode = md;
+
+  // WLEDMM cache current "main segment"
+  if (esp32SemTake(busDrawMux, 1200) == pdTRUE) { // stupid long timeout, but we don't want to wait forever
+    // WLEDMM protect against parallel cache updates from different tasks
+    //   positive side effect: this also introduces a wait if other bus activities are happening in parallel
+    Segment& mainSegRef = strip.getMainSegment();
+    theMainSeg = &mainSegRef; //convert from reference to pointer
+    if (realtimeOverride && !(realtimeMode && useMainSegmentOnly)) {
+      // prevent drawing during user override
+      theMainSegLength = 0;
+      theStripLength = 0;
+    } else {
+      theMainSegLength = theMainSeg->length();
+      theStripLength = strip.getLengthTotal();
+    }
+    esp32SemGive(busDrawMux);
+  } else {
+    // mutex acquisition failed, log debug message and pretend we are in override mode
+    DEBUG_PRINTLN(F("realtimeLock: failed to acquire busDrawMux for cache update."));
+    // clear cache to prevent stale pointer usage
+    theMainSeg = nullptr;
+    theMainSegLength = 0;
+    theStripLength = 0;
+  }
 
   if (realtimeOverride) return;
   if (arlsForceMaxBri) strip.setBrightness(scaledBri(255), true);
@@ -217,6 +258,16 @@ void exitRealtime() {
   } else {
     strip.show(); // possible fix for #3589
   }
+  // WLEDMM invalidate cached main segment pointer and length
+  #ifdef ARDUINO_ARCH_ESP32
+  portENTER_CRITICAL(&critical_lock); // critical section to make cache reset atomic and thread-safe
+  #endif
+    theMainSeg = nullptr;
+    theMainSegLength  = 0;
+    theStripLength = 0;
+  #ifdef ARDUINO_ARCH_ESP32
+  portEXIT_CRITICAL(&critical_lock); // end of critical section
+  #endif
   busses.invalidateCache(false);  // WLEDMM
   USER_PRINTLN(F("exitRealtime() realtime mode ended."));
   updateInterfaces(CALL_MODE_WS_SEND);
@@ -284,7 +335,7 @@ void handleNotifications()
     if (packetSize) {
 #ifdef ARDUINO_ARCH_ESP32
       if (!receiveDirect) {rgbUdp.flush(); notifierUdp.flush(); notifier2Udp.flush(); return;}
-      if (packetSize > UDP_IN_MAXSIZE || packetSize < 3) {rgbUdp.flush(); notifierUdp.flush(); notifier2Udp.flush(); return;}
+      if (packetSize > UDP_IN_MAXSIZE || packetSize < 3) {rgbUdp.flush(); notifierUdp.flush(); notifier2Udp.flush(); return;} // packetSize must not exceed buffersize (UDP_IN_MAXSIZE)
 #else
       if (!receiveDirect) {return;}
       if (packetSize > UDP_IN_MAXSIZE || packetSize < 3) {return;}
@@ -303,10 +354,13 @@ void handleNotifications()
 #endif
       uint16_t id = 0;
       uint16_t totalLen = strip.getLengthTotal();
-      for (int i = 0; i < packetSize -2; i += 3)
-      {
-        setRealtimePixel(id, lbuf[i], lbuf[i+1], lbuf[i+2], 0);
-        id++; if (id >= totalLen) break;
+      if (esp32SemTake(busDrawMux, 200) == pdTRUE) { // WLEDMM acquire drawing permission (wait max 200ms) before setting pixels
+        for (int i = 0; i < packetSize -2; i += 3)
+        {
+          setRealtimePixel(id, lbuf[i], lbuf[i+1], lbuf[i+2], 0);
+          id++; if (id >= totalLen) break;
+        }
+        esp32SemGive(busDrawMux);
       }
       if (!(realtimeMode && useMainSegmentOnly)) strip.show();
       return;
@@ -414,6 +468,7 @@ void handleNotifications()
         uint8_t numSrcSegs = udpIn[39];
         for (size_t i = 0; i < numSrcSegs; i++) {
           uint16_t ofs = 41 + i*udpIn[40]; //start of segment offset byte
+          if (ofs + 36 > UDP_IN_MAXSIZE) break; // WLEDMM avoid reading outsize of array
           uint8_t id = udpIn[0 +ofs];
           if (id > strip.getSegmentsNum()) break;
 
@@ -452,8 +507,8 @@ void handleNotifications()
               selseg.custom2 = udpIn[30+ofs];
               selseg.custom3 = udpIn[31+ofs] & 0x1F;
               selseg.check1  = (udpIn[31+ofs]>>5) & 0x1;
-              selseg.check1  = (udpIn[31+ofs]>>6) & 0x1;
-              selseg.check1  = (udpIn[31+ofs]>>7) & 0x1;
+              selseg.check2  = (udpIn[31+ofs]>>6) & 0x1;
+              selseg.check3  = (udpIn[31+ofs]>>7) & 0x1;
             }
             startY = (udpIn[32+ofs] << 8 | udpIn[33+ofs]);
             stopY  = (udpIn[34+ofs] << 8 | udpIn[35+ofs]);
@@ -547,17 +602,20 @@ void handleNotifications()
     if (tpmPacketCount == 1) tpmPayloadFrameSize = (udpIn[2] << 8) + udpIn[3]; //save frame size for the whole payload if this is the first packet
     byte packetNum = udpIn[4]; //starts with 1!
     byte numPackets = udpIn[5];
+    tpmPayloadFrameSize = min(tpmPayloadFrameSize, uint16_t(UDP_IN_MAXSIZE - 6)); // WLEDMM clamp to buffer size
 
     uint16_t id = (tpmPayloadFrameSize/3)*(packetNum-1); //start LED
     uint16_t totalLen = strip.getLengthTotal();
-    for (size_t i = 6; i < tpmPayloadFrameSize + 4U; i += 3)
-    {
-      if (id < totalLen)
+    if (esp32SemTake(busDrawMux, 200) == pdTRUE) { // WLEDMM acquire drawing permission (wait max 200ms) before setting pixels
+      for (size_t i = 6; i < tpmPayloadFrameSize + 4U; i += 3)
       {
-        setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], 0);
-        id++;
+        if (id < totalLen) {
+          setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], 0);
+          id++;
+        }
+        else break;
       }
-      else break;
+      esp32SemGive(busDrawMux);
     }
     if (tpmPacketCount == numPackets) //reset packet count and show if all packets were received
     {
@@ -567,8 +625,8 @@ void handleNotifications()
     return;
   }
 
-  //UDP realtime: 1 warls 2 drgb 3 drgbw
-  if (udpIn[0] > 0 && udpIn[0] < 5)
+  //UDP realtime: 1 warls 2 drgb 3 drgbw 4 dnrgb 5 dnrgbw
+  if (udpIn[0] > 0 && udpIn[0] < 6)
   {
     realtimeIP = (isSupp) ? notifier2Udp.remoteIP() : notifierUdp.remoteIP();
     DEBUG_PRINTLN(realtimeIP);
@@ -583,49 +641,40 @@ void handleNotifications()
     }
     if (realtimeOverride && !(realtimeMode && useMainSegmentOnly)) return;
 
-    uint16_t totalLen = strip.getLengthTotal();
-    if (udpIn[0] == 1 && packetSize > 5) //warls
-    {
-      for (int i = 2; i < packetSize -3; i += 4)
-      {
-        setRealtimePixel(udpIn[i], udpIn[i+1], udpIn[i+2], udpIn[i+3], 0);
+    if (esp32SemTake(busDrawMux, 250) == pdTRUE) { // WLEDMM acquire drawing permission (wait max 200ms) before setting pixels
+      uint16_t totalLen = strip.getLengthTotal();
+      if (udpIn[0] == 1 && packetSize > 5) { //warls
+        for (int i = 2; i < packetSize -3; i += 4) {
+          setRealtimePixel(udpIn[i], udpIn[i+1], udpIn[i+2], udpIn[i+3], 0);
+        }
+      } else if (udpIn[0] == 2 && packetSize > 4) { //drgb
+        uint16_t id = 0;
+        for (int i = 2; i < packetSize -2; i += 3) {
+          setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], 0);
+          id++; if (id >= totalLen) break;
+        }
+      } else if (udpIn[0] == 3 && packetSize > 6) { //drgbw
+        uint16_t id = 0;
+        for (int i = 2; i < packetSize -3; i += 4) {
+          setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], udpIn[i+3]);
+          id++; if (id >= totalLen) break;
+        }
+      } else if (udpIn[0] == 4 && packetSize > 7) { //dnrgb
+        uint16_t id = ((udpIn[3] << 0) & 0xFF) + ((udpIn[2] << 8) & 0xFF00);
+        for (int i = 4; i < packetSize -2; i += 3) {
+          if (id >= totalLen) break;
+          setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], 0);
+          id++;
+        }
+      } else if (udpIn[0] == 5 && packetSize > 8) { //dnrgbw
+        uint16_t id = ((udpIn[3] << 0) & 0xFF) + ((udpIn[2] << 8) & 0xFF00);
+        for (int i = 4; i < packetSize -3; i += 4) {
+          if (id >= totalLen) break;
+          setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], udpIn[i+3]);
+          id++;
+        }
       }
-    } else if (udpIn[0] == 2 && packetSize > 4) //drgb
-    {
-      uint16_t id = 0;
-      for (int i = 2; i < packetSize -2; i += 3)
-      {
-        setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], 0);
-
-        id++; if (id >= totalLen) break;
-      }
-    } else if (udpIn[0] == 3 && packetSize > 6) //drgbw
-    {
-      uint16_t id = 0;
-      for (int i = 2; i < packetSize -3; i += 4)
-      {
-        setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], udpIn[i+3]);
-
-        id++; if (id >= totalLen) break;
-      }
-    } else if (udpIn[0] == 4 && packetSize > 7) //dnrgb
-    {
-      uint16_t id = ((udpIn[3] << 0) & 0xFF) + ((udpIn[2] << 8) & 0xFF00);
-      for (int i = 4; i < packetSize -2; i += 3)
-      {
-        if (id >= totalLen) break;
-        setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], 0);
-        id++;
-      }
-    } else if (udpIn[0] == 5 && packetSize > 8) //dnrgbw
-    {
-      uint16_t id = ((udpIn[3] << 0) & 0xFF) + ((udpIn[2] << 8) & 0xFF00);
-      for (int i = 4; i < packetSize -2; i += 4)
-      {
-        if (id >= totalLen) break;
-        setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], udpIn[i+3]);
-        id++;
-      }
+      esp32SemGive(busDrawMux); // end of critical section
     }
     strip.show();
     return;
@@ -651,8 +700,8 @@ void handleNotifications()
 
 void setRealtimePixel(uint16_t i, byte r, byte g, byte b, byte w)
 {
-  uint16_t pix = i + arlsOffset;
-  if (pix < strip.getLengthTotal()) {
+  int pix = i + arlsOffset;
+  if (unsigned(pix) < theStripLength) { // WLEDMM use cached length
     if (!arlsDisableGammaCorrection && gammaCorrectCol) {
       r = gamma8(r);
       g = gamma8(g);
@@ -660,8 +709,8 @@ void setRealtimePixel(uint16_t i, byte r, byte g, byte b, byte w)
       w = gamma8(w);
     }
     if (useMainSegmentOnly) {
-      Segment &seg = strip.getMainSegment();
-      if (pix<seg.length()) seg.setPixelColor(pix, r, g, b, w);
+      //Segment &seg = strip.getMainSegment();
+      if ((theMainSeg) && (unsigned(pix) < theMainSegLength)) theMainSeg->setPixelColor(pix, r, g, b, w); // WLEDMM used cached main segment
     } else {
       strip.setPixelColor(pix, r, g, b, w);
     }
@@ -696,6 +745,7 @@ void refreshNodeList()
 void sendSysInfoUDP()
 {
   if (!udp2Connected) return;
+  // DEBUG_PRINTF("[%8u %s]\tsendSysInfoUDP()\tmin stack %d\n", millis(), pcTaskGetTaskName(NULL), uxTaskGetStackHighWaterMark(NULL));
 
   IPAddress ip = Network.localIP();
   if (!ip || ip == IPAddress(255,255,255,255)) ip = IPAddress(4,3,2,1);
@@ -750,24 +800,6 @@ void sendSysInfoUDP()
 /*********************************************************************************************\
  * Art-Net, DDP, E131 output - work in progress
 \*********************************************************************************************/
-
-#define DDP_HEADER_LEN 10
-#define DDP_SYNCPACKET_LEN 10
-
-#define DDP_FLAGS1_VER 0xc0  // version mask
-#define DDP_FLAGS1_VER1 0x40 // version=1
-#define DDP_FLAGS1_PUSH 0x01
-#define DDP_FLAGS1_QUERY 0x02
-#define DDP_FLAGS1_REPLY 0x04
-#define DDP_FLAGS1_STORAGE 0x08
-#define DDP_FLAGS1_TIME 0x10
-
-#define DDP_ID_DISPLAY 1
-#define DDP_ID_CONFIG 250
-#define DDP_ID_STATUS 251
-
-// 1440 channels per packet
-#define DDP_CHANNELS_PER_PACKET 1440 // 480 leds
 
 //
 // Send real time UDP updates to the specified client
@@ -837,11 +869,11 @@ uint8_t IRAM_ATTR_YN realtimeBroadcast(uint8_t type, IPAddress client, uint16_t 
         // the amount of data is AFTER the header in the current packet
         size_t packetSize = DDP_CHANNELS_PER_PACKET;
 
-        uint8_t flags = DDP_FLAGS1_VER1;
+        uint8_t flags = DDP_FLAGS_VER1;
         if (currentPacket == (packetCount - 1U)) {
           // last packet, set the push flag
           // TODO: determine if we want to send an empty push packet to each destination after sending the pixel data
-          flags = DDP_FLAGS1_VER1 | DDP_FLAGS1_PUSH;
+          flags = DDP_FLAGS_VER1 | DDP_FLAGS_PUSH;
           if (channelCount % DDP_CHANNELS_PER_PACKET) {
             packetSize = channelCount % DDP_CHANNELS_PER_PACKET;
           }

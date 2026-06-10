@@ -13,9 +13,37 @@ static byte e131LastSequenceNumber[E131_MAX_UNIVERSE_COUNT] = {0}; // to detect 
 //handles RGB data only
 void handleDDPPacket(e131_packet_t* p) {
   static bool ddpSeenPush = false;  // have we seen a push yet?
-  int lastPushSeq = e131LastSequenceNumber[0];
+  [[maybe_unused]] int lastPushSeq = e131LastSequenceNumber[0];
+
+  // WLEDMM: reject query/response protocol packets (not implemented)
+  if ((p->flags & DDP_FLAGS_QUERY) || (p->flags & DDP_FLAGS_REPLY)) {
+    USER_PRINTF("handleDDPPacket(): unsupported query/response flag in header 0x%02x\n", p->flags);
+    return;
+  }
+  // WLEDMM: reject "display form local storage" requests (but accept "push")
+  if ((p->flags & DDP_FLAGS_STORAGE) && ((p->flags & DDP_FLAGS_PUSH) == 0)) {
+    USER_PRINTF("handleDDPPacket(): unsupported 'Display from local storage' flag in header 0x%02x\n", p->flags);
+    return;
+  }
+
+  // reject unsupported color data types (only RGB and RGBW are supported)
+  uint8_t maskedType = p->dataType & 0x3F; // mask out custom and reserved flags, only type bits are relevant
+  uint8_t maskedColorType = p->dataType & DDP_MASK_TYPE; // WLEDMM mask out everything except for color type
+  if ( maskedType != DDP_TYPE_UNDEF && maskedType != DDP_TYPE_LEGACY &&       // WLEDMM allow legacy "undefined" datatype, and legacy (but wrong) datatype=0x01
+       maskedColorType != DDP_TYPE_RGB && maskedColorType != DDP_TYPE_RGBW && // WLEDMM allow common misinterpretations of the DDP specs
+       maskedType != DDP_TYPE_RGB24 && maskedType != DDP_TYPE_RGBW32) {
+    USER_PRINTF("handleDDPPacket(); unsupported datatype 0x%02x\n", p->dataType);
+    return;
+  }
+
+  // reject control, status and config packets (not implemented)
+  if (p->destination == DDP_ID_CONTROL || p->destination == DDP_ID_STATUS || p->destination == DDP_ID_CONFIG) {
+    DEBUG_PRINTF("handleDDPPacket(): unsupported destination 0x%02x\n", p->destination);
+    return;
+  }
 
   //reject late packets belonging to previous frame (assuming 4 packets max. before push)
+#if 0  // WLEDMM fixme - we definitely have more than 5-10 packets per frame !!!
   if (e131SkipOutOfSequence && lastPushSeq) {
     int sn = p->sequenceNum & 0xF;
     if (sn) {
@@ -26,16 +54,22 @@ void handleDDPPacket(e131_packet_t* p) {
       }
     }
   }
+#endif
 
   uint8_t ddpChannelsPerLed = ((p->dataType & 0b00111000)>>3 == 0b011) ? 4 : 3; // data type 0x1B (formerly 0x1A) is RGBW (type 3, 8 bit/channel)
+
+  // WLEDMM for debugging
+  [[maybe_unused]] static unsigned lastPush = millis();
+  static unsigned packets = 0;
+  static unsigned pixels = 0;
 
   uint32_t start =  htonl(p->channelOffset) / ddpChannelsPerLed;
   start += DMXAddress / ddpChannelsPerLed;
   uint16_t dataLen = htons(p->dataLen);
   unsigned stop = start + dataLen / ddpChannelsPerLed;
   uint8_t* data = p->data;
-  uint16_t c = 0;
-  if (p->flags & DDP_TIMECODE_FLAG) c = 4; //packet has timecode flag, we do not support it, but data starts 4 bytes later
+  unsigned c = 0;
+  if (p->flags & DDP_FLAGS_TIME) c = 4; //packet has timecode flag, we do not support it, but data starts 4 bytes later
 
   unsigned numLeds = stop - start; // stop >= start is guaranteed
   unsigned maxDataIndex = c + numLeds * ddpChannelsPerLed; // validate bounds before accessing data array
@@ -48,15 +82,27 @@ void handleDDPPacket(e131_packet_t* p) {
   realtimeLock(realtimeTimeoutMs, REALTIME_MODE_DDP);
 
   if (!realtimeOverride || (realtimeMode && useMainSegmentOnly)) {
-    for (uint16_t i = start; i < stop; i++) {
-      setRealtimePixel(i, data[c], data[c+1], data[c+2], ddpChannelsPerLed >3 ? data[c+3] : 0);
-      c += ddpChannelsPerLed;
+    // WLEDMM acquire drawing permission (wait max 200ms) before setting pixels
+    if (esp32SemTake(busDrawMux, 200) == pdTRUE) { 
+      for (uint16_t i = start; i < stop; i++) {
+        setRealtimePixel(i, data[c], data[c+1], data[c+2], ddpChannelsPerLed >3 ? data[c+3] : 0);
+        c += ddpChannelsPerLed;
+        pixels++;
+      }
+      packets ++;
+      esp32SemGive(busDrawMux);                                  // WLEDMM release drawing permissions
     }
   }
 
-  bool push = p->flags & DDP_PUSH_FLAG;
+  bool push = p->flags & DDP_FLAGS_PUSH;
   ddpSeenPush |= push;
   if (!ddpSeenPush || push) { // if we've never seen a push, or this is one, render display
+    #ifdef WLED_DEBUG
+      if (push) { USER_PRINT("-P-");} else { USER_PRINT("--");}
+      USER_PRINTF("> %dms (%upck, %upix) ", int(millis() - lastPush), packets, pixels);
+      lastPush = millis();
+      pixels = packets = 0;
+    #endif
     e131NewData = true;
     byte sn = p->sequenceNum & 0xF;
     if (sn) e131LastSequenceNumber[0] = sn;
@@ -69,6 +115,9 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol){
   uint16_t uni = 0, dmxChannels = 0;
   uint8_t* e131_data = nullptr;
   uint8_t seq = 0, mde = REALTIME_MODE_E131;
+
+  if (!receiveDirect) { exitRealtime(); return; } // WLEDMM kill switch
+  if (p == nullptr) return; // WLEDMM should not happen
 
   if (protocol == P_ARTNET)
   {
@@ -170,8 +219,11 @@ void handleDMXData(uint16_t uni, uint16_t dmxChannels, uint8_t* e131_data, uint8
       if (realtimeOverride && !(realtimeMode && useMainSegmentOnly)) return;
 
       wChannel = (availDMXLen > 3) ? e131_data[dataOffset+3] : 0;
-      for (uint16_t i = 0; i < totalLen; i++)
-        setRealtimePixel(i, e131_data[dataOffset+0], e131_data[dataOffset+1], e131_data[dataOffset+2], wChannel);
+      if (esp32SemTake(busDrawMux, 200) == pdTRUE) { // WLEDMM acquire drawing permission (wait max 200ms) before setting pixels
+        for (uint16_t i = 0; i < totalLen; i++)
+          setRealtimePixel(i, e131_data[dataOffset+0], e131_data[dataOffset+1], e131_data[dataOffset+2], wChannel);
+        esp32SemGive(busDrawMux);
+      }
       break;
 
     case DMX_MODE_SINGLE_DRGB:  // 4 channel: [Dimmer,R,G,B]
@@ -186,9 +238,11 @@ void handleDMXData(uint16_t uni, uint16_t dmxChannels, uint8_t* e131_data, uint8
         bri = e131_data[dataOffset+0];
         strip.setBrightness(bri, true);
       }
-
-      for (uint16_t i = 0; i < totalLen; i++)
-        setRealtimePixel(i, e131_data[dataOffset+1], e131_data[dataOffset+2], e131_data[dataOffset+3], wChannel);
+      if (esp32SemTake(busDrawMux, 200) == pdTRUE) { // WLEDMM acquire drawing permission (wait max 200ms) before setting pixels
+        for (uint16_t i = 0; i < totalLen; i++)
+          setRealtimePixel(i, e131_data[dataOffset+1], e131_data[dataOffset+2], e131_data[dataOffset+3], wChannel);
+        esp32SemGive(busDrawMux);
+      }
       break;
 
     case DMX_MODE_PRESET:       // 2 channel: [Dimmer,Preset]
@@ -332,16 +386,19 @@ void handleDMXData(uint16_t uni, uint16_t dmxChannels, uint8_t* e131_data, uint8
           }
         }
 
-        if (!is4Chan) {
-          for (uint16_t i = previousLeds; i < ledsTotal; i++) {
-            setRealtimePixel(i, e131_data[dmxOffset], e131_data[dmxOffset+1], e131_data[dmxOffset+2], 0);
-            dmxOffset+=3;
+        if (esp32SemTake(busDrawMux, 200) == pdTRUE) { // WLEDMM acquire drawing permission (wait max 200ms) before setting pixels
+          if (!is4Chan) {
+            for (uint16_t i = previousLeds; i < ledsTotal; i++) {
+              setRealtimePixel(i, e131_data[dmxOffset], e131_data[dmxOffset+1], e131_data[dmxOffset+2], 0);
+              dmxOffset+=3;
+            }
+          } else {
+            for (uint16_t i = previousLeds; i < ledsTotal; i++) {
+              setRealtimePixel(i, e131_data[dmxOffset], e131_data[dmxOffset+1], e131_data[dmxOffset+2], e131_data[dmxOffset+3]);
+              dmxOffset+=4;
+            }
           }
-        } else {
-          for (uint16_t i = previousLeds; i < ledsTotal; i++) {
-            setRealtimePixel(i, e131_data[dmxOffset], e131_data[dmxOffset+1], e131_data[dmxOffset+2], e131_data[dmxOffset+3]);
-            dmxOffset+=4;
-          }
+          esp32SemGive(busDrawMux);
         }
         break;
       }
@@ -440,7 +497,7 @@ void prepareArtnetPollReply(ArtPollReply *reply) {
 
   reply->reply_port = ARTNET_DEFAULT_PORT;
 
-  char * numberEnd = versionString;
+  char * numberEnd = (char*) versionString; // strtol promises not to try to edit this.
   reply->reply_version_h = (uint8_t)strtol(numberEnd, &numberEnd, 10);
   numberEnd++;
   reply->reply_version_l = (uint8_t)strtol(numberEnd, &numberEnd, 10);

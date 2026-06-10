@@ -44,12 +44,16 @@ def print_my_item(items, flag = False):
 
 # WLEDMM : dump out buildflags : usermods, disable, enable, use_..
 def wledmm_print_build_info(env):
-    all_flags = env["CPPDEFINES"]
+    # get all defines, duplicates are removed
+    all_flags = list(dict.fromkeys(
+        tuple(i) if isinstance(i, (list, tuple)) else i
+        for i in env["CPPDEFINES"]
+    ))
     first = True
 
     found = False
     for item in all_flags:
-        if  'WLED_RELEASE_NAME' in item[0] or 'WLED_VERSION' in item[0] or 'ARDUINO_USB_CDC_ON_BOOT' in item[0] or 'ARDUINO_USB_MODE' in item[0]:
+        if  'WLED_RELEASE_NAME' in item[0] or 'WLED_VERSION' in item[0] or 'ARDUINO_USB_CDC_ON_BOOT' in item[0] or 'ARDUINO_USB_MODE' in item[0] or 'CORE' in item[0] or 'BOARD_HAS' in item:
             if first: print("\nUsermods and Features:")
             print_my_item(item)
             first = False
@@ -67,7 +71,7 @@ def wledmm_print_build_info(env):
 
     found = False
     for item in all_flags: 
-        if 'WLED_DISABLE' in item or 'WIFI_FIX' in item:
+        if 'WLED_DISABLE' in item or 'WLED_DISABLE' in item[0] or 'WIFI_' in item:
             if first: print("\nUsermods and Features:")
             print_my_item(item)
             first = False
@@ -76,7 +80,7 @@ def wledmm_print_build_info(env):
 
     found = False
     for item in all_flags:
-        if 'WLED_' in item or 'WLED_' in item[0] or 'MAX_LED' in item[0]:
+        if 'WLED_' in item or 'WLED_' in item[0] or 'MAX_LED' in item[0] or 'JSON_' in item[0] or '_SEGMENT' in item[0] or '_HEAP' in item[0]:
             if not 'WLED_RELEASE_NAME' in item[0] and not 'WLED_VERSION' in item[0] and not 'WLED_WATCHDOG_TIMEOUT' in item[0] and not 'WLED_DISABLE' in item and not 'WLED_USE_MY_CONFIG' in item and not 'ARDUINO_PARTITION' in item:
                 if first: print("\nUsermods and Features:")
                 print_my_item(item)
@@ -88,11 +92,20 @@ def wledmm_print_build_info(env):
     found = False
     for item in all_flags: 
         if 'WLEDMM_' in item[0] or 'WLEDMM_' in item or 'TROYHACKS' in item:
-            if first: print("\nWLEDMM Features:")
+            if first: print("WLEDMM Features:")
             print_my_item(item)
             first = False
             found = True
-    if found: print("\n")
+    if found: print("")
+
+    first = True
+    for item in all_flags:
+        if  'PIN' in item[0] or 'PIN' in item or 'DMTYPE' in item[0] or 'STATUSLED' in item[0]:
+            if first: print("Default PINs:")
+            print_my_item(item)
+            first = False
+            found = True
+    print("\n")
 
 def wledmm_print_all_defines(env):
     all_flags = env["CPPDEFINES"]

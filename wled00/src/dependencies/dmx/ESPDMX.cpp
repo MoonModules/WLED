@@ -11,12 +11,13 @@
 // - - - - -
 
 /* ----- LIBRARIES ----- */
-#ifdef ESP8266
+#if defined(WLED_ENABLE_DMX) && (defined(ESP8266) || defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2))
 
 #include <Arduino.h>
 
 #include "ESPDMX.h"
 
+#pragma message "using ESPDMX"
 
 
 #define dmxMaxChannel  512
@@ -30,8 +31,8 @@
 bool dmxStarted = false;
 int sendPin = 2;		//default on ESP8266
 
-//DMX value array and size. Entry 0 will hold startbyte
-uint8_t dmxDataStore[dmxMaxChannel] = {};
+//DMX value array and size. Entry 0 will hold startbyte, so we need 512+1 elements
+uint8_t dmxDataStore[dmxMaxChannel+1] = {};
 int channelSize;
 
 
@@ -72,6 +73,7 @@ void DMXESPSerial::write(int Channel, uint8_t value) {
 
   if (Channel < 1) Channel = 1;
   if (Channel > channelSize) Channel = channelSize;
+  if (Channel > dmxMaxChannel) Channel = dmxMaxChannel; // WLEDMM protect against array bounds violation
   if (value < 0) value = 0;
   if (value > 255) value = 255;
 
@@ -98,7 +100,7 @@ void DMXESPSerial::update() {
   //send data
   Serial1.begin(DMXSPEED, DMXFORMAT);
   digitalWrite(sendPin, LOW);
-  Serial1.write(dmxDataStore, channelSize);
+  Serial1.write(dmxDataStore, min(dmxMaxChannel+1, channelSize+1));
   Serial1.flush();
   delay(1);
   Serial1.end();

@@ -49,6 +49,8 @@ Timezone* tz = nullptr;
 #define TZ_MX_CENTRAL          21
 #define TZ_PAKISTAN            22
 #define TZ_BRASILIA            23
+#define TZ_AUSTRALIA_WESTERN   24
+
 #define TZ_INIT               255
 
 byte tzCurrent = TZ_INIT; //uninitialized
@@ -172,6 +174,11 @@ void updateTimezone() {
     case TZ_BRASILIA : {
       tcrDaylight = {Last, Sun, Mar, 1, -180};    //Brasília Standard Time = UTC - 3 hours
       tcrStandard = tcrDaylight;
+      break;
+    }
+    case TZ_AUSTRALIA_WESTERN : {
+      tcrDaylight = {Last, Sun, Mar, 1, 480};     //AWST = UTC + 8 hours
+      tcrStandard = tcrDaylight;                  //AWST = UTC + 8 hours (no DST)
       break;
     }
   }

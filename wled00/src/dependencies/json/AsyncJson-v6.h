@@ -15,6 +15,22 @@
 #include "ArduinoJson-v6.h"
 #include <Print.h>
 
+// global WLED memory functions (util.cpp)
+extern "C" {
+  // only allocate from internal DRAM, never uses PSRAM
+  void *d_malloc_only(size_t);
+  // prefer DRAM in d_xalloc functions, PSRAM as fallback
+  void *d_malloc(size_t);
+  void *d_calloc(size_t, size_t);
+  void *d_realloc_malloc(void *ptr, size_t size);
+  void d_free(void *ptr);
+  // prefer PSRAM in p_xalloc functions, DRAM as fallback
+  void *p_malloc(size_t);
+  void *p_calloc(size_t, size_t);
+  void *p_realloc_malloc(void *ptr, size_t size);
+  void p_free(void *ptr);
+}
+
 #ifdef ESP8266
   #define DYNAMIC_JSON_DOCUMENT_SIZE 8192
 #else
@@ -154,7 +170,9 @@ public:
     if (_onRequest) {
       _contentLength = total;
       if (total > 0 && request->_tempObject == NULL && (int)total < _maxContentLength) {
-        request->_tempObject = malloc(total);
+        //request->_tempObject = malloc(total);
+        //request->_tempObject = d_malloc(total); // seems to cause instabilities on classic esp32 with PSRAM
+        request->_tempObject = d_malloc_only(total);
       }
       if (request->_tempObject != NULL) {
         memcpy((uint8_t*)(request->_tempObject) + index, data, len);

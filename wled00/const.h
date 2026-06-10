@@ -309,13 +309,14 @@
 #define BTN_TYPE_TOUCH_SWITCH     9    //WLEDMM not yet supported
 
 //Ethernet board types
-#define WLED_NUM_ETH_TYPES       15 //WLEDMM +1 for Olimex ESP32-Gateway
+#define WLED_NUM_ETH_TYPES        16
 
 #define WLED_ETH_NONE             0
 #define WLED_ETH_WT32_ETH01       1
 #define WLED_ETH_ESP32_POE        2
 #define WLED_ETH_WESP32           3
 #define WLED_ETH_QUINLED          4
+#define WLED_ETH_OLIMEX_GTW      (WLED_ETH_QUINLED)  // WLEDMM legacy value for Olimex ETH-Gateway - same config as WLED_ETH_QUINLED
 #define WLED_ETH_TWILIGHTLORD     5
 #define WLED_ETH_ESP32DEUX        6
 #define WLED_ETH_ESP32ETHKITVE    7
@@ -325,7 +326,8 @@
 #define WLED_ETH_ESP32_POE_WROVER 11
 #define WLED_ETH_LILYGO_T_POE_PRO 12
 #define WLED_ETH_GLEDOPTO         13
-#define WLED_ETH_OLIMEX_GTW      14
+#define WLED_ETH_QUINLED_V4_UNOQUAD  14
+#define WLED_ETH_QUINLED_V4_OCTA     15
 
 //Hue error codes
 #define HUE_ERROR_INACTIVE        0
@@ -391,8 +393,9 @@
 #define ERR_LOW_BUF     37  // WLEDMM: low memory (LED buffer from allocLEDs)
 #define ERR_SYS_REBOOT  90  // WLEDMM: reboot after error
 #define ERR_SYS_BROWNOUT  91 // WLEDMM: reboot after brownout alert
-#define ERR_REBOOT_NEEDED 98 // WLEDMM: reboot needed after changing hardware setting
-#define ERR_POWEROFF_NEEDED 99 // WLEDMM: power-cycle needed after changing hardware setting
+#define ERR_PERSISTENT    100 // threshold: errors below this value are non-persistent; persistent errors stay in the UI until restart
+#define ERR_REBOOT_NEEDED 100 // WLEDMM: reboot needed after changing hardware setting
+#define ERR_POWEROFF_NEEDED 101 // WLEDMM: power-cycle needed after changing hardware setting
 
 // Timer mode types
 #define NL_MODE_SET               0            //After nightlight time elapsed, set to target brightness
@@ -434,6 +437,14 @@
 #endif
 #endif
 #endif
+#ifdef ARDUINO_ARCH_ESP32
+  static_assert((MAX_LEDS) > 1023, "MAX_LEDS must be at least 1024."); // small values can lead to UI errors, see https://github.com/MoonModules/WLED-MM/issues/365
+#else
+  static_assert((MAX_LEDS) > 511, "MAX_LEDS must be at least 512."); // reduced lower limit for 8266
+#endif
+#if MAX_LEDS > INT16_MAX
+  #warning "MAX_LEDS > 32767 will not work in some effects !"
+#endif
 
 #ifndef MAX_LED_MEMORY
   #ifdef ESP8266
@@ -449,7 +460,7 @@
 
 #ifndef MAX_LEDS_PER_BUS
 #if !defined(ARDUINO_ARCH_ESP32)
-  #define MAX_LEDS_PER_BUS 2048   // may not be enough for fast LEDs (i.e. APA102)
+  #define MAX_LEDS_PER_BUS 1664   // may not be enough for fast LEDs (i.e. APA102) // WLEDMM align with MAX_LEDS default value
 #else
   #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
     #define MAX_LEDS_PER_BUS MAX_LEDS // for fast LEDs and fast MCUs (i.e. APA102, HUB75, ART.Net) - allows to have all LEDs on one bus
@@ -458,6 +469,7 @@
   #endif
 #endif  
 #endif
+static_assert( (MAX_LEDS_PER_BUS) <= (MAX_LEDS), "configuration error: MAX_LEDS_PER_BUS must not exceed MAX_LEDS");  // WLEDMM sanity check
 
 // string temp buffer (now stored in stack locally) // WLEDMM ...which is actually not the greatest design choice on ESP32
 #ifdef ESP8266
@@ -528,7 +540,31 @@
 #endif
 #endif
 
-// Web server limits
+// minimum heap size required to process web requests: try to keep free heap above this value
+#if !defined(MIN_HEAP_SIZE)
+#ifdef ESP8266
+  #define MIN_HEAP_SIZE (9*1024)
+#else
+  #define MIN_HEAP_SIZE (15*1024) // WLED allocation functions (util.cpp) try to keep this much contiguous heap free for other tasks
+#endif
+#endif
+#define MIN_HEAP_CRIT_SIZE (unsigned(MIN_HEAP_SIZE - (MIN_HEAP_SIZE/8)))  // allow 12% margin before for "critical low"
+
+// threshold for PSRAM use: if heap is running low, requests to allocate_buffer(prefer DRAM) above PSRAM_THRESHOLD may be put in PSRAM
+// if heap is depleted, PSRAM will be used regardless of threshold
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+  #define PSRAM_THRESHOLD (12*1024) // S3 has plenty of DRAM
+#elif defined(CONFIG_IDF_TARGET_ESP32)
+  #define PSRAM_THRESHOLD (5*1024)
+#else
+  #define PSRAM_THRESHOLD (2*1024) // S2 does not have a lot of RAM. C3 and ESP8266 do not support PSRAM: the value is not used
+#endif
+
+// Web server limits (8k for AsyncWebServer)
+//#if !defined(MIN_HEAP_SIZE)
+//#define MIN_HEAP_SIZE 8192
+//#endif
+
 #ifdef ESP8266
 // Minimum heap to consider handling a request
 #define WLED_REQUEST_MIN_HEAP (8*1024)
@@ -544,11 +580,6 @@
 // Maximum number of requests in queue; absolute cap on web server resource usage.
 // Websockets do not count against this limit.
 #define WLED_REQUEST_MAX_QUEUE 6
-
-//#define MIN_HEAP_SIZE (8k for AsyncWebServer)
-#if !defined(MIN_HEAP_SIZE)
-#define MIN_HEAP_SIZE 8192
-#endif
 
 // Maximum size of node map (list of other WLED instances)
 #ifdef ESP8266

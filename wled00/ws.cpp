@@ -5,6 +5,10 @@
  */
 #ifdef WLED_ENABLE_WEBSOCKETS
 
+#ifdef DYNAMICBUFFER_USE_PSRAM
+#warning "DYNAMICBUFFER_USE_PSRAM is experimental"
+#endif
+
 static volatile uint16_t wsLiveClientId = 0;        // WLEDMM added "static"
 static volatile unsigned long wsLastLiveTime = 0;   // WLEDMM
 //uint8_t* wsFrameBuffer = nullptr;
@@ -49,7 +53,7 @@ void wsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
         }
 
         bool verboseResponse = false;
-        if (!requestJSONBufferLock(11)) {
+        if (!requestJSONBufferLock(11, 300)) {
           client->text(F("{\"error\":3}")); // ERR_NOBUF
           return;
         }
@@ -83,7 +87,8 @@ void wsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
       } else if (info->opcode == WS_BINARY) {
         // first byte determines protocol. Note: since e131_packet_t is "packed", the compiler handles alignment issues
         //DEBUG_PRINTF_P(PSTR("WS binary message: len %u, byte0: %u\n"), len, data[0]);
-        int offset = 1; // offset to skip protocol byte
+        constexpr int offset = 1; // offset to skip protocol byte
+        if (!data || len < offset+1) return; // catch invalid / single-byte payload
         switch (data[0]) {
           case BINARY_PROTOCOL_E131:
             handleE131Packet((e131_packet_t*)&data[offset], client->remoteIP(), P_E131);
@@ -95,7 +100,7 @@ void wsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
             if (len < unsigned(10 + offset)) return; // DDP header is 10 bytes (+1 protocol byte)
             size_t ddpDataLen = (data[8+offset] << 8) | data[9+offset]; // data length in bytes from DDP header
             uint8_t flags = data[0+offset];
-            if ((flags & DDP_TIMECODE_FLAG) ) ddpDataLen += 4; // timecode flag adds 4 bytes to data length
+            if ((flags & DDP_FLAGS_TIME) ) ddpDataLen += 4; // timecode flag adds 4 bytes to data length
             if (len < (10 + offset + ddpDataLen)) return; // not enough data, prevent out of bounds read
             // could be a valid DDP packet, forward to handler
             handleE131Packet((e131_packet_t*)&data[offset], client->remoteIP(), P_DDP);
@@ -138,7 +143,7 @@ void sendDataWs(AsyncWebSocketClient * client)
   DEBUG_PRINTF("sendDataWs\n");
   if (!ws.count()) return;
 
-  if (!requestJSONBufferLock(12)) {
+  if (!requestJSONBufferLock(12, 300)) {
     if (client) {
       client->text(F("{\"error\":3}")); // ERR_NOBUF
     } else {
@@ -222,7 +227,11 @@ static bool sendLiveLedsWs(uint32_t wsClient)  // WLEDMM added "static"
   #ifdef ESP8266
     constexpr size_t MAX_LIVE_LEDS_WS = 256U;
   #else
+  #if !defined(BOARD_HAS_PSRAM) || !defined(DYNAMICBUFFER_USE_PSRAM)
     constexpr size_t MAX_LIVE_LEDS_WS = 4096U;  //WLEDMM use 4096 as max matrix size
+  #else
+    constexpr size_t MAX_LIVE_LEDS_WS = 4096 * 2;  //WLEDMM better preview on PSRAM boards
+  #endif
   #endif
   size_t used;// = strip.getLengthTotal();
   size_t n;// = ((used -1)/MAX_LIVE_LEDS_WS) +1; //only serve every n'th LED if count over MAX_LIVE_LEDS_WS
@@ -281,7 +290,7 @@ static bool sendLiveLedsWs(uint32_t wsClient)  // WLEDMM added "static"
   #endif
 
   (void) unGamma8(127); // WLEDMM dummy call, just to make sure that gammaTinv is initialized, so we can use fast_unGamma8
-  uint8_t stripBrightness = strip.getBrightness();
+  // [[maybe_unused]] uint8_t stripBrightness = strip.getBrightness();
   for (size_t i = 0; pos < bufSize -2; i += n)
   {
   //WLEDMM skipping lines done right 

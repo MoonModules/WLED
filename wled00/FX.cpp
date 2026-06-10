@@ -157,7 +157,7 @@ static uint16_t mode_oops(void) {
   strip._colors_t[0] = RED;
   strip._colors_t[1] = BLUE;
   strip._colors_t[2] = GREEN;
-  errorFlag = ERR_NORAM_PX;
+  //errorFlag = ERR_NORAM_PX;
   if (SEGLEN <= 1) return mode_static();
   const uint16_t width  = SEGMENT.is2D() ? SEGMENT.virtualWidth() : SEGMENT.virtualLength();
   const uint16_t height = SEGMENT.virtualHeight();
@@ -3012,24 +3012,24 @@ static const char _data_FX_MODE_TRI_STATIC_PATTERN[] PROGMEM = "Solid Pattern Tr
 
 uint16_t spots_base(uint16_t threshold)
 {
-  if (SEGLEN == 1) return mode_oops();
+  if (SEGLEN <= 1) return mode_oops();
   if (!SEGMENT.check2) SEGMENT.fill(SEGCOLOR(1));
 
-  uint16_t maxZones = SEGLEN >> 2;
-  uint16_t zones = 1 + ((SEGMENT.intensity * maxZones) >> 8);
-  uint16_t zoneLen = SEGLEN / zones;
-  uint16_t offset = (SEGLEN - zones * zoneLen) >> 1;
+  unsigned maxZones = max(1, SEGLEN / 4); // prevents "0 zones"
+  int zones         = 1U + ((uint32_t(SEGMENT.intensity) * maxZones + 127) >> 8); // with rounding
+  unsigned zoneLen  = (uint32_t(SEGLEN) + zones-1) / zones;  // round up (ceil)
+  int offset = ((int)SEGLEN - (zones * zoneLen)) / 2; // center the zones on the segment (can not use bit shift on negative number)
 
-  for (int z = 0; z < zones; z++)
+  for (unsigned z = 0; z < zones; z++)
   {
-    uint16_t pos = offset + z * zoneLen;
+    int pos = offset + (z * zoneLen);
     for (int i = 0; i < zoneLen; i++)
     {
-      uint16_t wave = triwave16((i * 0xFFFF) / zoneLen);
+      unsigned wave = triwave16((i * 0xFFFF) / zoneLen);
       if (wave > threshold) {
-        uint16_t index = 0 + pos + i;
-        uint8_t s = (wave - threshold)*255 / (0xFFFF - threshold);
-        SEGMENT.setPixelColor(index, color_blend(SEGMENT.color_from_palette(index, true, PALETTE_SOLID_WRAP, 0), SEGCOLOR(1), 255-s));
+        int index = pos + i;
+        unsigned s = ((wave - threshold)*255 / (0xFFFF - threshold)) & 0xFF; // & 0xFF prevents overflow in next line
+        SEGMENT.setPixelColor(index, color_blend(SEGMENT.color_from_palette(index, true, PALETTE_SOLID_WRAP, 0), SEGCOLOR(1), uint8_t(255-s)));
       }
     }
   }
@@ -3054,7 +3054,7 @@ uint16_t mode_spots_fade()
   uint16_t tr = (t >> 1) + (t >> 2);
   return spots_base(tr);
 }
-static const char _data_FX_MODE_SPOTS_FADE[] PROGMEM = "Spots Fade@Spread,Width,,,,,Overlay;!,!;!";
+static const char _data_FX_MODE_SPOTS_FADE[] PROGMEM = "Spots Fade@Speed,Width,,,,,Overlay;!,!;!";
 
 
 //each needs 12 bytes
@@ -4469,29 +4469,29 @@ static const char _data_FX_MODE_SINEWAVE[] PROGMEM = "Sine";
  */
 uint16_t mode_flow(void)
 {
-  uint16_t counter = 0;
+  unsigned counter = 0;
   if (SEGMENT.speed != 0)
   {
     counter = strip.now * ((SEGMENT.speed >> 2) +1);
     counter = counter >> 8;
   }
 
-  uint16_t maxZones = SEGLEN / 6; //only looks good if each zone has at least 6 LEDs
-  uint16_t zones = (SEGMENT.intensity * maxZones) >> 8;
+  unsigned maxZones = SEGLEN / 6; //only looks good if each zone has at least 6 LEDs
+  int zones = (SEGMENT.intensity * maxZones) >> 8;
   if (zones & 0x01) zones++; //zones must be even
   if (zones < 2) zones = 2;
-  uint16_t zoneLen = SEGLEN / zones;
-  uint16_t offset = (SEGLEN - zones * zoneLen) >> 1;
-
+  int zoneLen = SEGLEN / zones;
+  zones += 2; //add two extra zones to cover beginning and end of segment (compensate integer truncation)
+  int offset = ((int)SEGLEN - (zones * zoneLen)) / 2; // center the zones on the segment (can not use bit shift on negative number)
   SEGMENT.fill(SEGMENT.color_from_palette(-counter, false, true, 255));
 
   for (int z = 0; z < zones; z++)
   {
-    uint16_t pos = offset + z * zoneLen;
+    int pos = offset + z * zoneLen;
     for (int i = 0; i < zoneLen; i++)
     {
       uint8_t colorIndex = (i * 255 / zoneLen) - counter;
-      uint16_t led = (z & 0x01) ? i : (zoneLen -1) -i;
+      int led = (z & 0x01) ? i : (zoneLen -1) -i;
       if (SEGMENT.reverse) led = (zoneLen -1) -led;
       SEGMENT.setPixelColor(pos + led, SEGMENT.color_from_palette(colorIndex, false, true, 255));
     }
@@ -5035,6 +5035,85 @@ uint16_t mode_aurora(void) {
   return FRAMETIME;
 }
 static const char _data_FX_MODE_AURORA[] PROGMEM = "Aurora@!,!;1,2,3;!;;sx=24,pal=50";
+
+
+/** Softly floating colorful clouds.
+ * This is a very smooth effect that moves colorful clouds randomly around the LED strip.
+ * It was initially intended for rather unobtrusive ambient lights (with very slow speed settings).
+ * Nevertheless, it appears completely different and quite vibrant when the sliders are moved near
+ * to their limits. No matter in which direction or in which combination...
+ * Ported to WLED from https://github.com/JoaDick/EyeCandy/blob/master/ColorClouds.h
+ */
+uint16_t mode_ColorClouds()
+{
+  // Set random start points for clouds and color.
+  if (SEGENV.call == 0) {
+    SEGENV.aux0 = hw_random16();
+    SEGENV.aux1 = hw_random16();
+  }
+  const uint32_t volX0 = SEGENV.aux0;
+  const uint32_t hueX0 = SEGENV.aux1;
+  const uint8_t hueOffset0 = volX0 + hueX0; // derive a 3rd random number
+
+  // Makes a very soft wraparound of the color palette by putting more emphasis on the begin & end
+  // of the palette (or on the red'ish colors in case of a rainbow spectrum).
+  // This gives the effect oftentimes an even more calm perception.
+  const bool cozy = SEGMENT.check3;
+
+  // Higher values make the clouds move faster.
+  const uint32_t volSpeed = 1 + SEGMENT.speed;
+  
+  // Higher values make the color change faster.
+  const uint32_t hueSpeed = 1 + SEGMENT.intensity;
+  
+  // Higher values make more clouds (but smaller ones).
+  const uint32_t volSqueeze = 8 + SEGMENT.custom1;
+  
+  // Higher values make the clouds more colorful.
+  const uint32_t hueSqueeze = SEGMENT.custom2;
+
+  // Higher values make larger gaps between the clouds.
+  const int32_t volCutoff   = 12500 + SEGMENT.custom3 * 900;
+  const int32_t volSaturate = 52000;
+  // Note: When adjusting these calculations, ensure that volCutoff is always smaller than volSaturate.
+
+  const uint32_t now = strip.now;
+  const uint32_t volT = now * volSpeed / 8;
+  const uint32_t hueT = now * hueSpeed / 8;
+  const uint8_t hueOffset = beat88(64) >> 8;
+
+  bool doGammaCorrection = false; // WLEDMM gamma correction only needed when color is _not_ from a palette
+  if (SEGMENT.palette == 0) doGammaCorrection = true;
+  for (int i = 0; i < SEGLEN; i++) {
+    const uint32_t volX = i * volSqueeze * 64;
+    int32_t vol = perlin16(volX0 + volX, volT);
+    vol = map2(vol, volCutoff, volSaturate, 0, 255);
+    vol = min(max(vol, int32_t(0)), int32_t(255));
+
+    const uint32_t hueX = i * hueSqueeze * 8;
+    uint8_t hue = perlin16(hueX0 + hueX, hueT) >> 7;
+    hue += hueOffset0;
+    hue += hueOffset;
+    if (cozy) {
+      hue = cos8_t(128 + hue / 2);
+    }
+
+    uint32_t pixel;
+    if (SEGMENT.palette) { pixel = SEGMENT.color_from_palette(hue, false, true, 0, vol); }
+    else { hsv2rgb(CHSV32(hue, 255, vol), pixel); }
+
+    // Suppress extremely dark pixels to avoid flickering of plain r/g/b.
+    if (int(R(pixel)) + G(pixel) + B(pixel) <= 2) {
+      pixel = 0;
+    }
+
+    if (doGammaCorrection) pixel = gamma32(pixel);
+    SEGMENT.setPixelColor(i, pixel);
+  }
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_COLORCLOUDS[] PROGMEM = "Color Clouds@!,!,Clouds,Colors,Distance,,,Cozy;;!;;sx=24,ix=32,c1=48,c2=64,c3=12,pal=0";
+
 
 // WLED-SR effects
 
@@ -6179,15 +6258,15 @@ uint16_t mode_2Dmetaballs(void) {   // Metaballs by Stefan Petrick. Cannot have 
       // and add them together with weightening
       uint16_t dx = abs(x - x1);
       uint16_t dy = abs(y - y1);
-      uint16_t dist = 2 * sqrt16((dx * dx) + (dy * dy));
+      uint16_t dist = 2 * sqrt32_bw((dx * dx) + (dy * dy));
 
       dx = abs(x - x2);
       dy = abs(y - y2);
-      dist += sqrt16((dx * dx) + (dy * dy));
+      dist += sqrt32_bw((dx * dx) + (dy * dy));
 
       dx = abs(x - x3);
       dy = abs(y - y3);
-      dist += sqrt16((dx * dx) + (dy * dy));
+      dist += sqrt32_bw((dx * dx) + (dy * dy));
 
       // inverse result
       byte color = dist ? 1000 / dist : 255;
@@ -9376,9 +9455,9 @@ uint16_t mode_particlefireworks(void) {
   // check each rocket's state and emit particles according to its state: moving up = emit exhaust, at top = explode; falling down = standby time
   uint32_t emitparticles, frequency, baseangle, hueincrement; // number of particles to emit for each rocket's state
   // variables for circular explosions
-  [[maybe_unused]] int32_t speed, currentspeed, speedvariation, percircle;
+  [[maybe_unused]] int32_t speed = 0, currentspeed, speedvariation, percircle;
   int32_t counter = 0;
-  [[maybe_unused]] uint16_t angle;
+  [[maybe_unused]] uint16_t angle = 0;
   [[maybe_unused]] unsigned angleincrement;
   bool circularexplosion = false;
 
@@ -9455,7 +9534,7 @@ uint16_t mode_particlefireworks(void) {
   return FRAMETIME;
 }
 #undef NUMBEROFSOURCES
-static const char _data_FX_MODE_PARTICLEFIREWORKS[] PROGMEM = "PS Fireworks@Launches,Explosion Size,Fuse,Blur,Gravity,Cylinder,Ground,Fast;;!;2;pal=11,ix=200,sx=180,c1=196,c2=0,c3=10,o3=1";
+static const char _data_FX_MODE_PARTICLEFIREWORKS[] PROGMEM = "PS Fireworks@Launches,Explosion Size,Fuse,Blur,Gravity,Cylinder,Ground,Fast;;!;2;pal=11,ix=200,sx=180,c1=196,c2=220,c3=10,o3=1";
 
 /*
   Particle Volcano
@@ -9555,6 +9634,7 @@ uint16_t mode_particlefire(void) {
   PartSys->updateSystem(); // update system properties (dimensions and data pointers)
   PartSys->setWrapX(SEGMENT.check2);
   PartSys->setMotionBlur(SEGMENT.check1 * 170); // anable/disable motion blur
+  PartSys->setSmearBlur(!SEGMENT.check1 * 60);  // enable smear blur if motion blur is not enabled
 
   uint32_t firespeed = max((uint8_t)100, SEGMENT.speed); //limit speed to 100 minimum, reduce frame rate to make it slower (slower speeds than 100 do not look nice)
   if (SEGMENT.speed < 100) { //slow, limit FPS
@@ -9606,6 +9686,20 @@ uint16_t mode_particlefire(void) {
           int32_t curl = ((int32_t)perlin8(PartSys->particles[i].x, PartSys->particles[i].y, SEGENV.step << 4) - 127);
           PartSys->particles[i].vx += (curl * (firespeed + 10)) >> 9;
         }
+      }
+    }
+  }
+
+  // emit faster sparks at first flame position, amount and speed mostly dependends on intensity
+  if(hw_random8() < 10 + (SEGMENT.intensity >> 2)) {
+    for (i = 0; i < PartSys->usedParticles; i++) {
+      if (PartSys->particles[i].ttl == 0) { // find a dead particle
+        PartSys->particles[i].ttl = hw_random16(SEGMENT.vHeight()) + 30;
+        PartSys->particles[i].x = PartSys->sources[0].source.x;
+        PartSys->particles[i].y = PartSys->sources[0].source.y;
+        PartSys->particles[i].vx = PartSys->sources[0].source.vx;
+        PartSys->particles[i].vy = (SEGMENT.vHeight() >> 1) + (firespeed >> 4) + ((30 + (SEGMENT.intensity >> 1) + SEGMENT.custom1) >> 4); // emitting speed (upwards)
+        break; // emit only one particle
       }
     }
   }
@@ -9673,8 +9767,10 @@ uint16_t mode_particlepit(void) {
           PartSys->setParticleSize(1); // set global size to 1 for advanced rendering (no single pixel particles)
           PartSys->advPartProps[i].size = hw_random16(SEGMENT.custom1); // set each particle to random size
         } else {
+          //PartSys->perParticleSize = false;
           PartSys->setParticleSize(SEGMENT.custom1); // set global size
           PartSys->advPartProps[i].size = 0; // use global size
+          //PartSys->advPartProps[i].size = SEGMENT.custom1; // also set individual size for consistency
         }
         break; // emit only one particle per round
       }
@@ -9916,7 +10012,6 @@ static const char _data_FX_MODE_PARTICLEPERLIN[] PROGMEM = "PS Fuzzy Noise@Speed
 #define NUMBEROFSOURCES 8
 uint16_t mode_particleimpact(void) {
   ParticleSystem2D *PartSys = nullptr;
-  uint32_t i = 0;
   uint32_t numMeteors;
   PSsettings2D meteorsettings;
   meteorsettings.asByte = 0b00101000; // PS settings for meteors: bounceY and gravity enabled
@@ -9951,7 +10046,7 @@ uint16_t mode_particleimpact(void) {
   numMeteors = min(PartSys->numSources, (uint32_t)NUMBEROFSOURCES);
   uint32_t emitparticles; // number of particles to emit for each rocket's state
 
-  for (i = 0; i < numMeteors; i++) {
+  for (uint32_t i = 0; i < numMeteors; i++) {
     // determine meteor state by its speed:
     if ( PartSys->sources[i].source.vy < 0) // moving down, emit sparks
       emitparticles = 1;
@@ -9967,7 +10062,7 @@ uint16_t mode_particleimpact(void) {
   }
 
   // update the meteors, set the speed state
-  for (i = 0; i < numMeteors; i++) {
+  for (uint32_t i = 0; i < numMeteors; i++) {
     if (PartSys->sources[i].source.ttl) {
       PartSys->sources[i].source.ttl--; // note: this saves an if statement, but moving down particles age twice
       if (PartSys->sources[i].source.vy < 0) { // move down
@@ -10442,6 +10537,7 @@ uint16_t mode_particleblobs(void) {
     PartSys->setWallHardness(255);
     PartSys->setWallRoughness(255);
     PartSys->setCollisionHardness(255);
+    //PartSys->perParticleSize = true; // enable per particle size control
   }
   else
     PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
@@ -10501,6 +10597,106 @@ uint16_t mode_particleblobs(void) {
   return FRAMETIME;
 }
 static const char _data_FX_MODE_PARTICLEBLOBS[] PROGMEM = "PS Blobs@Speed,Blobs,Size,Life,Blur,Wobble,Collide,Pulsate;;!;2v;sx=30,ix=64,c1=200,c2=130,c3=0,o3=1";
+
+/*
+  Particle Galaxy, particles spiral like in a galaxy
+  Uses palette for particle color
+  by DedeHai (Damian Schneider)
+*/
+uint16_t mode_particlegalaxy(void) {
+  ParticleSystem2D *PartSys = nullptr;
+  PSsettings2D sourcesettings;
+  sourcesettings.asByte = 0b00001100; // PS settings for bounceY, bounceY used for source movement (it always bounces whereas particles do not)
+  if (SEGMENT.call == 0) { // initialization
+    if (!initParticleSystem2D(PartSys, 1, 0, true)) // init using 1 source and advanced particle settings
+      return mode_oops(); // allocation failed or not 2D
+    PartSys->sources[0].source.vx = -4; // will collide with wall and get random bounce direction
+    PartSys->sources[0].source.x =  PartSys->maxX >> 1; // start in the center
+    PartSys->sources[0].source.y =  PartSys->maxY >> 1;
+    PartSys->sources[0].sourceFlags.perpetual = true; //source does not age
+    PartSys->sources[0].maxLife = 4000; // lifetime in frames
+    PartSys->sources[0].minLife = 800;
+    PartSys->sources[0].source.hue = hw_random16(); // start with random color
+    PartSys->setWallHardness(255);  //bounce forever
+    PartSys->setWallRoughness(200); //randomize wall bounce
+  }
+  else {
+    PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
+  }
+  if (PartSys == nullptr)
+    return mode_oops(); // something went wrong, no data!
+  // Particle System settings
+  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  uint8_t particlesize = SEGMENT.custom1;
+  PartSys->setParticleSize(particlesize); // set size globally
+  PartSys->setMotionBlur(250 * SEGMENT.check3); // adds trails to single/quad pixel particles, no effect if size > 1
+
+  if ((SEGMENT.call % ((33 - SEGMENT.custom3) >> 1)) == 0) // change hue of emitted particles
+    PartSys->sources[0].source.hue+=2;
+
+  if (hw_random8() < (10 + (SEGMENT.intensity >> 1))) // 5%-55% chance to emit a particle in this frame
+    PartSys->sprayEmit(PartSys->sources[0]);
+
+  if ((SEGMENT.call & 0x3) == 0) // every 4th frame, move the emitter
+    PartSys->particleMoveUpdate(PartSys->sources[0].source, PartSys->sources[0].sourceFlags, &sourcesettings);
+
+  // move alive particles in a spiral motion (or almost straight in fast starfield mode)
+  int32_t centerx = PartSys->maxX >> 1; // center of matrix in subpixel coordinates
+  int32_t centery = PartSys->maxY >> 1;
+  if (SEGMENT.check2) { // starfield mode
+    PartSys->setKillOutOfBounds(true);
+    PartSys->sources[0].var = 7; // emiting variation
+    PartSys->sources[0].source.x =  centerx; // set emitter to center
+    PartSys->sources[0].source.y =  centery;
+  }
+  else {
+    PartSys->setKillOutOfBounds(false);
+    PartSys->sources[0].var = 1; // emiting variation
+  }
+  for (uint32_t i = 0; i < PartSys->usedParticles; i++) { //check all particles
+    if (PartSys->particles[i].ttl == 0) continue; //skip dead particles
+    // (dx/dy): vector pointing from particle to center
+    int32_t dx = centerx - PartSys->particles[i].x;
+    int32_t dy = centery - PartSys->particles[i].y;
+    //speed towards center:
+    int32_t distance = sqrt32_bw(dx * dx + dy * dy); // absolute distance to center
+    if (distance < 20) distance = 20; // avoid division by zero, keep a minimum
+    int32_t speedfactor;
+    if (SEGMENT.check2) { // starfield mode
+      speedfactor = 1 + (1 + (SEGMENT.speed >> 1)) * distance; // speed increases towards edge
+      //apply velocity
+      PartSys->particles[i].x += (-speedfactor * dx) / 400000 - (dy >> 6);
+      PartSys->particles[i].y += (-speedfactor * dy) / 400000 + (dx >> 6);
+    }
+    else {
+      speedfactor = 2 + (((50 + SEGMENT.speed) << 6) / distance); // speed increases towards center
+      // rotate clockwise
+      int32_t tempVx = (-speedfactor * dy); // speed is orthogonal to center vector
+      int32_t tempVy =  (speedfactor * dx);
+      //add speed towards center to make particles spiral in
+      int vxc = (dx << 9) / (distance - 19); // subtract value from distance to make the pull-in force a bit stronger (helps on faster speeds)
+      int vyc = (dy << 9) / (distance - 19);
+      //apply velocity
+      PartSys->particles[i].x += (tempVx + vxc) / 1024; // note: cannot use bit shift as that causes asymmetric rounding
+      PartSys->particles[i].y += (tempVy + vyc) / 1024;
+
+      if (distance < 128) { // close to center
+        if (PartSys->particles[i].ttl > 3)
+          PartSys->particles[i].ttl -= 4; //age fast
+        PartSys->particles[i].sat = distance << 1; // turn white towards center
+      }
+    }
+    if(SEGMENT.custom3 == 31) // color by age but mapped to 1024 as particles have a long life, since age is random, this gives more or less random colors
+      PartSys->particles[i].hue = PartSys->particles[i].ttl >> 2;
+    else if(SEGMENT.custom3 == 0) // color by distance
+      PartSys->particles[i].hue = map(distance, 20, (PartSys->maxX + PartSys->maxY) >> 2, 0, 180); // color by distance to center
+  }
+
+  PartSys->update(); // update and render
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_PARTICLEGALAXY[] PROGMEM = "PS Galaxy@!,!,Size,,Color,,Starfield,Trace;;!;2;pal=59,sx=80,c1=1,c3=4";
+
 #endif //WLED_DISABLE_PARTICLESYSTEM2D
 #endif // WLED_DISABLE_2D
 
@@ -11642,7 +11838,7 @@ uint16_t mode_particle1DsonicStream(void) {
       else PartSys->particles[i].ttl = 0;
     }
     if (SEGMENT.check1) { // modulate colors by mid frequencies
-      int mids = sqrt16((int)fftResult[5] + (int)fftResult[6] + (int)fftResult[7] + (int)fftResult[8] + (int)fftResult[9] + (int)fftResult[10]); // average the mids, bin 5 is ~500Hz, bin 10 is ~2kHz (see audio_reactive.h)
+      int mids = sqrt32_bw((int)fftResult[5] + (int)fftResult[6] + (int)fftResult[7] + (int)fftResult[8] + (int)fftResult[9] + (int)fftResult[10]); // average the mids, bin 5 is ~500Hz, bin 10 is ~2kHz (see audio_reactive.h)
       PartSys->particles[i].hue += (mids * perlin8(PartSys->particles[i].x << 2, SEGMENT.step << 2)) >> 9; // color by perlin noise from mid frequencies
     }
   }
@@ -11730,7 +11926,7 @@ uint16_t mode_particle1DsonicBoom(void) {
   // particle manipulation
   for (uint32_t i = 0; i < PartSys->usedParticles; i++) {
     if (SEGMENT.check1) { // modulate colors by mid frequencies
-      int mids = sqrt16((int)fftResult[5] + (int)fftResult[6] + (int)fftResult[7] + (int)fftResult[8] + (int)fftResult[9] + (int)fftResult[10]); // average the mids, bin 5 is ~500Hz, bin 10 is ~2kHz (see audio_reactive.h)
+      int mids = sqrt32_bw((int)fftResult[5] + (int)fftResult[6] + (int)fftResult[7] + (int)fftResult[8] + (int)fftResult[9] + (int)fftResult[10]); // average the mids, bin 5 is ~500Hz, bin 10 is ~2kHz (see audio_reactive.h)
       PartSys->particles[i].hue += (mids * perlin8(PartSys->particles[i].x << 2, SEGMENT.step << 2)) >> 9; // color by perlin noise from mid frequencies
     }
     if (PartSys->particles[i].ttl > 16) {
@@ -12038,6 +12234,7 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_COLOR_SWEEP_RANDOM, &mode_color_sweep_random, _data_FX_MODE_COLOR_SWEEP_RANDOM);
   addEffect(FX_MODE_RUNNING_COLOR, &mode_running_color, _data_FX_MODE_RUNNING_COLOR);
   addEffect(FX_MODE_AURORA, &mode_aurora, _data_FX_MODE_AURORA);
+  addEffect(FX_MODE_COLORCLOUDS, &mode_ColorClouds, _data_FX_MODE_COLORCLOUDS);
   addEffect(FX_MODE_RUNNING_RANDOM, &mode_running_random, _data_FX_MODE_RUNNING_RANDOM);
   addEffect(FX_MODE_LARSON_SCANNER, &mode_larson_scanner, _data_FX_MODE_LARSON_SCANNER);
   addEffect(FX_MODE_COMET, &mode_comet, _data_FX_MODE_COMET);
@@ -12235,6 +12432,7 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_PARTICLECENTERGEQ, &mode_particlecenterGEQ, _data_FX_MODE_PARTICLECIRCULARGEQ);
   addEffect(FX_MODE_PARTICLEGHOSTRIDER, &mode_particleghostrider, _data_FX_MODE_PARTICLEGHOSTRIDER);
   addEffect(FX_MODE_PARTICLEBLOBS, &mode_particleblobs, _data_FX_MODE_PARTICLEBLOBS);
+  addEffect(FX_MODE_PARTICLEGALAXY, &mode_particlegalaxy, _data_FX_MODE_PARTICLEGALAXY);
 #endif // WLED_DISABLE_PARTICLESYSTEM2D
 #endif // WLED_DISABLE_2D
 

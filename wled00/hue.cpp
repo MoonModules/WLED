@@ -6,6 +6,13 @@
 
 #ifndef WLED_DISABLE_HUESYNC
 
+// WLEDMM moved out of wled.h
+static AsyncClient* hueClient = nullptr;
+
+#ifdef ARDUINO_ARCH_ESP32
+StaticJsonDocument<640> jsonHUEroot; // (was 1024) - 640 bytes should be more than enough
+#endif
+
 void handleHue()
 {
   if (hueReceived)
@@ -27,37 +34,18 @@ void handleHue()
     reconnectHue();
   } else {
     hueClient->close();
+    delete hueClient; hueClient = nullptr;
     if (hueError == HUE_ERROR_ACTIVE) hueError = HUE_ERROR_INACTIVE;
   }
 }
 
-void reconnectHue()
+static void onHueError(void* arg, AsyncClient* client, int8_t error)
 {
-  if (!WLED_CONNECTED || !huePollingEnabled) return;
-  DEBUG_PRINTLN(F("Hue reconnect"));
-  if (hueClient == nullptr) {
-    hueClient = new AsyncClient();
-    hueClient->onConnect(&onHueConnect, hueClient);
-    hueClient->onData(&onHueData, hueClient);
-    hueClient->onError(&onHueError, hueClient);
-    hueAuthRequired = (strlen(hueApiKey)<20);
-  }
-  hueClient->connect(hueIP, 80);
-}
-
-void onHueError(void* arg, AsyncClient* client, int8_t error)
-{
-  DEBUG_PRINTLN(F("Hue err"));
+  USER_PRINTLN("Hue err " + String(error));
   hueError = HUE_ERROR_TIMEOUT;
 }
 
-void onHueConnect(void* arg, AsyncClient* client)
-{
-  DEBUG_PRINTLN(F("Hue connect"));
-  sendHuePoll();
-}
-
-void sendHuePoll()
+static void sendHuePoll()
 {
   if (hueClient == nullptr || !hueClient->connected()) return;
   String req = "";
@@ -81,7 +69,13 @@ void sendHuePoll()
   hueLastRequestSent = millis();
 }
 
-void onHueData(void* arg, AsyncClient* client, void *data, size_t len)
+static void onHueConnect(void* arg, AsyncClient* client)
+{
+  DEBUG_PRINTLN(F("Hue connect"));
+  sendHuePoll();
+}
+
+static void onHueData(void* arg, AsyncClient* client, void *data, size_t len)
 {
   if (!len) return;
   char* str = (char*)data;
@@ -89,19 +83,22 @@ void onHueData(void* arg, AsyncClient* client, void *data, size_t len)
   DEBUG_PRINTLN(str);
   //only get response body
   str = strstr(str,"\r\n\r\n");
-  if (str == nullptr) return;
+  if ((str == nullptr) || strlen(str) < 4) return;
   str += 4;
 
-  StaticJsonDocument<1024> root;
+#if !defined(ARDUINO_ARCH_ESP32)
+  StaticJsonDocument<640> jsonHUEroot; // was 1024 - completely ovrersized.
+#endif
   if (str[0] == '[') //is JSON array
   {
-    auto error = deserializeJson(root, str);
+    auto error = deserializeJson(jsonHUEroot, str);
     if (error)
     {
+      USER_PRINTF("Hue error: failed to parse (len =%d) \t: %s\n", strlen(str), str);
       hueError = HUE_ERROR_JSON_PARSING; return;
     }
 
-    int hueErrorCode = root[0][F("error")]["type"];
+    int hueErrorCode = jsonHUEroot[0][F("error")]["type"];
     if (hueErrorCode)//hue bridge returned error
     {
       hueError = hueErrorCode;
@@ -116,7 +113,7 @@ void onHueData(void* arg, AsyncClient* client, void *data, size_t len)
 
     if (hueAuthRequired)
     {
-      const char* apikey = root[0][F("success")][F("username")];
+      const char* apikey = jsonHUEroot[0][F("success")][F("username")];
       if (apikey != nullptr && strlen(apikey) < sizeof(hueApiKey))
       {
         strlcpy(hueApiKey, apikey, sizeof(hueApiKey));
@@ -131,10 +128,12 @@ void onHueData(void* arg, AsyncClient* client, void *data, size_t len)
   str = strstr(str,"state");
   if (str == nullptr) return;
   str = strstr(str,"{");
+  if (str == nullptr) return;
 
-  auto error = deserializeJson(root, str);
+  auto error = deserializeJson(jsonHUEroot, str);
   if (error)
   {
+    USER_PRINTF("Hue error: failed to parse (len =%d) \t: %s\n", strlen(str), str);
     hueError = HUE_ERROR_JSON_PARSING; return;
   }
 
@@ -142,27 +141,27 @@ void onHueData(void* arg, AsyncClient* client, void *data, size_t len)
   uint16_t hueHue=0, hueCt=0;
   byte hueBri=0, hueSat=0, hueColormode=0;
 
-  if (root["on"]) {
-    if (root.containsKey("bri")) //Dimmable device
+  if (jsonHUEroot["on"]) {
+    if (jsonHUEroot.containsKey("bri")) //Dimmable device
     {
-      hueBri = root["bri"];
+      hueBri = jsonHUEroot["bri"];
       hueBri++;
-      const char* cm =root[F("colormode")];
+      const char* cm =jsonHUEroot[F("colormode")];
       if (cm != nullptr) //Color device
       {
         if (strstr(cm,("ct")) != nullptr) //ct mode
         {
-          hueCt = root["ct"];
+          hueCt = jsonHUEroot["ct"];
           hueColormode = 3;
         } else if (strstr(cm,"xy") != nullptr) //xy mode
         {
-          hueX = root["xy"][0]; // 0.5051
-          hueY = root["xy"][1]; // 0.4151
+          hueX = jsonHUEroot["xy"][0]; // 0.5051
+          hueY = jsonHUEroot["xy"][1]; // 0.4151
           hueColormode = 1;
         } else //hs mode
         {
-          hueHue = root["hue"];
-          hueSat = root[F("sat")];
+          hueHue = jsonHUEroot["hue"];
+          hueSat = jsonHUEroot[F("sat")];
           hueColormode = 2;
         }
       }
@@ -202,6 +201,21 @@ void onHueData(void* arg, AsyncClient* client, void *data, size_t len)
   }
   hueReceived = true;
 }
+
+void reconnectHue() // this is also called from async_tcp task handleSettingsSet()
+{
+  if (!WLED_CONNECTED || !huePollingEnabled) return;
+  DEBUG_PRINTLN(F("Hue reconnect"));
+  if (hueClient == nullptr) {
+    hueClient = new AsyncClient();
+    hueClient->onConnect(&onHueConnect, hueClient);
+    hueClient->onData(&onHueData, hueClient);
+    hueClient->onError(&onHueError, hueClient);
+    hueAuthRequired = (strlen(hueApiKey)<20);
+  }
+  hueClient->connect(hueIP, 80);
+}
+
 #else
 void handleHue(){}
 void reconnectHue(){}
