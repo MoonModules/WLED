@@ -1238,7 +1238,14 @@ bool WLED::initEthernet()
   // Do NOT call ETH.begin() — it uses the real ESP32 EMAC which crashes in QEMU
   // Reference: https://github.com/mluis/qemu-esp32/issues/2
   // Reference: https://github.com/esp-afr-sdk/blob/release/v4.4/examples/common_components/protocol_examples_common/connect.c
-  
+  //
+  // esp_eth_mac_new_openeth() is only available when the ESP-IDF library was compiled with
+  // CONFIG_ETH_USE_OPENETH=y (set via board_build.sdkconfig = sdkconfig.defaults.qemu).
+  // If the pre-compiled platform libraries do not include that symbol the build will fail with
+  // "undefined reference to esp_eth_mac_new_openeth".  The guard below keeps the code path
+  // active only when the SDK actually provides the symbol.
+  #if CONFIG_ETH_USE_OPENETH
+
   USER_PRINTLN(F("initC: QEMU mode - initializing OpenETH MAC driver"));
   
   // 1. Ensure event loop exists (Arduino may not have created it without WiFi/ETH)
@@ -1341,11 +1348,27 @@ bool WLED::initEthernet()
   successfullyConfiguredEthernet = true;
   USER_PRINTLN(F("initC: *** QEMU OpenETH configured successfully! ***"));
   return true;
-  #else
+
+  #else  // CONFIG_ETH_USE_OPENETH not compiled into the platform libraries
+  // Fallback: CONFIG_ETH_USE_OPENETH was not set in the ESP-IDF that shipped with this
+  // platform, so esp_eth_mac_new_openeth() is unavailable.  We still need to at least
+  // initialise the TCP/IP adapter and mark ethernet as configured so that the rest of
+  // the WLED stack (Network.isConnected(), initInterfaces(), …) can proceed.
+  // Real TCP/IP connectivity requires an openeth-capable build; see sdkconfig.defaults.qemu.
+  USER_PRINTLN(F("initC: QEMU - WARNING: CONFIG_ETH_USE_OPENETH not available in this SDK build."));
+  USER_PRINTLN(F("initC: QEMU - Set board_build.sdkconfig = sdkconfig.defaults.qemu and use a"));
+  USER_PRINTLN(F("initC: QEMU - pioarduino/Tasmota platform that rebuilds esp_eth from source."));
+  tcpip_adapter_init();
+  successfullyConfiguredEthernet = true;
+  USER_PRINTLN(F("initC: *** QEMU (no openeth driver) - ethernet marked configured ***"));
+  return true;
+  #endif  // CONFIG_ETH_USE_OPENETH
+
+  #else  // !WLED_QEMU
   if (!ETH.begin(
                 (uint8_t) es.eth_address,
                 (int)     es.eth_power,
-                (int)     es.eth_mdc,
+
                 (int)     es.eth_mdio,
                 (eth_phy_type_t)   es.eth_type,
                 (eth_clock_mode_t) es.eth_clk_mode
