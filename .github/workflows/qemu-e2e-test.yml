@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [ mdev, main ]
   push:
-    branches: [ mdev, main ]
+    branches: [ mdev, main, copilot/add-ci-workflow-for-esp32 ]
   workflow_dispatch:
 
 jobs:
