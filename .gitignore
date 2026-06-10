@@ -37,5 +37,6 @@ _codeql_detected_source_root
 /playwright-report/
 /test-results/
 /playwright/.cache/
+/console-logs/
 qemu-esp32/
 qemu.pid

@@ -316,6 +316,14 @@ jobs:
           path: playwright-report/
           retention-days: 7
       
+      - name: Upload JS console logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: js-console-logs
+          path: console-logs/
+          retention-days: 7
+      
       - name: Stop QEMU
         if: always()
         run: |
