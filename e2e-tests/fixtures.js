@@ -36,8 +36,9 @@ exports.test = base.test.extend({
 			const safeName = testInfo.titlePath.join(' - ')
 				.replace(/[^a-zA-Z0-9_\-. ]/g, '_')
 				.replace(/\s+/g, '_');
-			const uniqueSuffix = `${testInfo.project.name}-w${testInfo.workerIndex}-r${testInfo.retry}`;
-			const logFile = path.join(CONSOLE_LOG_DIR, `${safeName}-${uniqueSuffix}.log`);
+			const logFile = path.join(CONSOLE_LOG_DIR, `${safeName}.log`);
+			//const uniqueSuffix = `${testInfo.project.name}-w${testInfo.workerIndex}-r${testInfo.retry}`; // not (yet) compatible with artefacts collection step
+			//const logFile = path.join(CONSOLE_LOG_DIR, `${safeName}-${uniqueSuffix}.log`);
 			const logContent = consoleLogs.join('\n') + '\n';
 			fs.writeFileSync(logFile, logContent);
 

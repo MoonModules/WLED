@@ -52,8 +52,8 @@ test.describe('WLED Index Page', () => {
     await page.waitForTimeout(3000);
 
     // Both `#picker` (color wheel) and `#sliders` are defined in index.htm
-    await expect(page.locator('`#picker`')).toBeAttached();
-    await expect(page.locator('`#sliders`')).toBeAttached();
+    await expect(page.locator('#picker')).toBeAttached();
+    await expect(page.locator('#sliders')).toBeAttached();
   });
 
   test('JSON API /json/info should return valid data', async ({ page }) => {
