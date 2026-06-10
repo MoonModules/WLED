@@ -2,14 +2,16 @@
 const { test, expect } = require('@playwright/test');
 
 /**
- * Test other WLED pages load without JavaScript errors
+ * Test other WLED pages load without JavaScript errors.
+ * These pages are served from compiled-in firmware data via routes defined
+ * in wled_server.cpp, NOT from LittleFS filesystem paths.
  */
 test.describe('WLED Other Pages', () => {
   const otherPages = [
     { path: '/simple.htm', name: 'Simple Control' },
-    { path: '/welcome.htm', name: 'Welcome Page' },
-    { path: '/update.htm', name: 'Update Page' },
-    { path: '/liveview.htm', name: 'Live View' },
+    { path: '/welcome', name: 'Welcome Page' },
+    { path: '/update', name: 'Update Page' },
+    { path: '/liveview', name: 'Live View' },
   ];
 
   for (const { path, name } of otherPages) {
@@ -23,7 +25,7 @@ test.describe('WLED Other Pages', () => {
 
       await page.goto(path);
       await page.waitForLoadState('load');
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(2000);
       
       // Check that the page loaded (these pages may have different titles)
       const title = await page.title();

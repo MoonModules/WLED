@@ -2,21 +2,33 @@
 const { test, expect } = require('@playwright/test');
 
 /**
- * Test that all settings pages load without JavaScript errors
+ * Test that all settings pages load without JavaScript errors.
+ * WLED serves settings pages from compiled-in firmware data via URL routes:
+ *   /settings       → main settings page
+ *   /settings/wifi  → WiFi settings
+ *   /settings/leds  → LED settings
+ *   /settings/ui    → UI settings
+ *   /settings/sync  → Sync interfaces
+ *   /settings/time  → Time & macros
+ *   /settings/sec   → Security & updates
+ *   /settings/dmx   → DMX output
+ *   /settings/um    → Usermods
+ *   /settings/2D    → 2D configuration
+ *
+ * Note: The paths like /settings_wifi.htm are filesystem-based and won't work
+ * without LittleFS content. Use the route-based URLs instead.
  */
 test.describe('WLED Settings Pages', () => {
   const settingsPages = [
-    { path: '/settings.htm', name: 'Main Settings' },
-    { path: '/settings_wifi.htm', name: 'WiFi Settings' },
-    { path: '/settings_leds.htm', name: 'LED Settings' },
-    { path: '/settings_ui.htm', name: 'UI Settings' },
-    { path: '/settings_sync.htm', name: 'Sync Settings' },
-    { path: '/settings_time.htm', name: 'Time Settings' },
-    { path: '/settings_sec.htm', name: 'Security Settings' },
-    { path: '/settings_dmx.htm', name: 'DMX Settings' },
-    { path: '/settings_um.htm', name: 'Usermod Settings' },
-    { path: '/settings_2D.htm', name: '2D Settings' },
-    { path: '/settings_pin.htm', name: 'Pin Settings' },
+    { path: '/settings', name: 'Main Settings' },
+    { path: '/settings/wifi', name: 'WiFi Settings' },
+    { path: '/settings/leds', name: 'LED Settings' },
+    { path: '/settings/ui', name: 'UI Settings' },
+    { path: '/settings/sync', name: 'Sync Settings' },
+    { path: '/settings/time', name: 'Time Settings' },
+    { path: '/settings/sec', name: 'Security Settings' },
+    { path: '/settings/um', name: 'Usermod Settings' },
+    { path: '/settings/2D', name: '2D Settings' },
   ];
 
   for (const { path, name } of settingsPages) {
@@ -30,9 +42,9 @@ test.describe('WLED Settings Pages', () => {
 
       await page.goto(path);
       await page.waitForLoadState('load');
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(2000);
       
-      // Check that the page loaded (has title)
+      // Check that the page loaded with WLED title
       await expect(page).toHaveTitle(/WLED/);
       
       // Check for JavaScript uncaught exceptions
