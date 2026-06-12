@@ -66,6 +66,13 @@
 #define SR_HIRES_TYPE float   // prefer faster type on slower boards (-S2, -C3)
 #endif
 
+// Analog mic with DMA ADC sampling is only supported on ESP32-S2, ESP32-C3 and ESP32-S3 on IDF >= 4.4.0
+#ifdef ARDUINO_ARCH_ESP32
+#if !defined(CONFIG_IDF_TARGET_ESP32) && (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0) && (defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)))
+#define AR_DMA_ADC_SAMPLING
+#endif
+#endif
+
 // Comment/Uncomment to toggle usb serial debugging
 // #define MIC_LOGGER                   // MIC sampling & sound input debugging (serial plotter)
 // #define FFT_SAMPLING_LOG             // FFT result debugging
@@ -959,7 +966,7 @@ void FFTcode(void * parameter)
     haveNewFFTResult = true;
     
     #if !defined(I2S_GRAB_ADC1_COMPLETELY)    
-    if ((audioSource == nullptr) || (audioSource->getType() != AudioSource::Type_I2SAdc))  // the "delay trick" does not help for analog ADC
+    if ((audioSource == nullptr) || (audioSource->getType() != AudioSource::Type_ADC))  // the "delay trick" does not help for analog ADC
     #endif
     {
   #ifdef FFT_USE_SLIDING_WINDOW
@@ -1287,7 +1294,7 @@ class AudioReactive : public Usermod {
     static const char _name[];
     static const char _enabled[];
     static const char _inputLvl[];
-#if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
+#if defined(CONFIG_IDF_TARGET_ESP32) || defined(AR_DMA_ADC_SAMPLING)
     static const char _analogmic[];
 #endif
     static const char _digitalmic[];
@@ -2031,14 +2038,14 @@ class AudioReactive : public Usermod {
 
       useInputFilter = 2; // default: DC blocker
       switch (dmType) {
-      #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)
-        // stub cases for not-yet-supported I2S modes on other ESP32 chips
+        #if !defined(CONFIG_IDF_TARGET_ESP32) && !defined(AR_DMA_ADC_SAMPLING)
+        // stub cases for ADC analog on unsupported targets
         case 0:  //ADC analog
+        #endif
         #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3)
         case 5:  //PDM Microphone
         case 51: //legacy PDM Microphone
         #endif
-      #endif
         case 1:
           DEBUGSR_PRINT(F("AR: Generic I2S Microphone - ")); DEBUGSR_PRINTLN(F(I2S_MIC_CHANNEL_TEXT));
           audioSource = new I2SSource(SAMPLE_RATE, BLOCK_SIZE);
@@ -2154,14 +2161,21 @@ class AudioReactive : public Usermod {
             audioSyncEnabled = AUDIOSYNC_REC; // force udp sound receive mode
           break;
 
-        #if  !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
-        // ADC over I2S is only possible on "classic" ESP32
+        #if defined(CONFIG_IDF_TARGET_ESP32) || defined(AR_DMA_ADC_SAMPLING)
+        // ADC over I2S is only possible on "classic" ESP32 and on ESP32S2, ESP32C3, ESP32S3 with IDF >= 4.4.0
         case 0:
         default:
-          DEBUGSR_PRINTLN(F("AR: Analog Microphone (left channel only)."));
           useInputFilter = 1;  // PDM bandpass filter seems to work well for analog, too
+          #if  !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
+          // ADC over I2S is only possible on "classic" ESP32
+          DEBUGSR_PRINTLN(F("AR: Analog Microphone (I2S ADC)"));
           audioSource = new I2SAdcSource(SAMPLE_RATE, BLOCK_SIZE);
           delay(100);
+          #else
+          // use ADC DMA on ESP32S2, ESP32C3, ESP32S3
+          DEBUGSR_PRINTLN(F("AR: Analog Microphone (DMA ADC)"));
+          audioSource = new DMAadcSource(SAMPLE_RATE, samplesFFT);
+          #endif
           if (audioSource) audioSource->initialize(audioPin);
           break;
         #endif
@@ -2701,7 +2715,7 @@ class AudioReactive : public Usermod {
           // Analog or I2S digital input
           if (audioSource && (audioSource->isInitialized()) && !isOOM) {
             // audio source successfully configured
-            if (audioSource->getType() == AudioSource::Type_I2SAdc) {
+            if (audioSource->getType() == AudioSource::Type_ADC) {
               infoArr.add(F("ADC analog"));
             } else {
               if (dmType != 51) {
@@ -2887,7 +2901,7 @@ class AudioReactive : public Usermod {
       JsonObject top = root.createNestedObject(FPSTR(_name));
       top[FPSTR(_enabled)] = enabled;
 #ifdef ARDUINO_ARCH_ESP32
-    #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
+    #if defined(CONFIG_IDF_TARGET_ESP32) || defined(AR_DMA_ADC_SAMPLING)
       JsonObject amic = top.createNestedObject(FPSTR(_analogmic));
       amic["pin"] = audioPin;
     #endif
@@ -2970,19 +2984,19 @@ class AudioReactive : public Usermod {
 
       configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled);
 #ifdef ARDUINO_ARCH_ESP32
-    #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
+    #if defined(CONFIG_IDF_TARGET_ESP32) || defined(AR_DMA_ADC_SAMPLING)
       configComplete &= getJsonValue(top[FPSTR(_analogmic)]["pin"], audioPin);
     #else
       audioPin = -1; // MCU does not support analog mic
     #endif
 
       configComplete &= getJsonValue(top[FPSTR(_digitalmic)]["type"],   dmType);
-    #if  defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)
+    #if !defined(CONFIG_IDF_TARGET_ESP32) && !defined(AR_DMA_ADC_SAMPLING)
       if (dmType == 0) dmType = SR_DMTYPE;   // MCU does not support analog
-      #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3)
+    #endif
+    #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3)
       if (dmType == 5) dmType = SR_DMTYPE;   // MCU does not support PDM
       if (dmType == 51) dmType = SR_DMTYPE;  // MCU does not support legacy PDM
-      #endif
     #else
       if (dmType == 5) useInputFilter = 1;      // enable filter for PDM
       if (dmType == 51) useInputFilter = 1;     // switch on filter for legacy PDM    
@@ -3040,9 +3054,9 @@ class AudioReactive : public Usermod {
       oappend(SET_F("ux='AudioReactive';"));        // ux = shortcut for Audioreactive - fingers crossed that "ux" isn't already used as JS var, html post parameter or css style
       oappend(SET_F("uxp=ux+':digitalmic:pin[]';")); // uxp = shortcut for AudioReactive:digitalmic:pin[]
       oappend(SET_F("addInfo(ux+':help',0,'<button onclick=\"location.href=&quot;https://mm.kno.wled.ge/soundreactive/Sound-Settings&quot;\" type=\"button\">?</button>');"));
-#ifdef ARDUINO_ARCH_ESP32      
+#ifdef ARDUINO_ARCH_ESP32
       //WLEDMM: add defaults
-      #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)  // -S3/-S2/-C3 don't support analog audio
+      #if defined(CONFIG_IDF_TARGET_ESP32) || defined(AR_DMA_ADC_SAMPLING)
       #ifdef AUDIOPIN
         oappend(SET_F("xOpt(ux+':analogmic:pin',1,' ⎌',")); oappendi(AUDIOPIN); oappend(");"); 
       #endif
@@ -3055,7 +3069,7 @@ class AudioReactive : public Usermod {
       #else
         oappend(SET_F("addOption(dd,'None - network receive only',254);"));
       #endif
-      #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
+      #if defined(CONFIG_IDF_TARGET_ESP32) || defined(AR_DMA_ADC_SAMPLING)
         #if SR_DMTYPE==0
           oappend(SET_F("addOption(dd,'Generic Analog (⎌)',0);"));
         #else
@@ -3328,7 +3342,7 @@ class AudioReactive : public Usermod {
 const char AudioReactive::_name[]       PROGMEM = "AudioReactive";
 const char AudioReactive::_enabled[]    PROGMEM = "enabled";
 const char AudioReactive::_inputLvl[]   PROGMEM = "inputLevel";
-#if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
+#if defined(ARDUINO_ARCH_ESP32) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(AR_DMA_ADC_SAMPLING))
 const char AudioReactive::_analogmic[]  PROGMEM = "analogmic";
 #endif
 const char AudioReactive::_digitalmic[] PROGMEM = "digitalmic";
