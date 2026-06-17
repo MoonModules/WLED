@@ -1,3 +1,20 @@
+#ifndef WLED_MY_PINS
+#define WLED_MY_PINS
+#define R1_PIN  42
+#define G1_PIN  41
+#define B1_PIN  40
+#define R2_PIN  39
+#define G2_PIN  38
+#define B2_PIN  45
+#define A_PIN   1
+#define B_PIN   2
+#define C_PIN   3
+#define D_PIN   4
+#define E_PIN   5
+#define LAT_PIN 6
+#define OE_PIN  7
+#define CLK_PIN 8
+#endif
 #ifndef WLED_H
 #define WLED_H
 /*
