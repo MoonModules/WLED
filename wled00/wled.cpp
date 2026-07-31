@@ -130,6 +130,17 @@ void WLED::loop()
   static uint16_t avgStripMillis = 0;
   #endif
 
+  #ifdef WLED_ENABLE_HUB75MATRIX
+  // WLEDMM+: the boot counts as successful once the main loop has been running for a while - then
+  // remove the marker for the virtual HUB75 arrangement. 20 s is ample: panel initialisation is
+  // long done by then and the web server is already serving requests.
+  static bool hub75TryCleared = false;
+  if (!hub75TryCleared && (millis() > 20000)) {
+    hub75TryCleared = true;
+    if (WLED_FS.exists(hub75TryFile)) WLED_FS.remove(hub75TryFile);
+  }
+  #endif
+
   handleTime();
   #ifndef WLED_DISABLE_INFRARED
   handleIR();        // 2nd call to function needed for ESP32 to return valid results -- should be good for ESP8266, too
@@ -888,6 +899,24 @@ void WLED::setup()
     // NOTE: Special case: The status LED should *NOT* be allocated.
     //       See comments in handleStatusLed().
     pinMode(STATUSLED, OUTPUT);
+  }
+#endif
+
+#ifdef WLED_ENABLE_HUB75MATRIX
+  // WLEDMM+: safety fuse for the virtual HUB75 panel arrangement.
+  // (This block was drafted with AI assistance and reviewed and tested on hardware by the author.)
+  // A bad arrangement could in theory stall during panel initialisation - the web server would
+  // then never come up and the device would be unreachable without USB access. So: write a marker
+  // BEFORE creating it and remove it after a successful boot (see WLED::loop). If the marker is
+  // still present at boot, the previous attempt did not get through -> skip the arrangement so the
+  // device boots normally. To arm it again, delete the file from the /edit page.
+  if (WLED_FS.exists(hub75TryFile)) {
+    hub75ArrangementArmed = false;
+    USER_PRINTLN(F("HUB75: previous boot with virtual arrangement did not complete - arrangement DISABLED."));
+    USER_PRINTLN(F("HUB75: delete /vpanel_try.txt to arm it again."));
+  } else {
+    File f = WLED_FS.open(hub75TryFile, "w");
+    if (f) { f.print(1); f.close(); }
   }
 #endif
 

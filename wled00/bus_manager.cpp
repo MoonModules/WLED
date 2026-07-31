@@ -615,6 +615,10 @@ void BusNetwork::cleanup() {
 // BusHub75Matrix "global" variables (static members)
 MatrixPanel_I2S_DMA* BusHub75Matrix::activeDisplay = nullptr;
 VirtualMatrixPanel*  BusHub75Matrix::activeFourScanPanel = nullptr;
+
+// WLEDMM+: see comment in bus_manager.h
+bool hub75ArrangementArmed = true;
+const char hub75TryFile[] = "/vpanel_try.txt";
 HUB75_I2S_CFG BusHub75Matrix::activeMXconfig = HUB75_I2S_CFG();
 uint8_t BusHub75Matrix::activeType = 0;
 uint8_t BusHub75Matrix::instanceCount = 0;
@@ -1096,7 +1100,50 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
       fourScanPanel->setPhysicalPanelScanRate(FOUR_SCAN_64PX_HIGH);
       fourScanPanel->setRotation(0);
       break;
-  }  
+
+    // WLEDMM+: non-horizontal panel arrangement for NORMAL (non four-scan) panels.
+    // (This block was drafted with AI assistance and reviewed and tested on hardware by the author.)
+    // A HUB75 chain is electrically always horizontal: N panels form an area of
+    // (panel width * N) x panel height. Stacking the panels physically therefore needs a mapping
+    // from logical to physical coordinates. VirtualMatrixPanel does exactly that, but so far it was
+    // only created for four-scan panels, and there hard-coded as (1, chain_length) - always a single
+    // row. Without this branch show() iterates over display->width() and wraps the image onto the
+    // physical chain width. Measured on device: a logical 64x128 area came out as 128x64, with the
+    // upper half red on BOTH panels instead of left red / right blue.
+    //
+    // The arrangement is carried in the bus "pin" field: [0] = chain length, [1] = rows,
+    // [2] = columns, [3] = PANEL_CHAIN_TYPE (0 = CHAIN_NONE, 1 = TOP_LEFT_DOWN, 2 = TOP_RIGHT_DOWN,
+    // 3 = BOTTOM_LEFT_UP, 4 = BOTTOM_RIGHT_UP, 5..8 = the ZigZag variants). Which chain type is
+    // correct depends on how the panels are wired and mounted. Example for 4 panels of 64x32
+    // stacked vertically and chained bottom-left up in a zigzag: pin: [4, 4, 1, 8].
+    // Unset values are normalised to 1, so an existing pin: [2] becomes [2, 1, 1, 0] and the
+    // arrangement stays dormant - behaviour is unchanged for every existing configuration.
+    default:
+      if (!fourScanPanel) {
+        unsigned vRows = (bc.pins[1] == 255 || bc.pins[1] == 0) ? 1 : bc.pins[1];
+        unsigned vCols = (bc.pins[2] == 255 || bc.pins[2] == 0) ? 1 : bc.pins[2];
+        unsigned vType = (bc.pins[3] == 255) ? 0 : bc.pins[3];
+        if (vType > CHAIN_BOTTOM_LEFT_UP_ZZ) vType = 0;   // ignore out-of-range values
+        if (((vRows > 1) || (vCols > 1)) && !hub75ArrangementArmed) {
+          USER_PRINTLN("MatrixPanel_I2S_DMA: virtual arrangement SKIPPED (previous boot did not complete).");
+        }
+        else if ((vRows > 1) || (vCols > 1)) {
+          if (vRows * vCols != mxconfig.chain_length) {
+            USER_PRINTF("MatrixPanel_I2S_DMA WARNING: %ux%u panels != chain length %u - arrangement ignored.\n",
+                        vRows, vCols, mxconfig.chain_length);
+          } else {
+            USER_PRINTF("MatrixPanel_I2S_DMA virtual arrangement: %u rows x %u cols, chain type %u.\n",
+                        vRows, vCols, vType);
+            fourScanPanel = new VirtualMatrixPanel((*display), vRows, vCols,
+                                                   mxconfig.mx_width, mxconfig.mx_height,
+                                                   (PANEL_CHAIN_TYPE)vType);
+            fourScanPanel->setRotation(0);
+            _vRows = vRows; _vCols = vCols; _vChainType = vType;
+          }
+        }
+      }
+      break;
+  }
 
   if (_valid) {
     _panelWidth = fourScanPanel ? fourScanPanel->width() : display->width();  // cache width - it will never change

@@ -90,7 +90,12 @@ struct BusConfig {
     if ((type >= TYPE_NET_DDP_RGB) && (type < (TYPE_NET_DDP_RGB + 16))) nPins = 4;     // virtual network bus. 4 "pins" store IP address
     else if ((type > 47) && (type < 63)) nPins = 2;                                    // (data + clock / SPI) busses - two pins
     else if (IS_PWM(type)) nPins = NUM_PWM_PINS(type);                                 // PWM needs 1..5 pins
-    else if (type >= TYPE_HUB75MATRIX && type <= (TYPE_HUB75MATRIX + 10)) nPins = 1;   // HUB75 does not use LED pins, but we need to preserve the "chain length" parameter
+    // HUB75 does not use LED pins. The "pin" array carries panel arrangement instead:
+    //   [0] chain length, [1] virtual rows, [2] virtual cols, [3] PANEL_CHAIN_TYPE
+    // Rows/cols > 1 describe a non-horizontal arrangement (e.g. panels stacked vertically),
+    // which is handled by VirtualMatrixPanel. Was 1 before - then only the chain length survived
+    // a config save, and any arrangement was silently lost.
+    else if (type >= TYPE_HUB75MATRIX && type <= (TYPE_HUB75MATRIX + 10)) nPins = 4;
     for (uint8_t i = 0; i < min(unsigned(nPins), sizeof(pins)/sizeof(pins[0])); i++) pins[i] = ppins[i];   //softhack007 fix for potential array out-of-bounds access
   }
 
@@ -422,6 +427,14 @@ class BusNetwork : public Bus {
 };
 
 #ifdef WLED_ENABLE_HUB75MATRIX
+// WLEDMM+: safety fuse for the virtual HUB75 arrangement.
+// wled.cpp writes a marker file before the strip is initialised and removes it once the main loop
+// has been running for a while. If the marker is still present at boot, the previous attempt never
+// got that far -> hub75ArrangementArmed = false and no VirtualMatrixPanel is created. That way a
+// bad arrangement cannot leave the device permanently unreachable.
+extern bool hub75ArrangementArmed;
+extern const char hub75TryFile[];
+
 class BusHub75Matrix : public Bus {
   public:
     BusHub75Matrix(BusConfig &bc);
@@ -440,9 +453,13 @@ class BusHub75Matrix : public Bus {
     void setBrightness(uint8_t b, bool immediate) override;
 
     uint8_t getPins(uint8_t* pinArray) const override {
+      // No real LED pins - we report back the panel arrangement so it survives a config save.
       pinArray[0] = activeMXconfig.chain_length;
-      return 1;
-    } // Fake value due to keep finaliseInit happy
+      pinArray[1] = _vRows;
+      pinArray[2] = _vCols;
+      pinArray[3] = _vChainType;
+      return 4;
+    } // Fake values due to keep finaliseInit happy
 
     void deallocatePins();
 
@@ -457,6 +474,9 @@ class BusHub75Matrix : public Bus {
   private:
     unsigned _panelWidth = 0;
     uint8_t  _colorOrder = COL_ORDER_RGB;
+    uint8_t  _vRows = 1;        // virtual panel rows (1 = classic horizontal chain)
+    uint8_t  _vCols = 1;        // virtual panel columns
+    uint8_t  _vChainType = 0;   // PANEL_CHAIN_TYPE, 0 = CHAIN_NONE
     CRGB *_ledBuffer = nullptr;
     byte *_ledsDirty = nullptr;
     // C++ dirty trick: private static variables are actually _not_ part of the class (however only visibile to class instances). 
