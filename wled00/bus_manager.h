@@ -427,7 +427,7 @@ class BusNetwork : public Bus {
 };
 
 #ifdef WLED_ENABLE_HUB75MATRIX
-// WLEDMM+: safety fuse for the virtual HUB75 arrangement.
+// WLEDMM: safety fuse for the virtual HUB75 arrangement.
 // wled.cpp writes a marker file before the strip is initialised and removes it once the main loop
 // has been running for a while. If the marker is still present at boot, the previous attempt never
 // got that far -> hub75ArrangementArmed = false and no VirtualMatrixPanel is created. That way a

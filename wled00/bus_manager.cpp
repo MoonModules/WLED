@@ -616,7 +616,7 @@ void BusNetwork::cleanup() {
 MatrixPanel_I2S_DMA* BusHub75Matrix::activeDisplay = nullptr;
 VirtualMatrixPanel*  BusHub75Matrix::activeFourScanPanel = nullptr;
 
-// WLEDMM+: see comment in bus_manager.h
+// WLEDMM: see comment in bus_manager.h
 bool hub75ArrangementArmed = true;
 const char hub75TryFile[] = "/vpanel_try.txt";
 HUB75_I2S_CFG BusHub75Matrix::activeMXconfig = HUB75_I2S_CFG();
@@ -1101,7 +1101,7 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
       fourScanPanel->setRotation(0);
       break;
 
-    // WLEDMM+: non-horizontal panel arrangement for NORMAL (non four-scan) panels.
+    // WLEDMM: non-horizontal panel arrangement for NORMAL (non four-scan) panels.
     // A HUB75 chain is electrically always horizontal: N panels form an area of
     // (panel width * N) x panel height. Stacking the panels physically therefore needs a mapping
     // from logical to physical coordinates. VirtualMatrixPanel does exactly that, but so far it was

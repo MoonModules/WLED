@@ -131,7 +131,7 @@ void WLED::loop()
   #endif
 
   #ifdef WLED_ENABLE_HUB75MATRIX
-  // WLEDMM+: the boot counts as successful once the main loop has been running for a while - then
+  // WLEDMM: the boot counts as successful once the main loop has been running for a while - then
   // remove the marker for the virtual HUB75 arrangement. 20 s is ample: panel initialisation is
   // long done by then and the web server is already serving requests.
   static bool hub75TryCleared = false;
@@ -903,7 +903,7 @@ void WLED::setup()
 #endif
 
 #ifdef WLED_ENABLE_HUB75MATRIX
-  // WLEDMM+: safety fuse for the virtual HUB75 panel arrangement.
+  // WLEDMM: safety fuse for the virtual HUB75 panel arrangement.
   // (This block was drafted with AI assistance and reviewed and tested on hardware by the author.)
   // A bad arrangement could in theory stall during panel initialisation - the web server would
   // then never come up and the device would be unreachable without USB access. So: write a marker
