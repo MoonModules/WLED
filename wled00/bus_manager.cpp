@@ -615,6 +615,9 @@ void BusNetwork::cleanup() {
 // BusHub75Matrix "global" variables (static members)
 MatrixPanel_I2S_DMA* BusHub75Matrix::activeDisplay = nullptr;
 VirtualMatrixPanel*  BusHub75Matrix::activeFourScanPanel = nullptr;
+uint8_t BusHub75Matrix::activeVRows = 1;
+uint8_t BusHub75Matrix::activeVCols = 1;
+uint8_t BusHub75Matrix::activeVChainType = 0;
 
 HUB75_I2S_CFG BusHub75Matrix::activeMXconfig = HUB75_I2S_CFG();
 uint8_t BusHub75Matrix::activeType = 0;
@@ -1134,6 +1137,17 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
         // configured stays in the configuration, and the warning repeats on every boot.
         _vRows = vRows; _vCols = vCols; _vChainType = vType;
 
+        // A re-used display brings its mapping along (see "continue with existing matrix object"
+        // above), and the re-use check only looks at the physical configuration - the arrangement
+        // is not part of it. Keep the mapping only while it still describes what is configured;
+        // otherwise drop it, so the block below builds the right one and switching the
+        // arrangement off falls back to the plain chain instead of rendering through the old map.
+        // Not deleted on purpose: see the note next to the disabled delete in cleanup().
+        if (fourScanPanel
+            && !((activeVRows == vRows) && (activeVCols == vCols) && (activeVChainType == vType))) {
+          fourScanPanel = nullptr;
+        }
+
         if (!fourScanPanel && ((vRows > 1) || (vCols > 1))) {
           // The arrangement must describe exactly the panels that are chained. chain_length is
           // already capped to a sane value above, so this also bounds vRows and vCols.
@@ -1156,6 +1170,11 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
             }
           }
         }
+
+        // Record what the mapping in use actually represents, so the check above can tell a
+        // re-used one apart from a reconfigured arrangement.
+        if (fourScanPanel) { activeVRows = vRows; activeVCols = vCols; activeVChainType = vType; }
+        else               { activeVRows = 1;     activeVCols = 1;     activeVChainType = 0;     }
       }
       break;
     // AI: end

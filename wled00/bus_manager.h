@@ -475,6 +475,9 @@ class BusHub75Matrix : public Bus {
     // These variables persist when BusHub75Matrix gets deleted.
     static MatrixPanel_I2S_DMA *activeDisplay;         // active display object
     static VirtualMatrixPanel  *activeFourScanPanel;   // active fourScan object
+    // WLEDMM: arrangement the active fourScan object was built for - the re-use check for the
+    // display only covers the physical configuration, so the arrangement is tracked separately.
+    static uint8_t activeVRows, activeVCols, activeVChainType;
     static HUB75_I2S_CFG activeMXconfig;               // last used mxconfig
     static uint8_t activeType;                         // last used type
     static uint8_t instanceCount;                      // active instances - 0 or 1
