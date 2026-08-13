@@ -616,9 +616,6 @@ void BusNetwork::cleanup() {
 MatrixPanel_I2S_DMA* BusHub75Matrix::activeDisplay = nullptr;
 VirtualMatrixPanel*  BusHub75Matrix::activeFourScanPanel = nullptr;
 
-// WLEDMM: see comment in bus_manager.h
-bool hub75ArrangementArmed = true;
-const char hub75TryFile[] = "/vpanel_try.txt";
 HUB75_I2S_CFG BusHub75Matrix::activeMXconfig = HUB75_I2S_CFG();
 uint8_t BusHub75Matrix::activeType = 0;
 uint8_t BusHub75Matrix::instanceCount = 0;
@@ -1132,25 +1129,29 @@ BusHub75Matrix::BusHub75Matrix(BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWh
         // set on this fresh instance, so the creation block below is skipped. Assigning only in
         // there would leave the new instance at the (1,1,0) defaults, and the next config save
         // would silently overwrite a working arrangement with "none" - unrecoverable without
-        // physical access, which is exactly what the boot fuse is meant to avoid.
-        // Deliberately also assigned when the arrangement is skipped or rejected below: what the
-        // user configured stays in the configuration, and the warning repeats on every boot.
+        // physical access.
+        // Deliberately also assigned when the arrangement is rejected below: what the user
+        // configured stays in the configuration, and the warning repeats on every boot.
         _vRows = vRows; _vCols = vCols; _vChainType = vType;
 
-        if (!fourScanPanel) {
-          if (((vRows > 1) || (vCols > 1)) && !hub75ArrangementArmed) {
-            USER_PRINTLN("MatrixPanel_I2S_DMA: virtual arrangement SKIPPED (previous boot did not complete).");
-          }
-          else if ((vRows > 1) || (vCols > 1)) {
-            if (vRows * vCols != mxconfig.chain_length) {
-              USER_PRINTF("MatrixPanel_I2S_DMA WARNING: %ux%u panels != chain length %u - arrangement ignored.\n",
-                          vRows, vCols, mxconfig.chain_length);
+        if (!fourScanPanel && ((vRows > 1) || (vCols > 1))) {
+          // The arrangement must describe exactly the panels that are chained. chain_length is
+          // already capped to a sane value above, so this also bounds vRows and vCols.
+          if (vRows * vCols != mxconfig.chain_length) {
+            USER_PRINTF("MatrixPanel_I2S_DMA WARNING: %ux%u panels != chain length %u - arrangement ignored.\n",
+                        vRows, vCols, mxconfig.chain_length);
+          } else {
+            // The display is fully initialised at this point - VirtualMatrixPanel only remaps
+            // coordinates, so the allocation is the one thing left that can fail here. Without a
+            // panel object the plain horizontal chain is used, which is the previous behaviour.
+            fourScanPanel = new(std::nothrow) VirtualMatrixPanel((*display), vRows, vCols,
+                                                                 mxconfig.mx_width, mxconfig.mx_height,
+                                                                 (PANEL_CHAIN_TYPE)vType);
+            if (fourScanPanel == nullptr) {
+              USER_PRINTLN("MatrixPanel_I2S_DMA WARNING: not enough memory for the virtual arrangement - using the plain chain.");
             } else {
               USER_PRINTF("MatrixPanel_I2S_DMA virtual arrangement: %u rows x %u cols, chain type %u.\n",
                           vRows, vCols, vType);
-              fourScanPanel = new VirtualMatrixPanel((*display), vRows, vCols,
-                                                     mxconfig.mx_width, mxconfig.mx_height,
-                                                     (PANEL_CHAIN_TYPE)vType);
               fourScanPanel->setRotation(0);
             }
           }
