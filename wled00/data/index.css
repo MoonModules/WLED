@@ -402,6 +402,10 @@ button {
     margin: 0 auto auto;
 }
 
+.belowpreview {
+	top: 164px;
+}
+
 .staybot {
 	bottom: 5px;
 }
