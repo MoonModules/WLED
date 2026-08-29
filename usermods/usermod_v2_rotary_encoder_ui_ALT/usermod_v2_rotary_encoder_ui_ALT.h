@@ -111,7 +111,7 @@ static int re_qstringCmp(const void *ap, const void *bp) {
 
 class RotaryEncoderUIUsermod : public Usermod {
 private:
-  int8_t fadeAmount = 5;              // Amount to change every step (brightness)
+  int8_t fadeAmount = 5;             // Amount to change every step (brightness)
   unsigned long loopTime = 0;
 
   unsigned long buttonPressedTime = 0;
@@ -149,6 +149,7 @@ private:
   unsigned char Enc_A;
   unsigned char Enc_B;
   unsigned char Enc_A_prev = 0;
+  unsigned char Enc_B_prev = 0;
 
   bool currentEffectAndPaletteInitialized = false;
   uint16_t effectCurrentIndex = 0;
@@ -162,6 +163,7 @@ private:
   byte presetLow = 0;
 
   bool applyToAll = true;
+  bool HalfStep = false; // WLEDMM: use half step for encoder
 
   bool initDone = false;
   bool enabled = true;
@@ -175,6 +177,7 @@ private:
   static const char _presetHigh[];
   static const char _presetLow[];
   static const char _applyToAll[];
+  static const char _HalfStep[];
 
   /**
    * Sort the modes and palettes to the index arrays
@@ -330,6 +333,7 @@ const char RotaryEncoderUIUsermod::_SW_pin[]     PROGMEM = "SW-pin";
 const char RotaryEncoderUIUsermod::_presetHigh[] PROGMEM = "preset-high";
 const char RotaryEncoderUIUsermod::_presetLow[]  PROGMEM = "preset-low";
 const char RotaryEncoderUIUsermod::_applyToAll[] PROGMEM = "apply-2-all-seg";
+const char RotaryEncoderUIUsermod::_HalfStep[]   PROGMEM = "half-step encoder"; // WLEDMM: use half step for encoder
 
 /**
  * Sort the modes and palettes to the index arrays
@@ -468,6 +472,7 @@ void RotaryEncoderUIUsermod::setup()
   Enc_A = digitalRead(pinA); // Read encoder pins
   Enc_B = digitalRead(pinB);
   Enc_A_prev = Enc_A;
+  Enc_B_prev = Enc_B;
   USER_PRINTLN(F("Rotary encoder (ALT) setup completed."));   // WLEDMM inform user
 }
 
@@ -585,44 +590,103 @@ void RotaryEncoderUIUsermod::loop()
 
     Enc_A = digitalRead(pinA); // Read encoder pins
     Enc_B = digitalRead(pinB);
-    if ((Enc_A) && (!Enc_A_prev))
-    { // A has gone from high to low
-      if (Enc_B == LOW)    //changes to LOW so that then encoder registers a change at the very end of a pulse
-      { // B is high so clockwise
-        switch(select_state) {
-          case  0: changeBrightness(true);      break;
-          case  1: changeEffectSpeed(true);     break;
-          case  2: changeEffectIntensity(true); break;
-          case  3: changePalette(true);         break;
-          case  4: changeEffect(true);          break;
-          case  5: changeHue(true);             break;
-          case  6: changeSat(true);             break;
-          case  7: changeCCT(true);             break;
-          case  8: changePreset(true);          break;
-          case  9: changeCustom(1,true);        break;
-          case 10: changeCustom(2,true);        break;
-          case 11: changeCustom(3,true);        break;
+    if (Enc_A != Enc_A_prev || Enc_B != Enc_B_prev) {
+//      Serial.print(F("Encoder A: ")); Serial.print(Enc_A);
+//      Serial.print(F(" B: ")); Serial.println(Enc_B);
+//      Serial.print(F("State: ")); Serial.println(HalfStep ? "Half Step" : "Full Step" );
+    }
+
+    if (HalfStep) { // WLEDMM: use half step for encoder
+      if (Enc_A != Enc_A_prev) { // WLEDMM: use rising edge detection
+        if ((Enc_B == HIGH && Enc_A == LOW) || (Enc_B == LOW && Enc_A == HIGH)) {
+//          Serial.println("A changed +");
+          // Clockwise
+          switch(select_state) {
+            case  0: changeBrightness(true);      break;
+            case  1: changeEffectSpeed(true);     break;
+            case  2: changeEffectIntensity(true); break;
+            case  3: changePalette(true);         break;
+            case  4: changeEffect(true);          break;
+            case  5: changeHue(true);             break;
+            case  6: changeSat(true);             break;
+            case  7: changeCCT(true);             break;
+            case  8: changePreset(true);          break;
+            case  9: changeCustom(1,true);        break;
+            case 10: changeCustom(2,true);        break;
+            case 11: changeCustom(3,true);        break;
+          }
         }
       }
-      else if (Enc_B == HIGH)
-      { // B is low so counter-clockwise
-        switch(select_state) {
-          case  0: changeBrightness(false);      break;
-          case  1: changeEffectSpeed(false);     break;
-          case  2: changeEffectIntensity(false); break;
-          case  3: changePalette(false);         break;
-          case  4: changeEffect(false);          break;
-          case  5: changeHue(false);             break;
-          case  6: changeSat(false);             break;
-          case  7: changeCCT(false);             break;
-          case  8: changePreset(false);          break;
-          case  9: changeCustom(1,false);        break;
-          case 10: changeCustom(2,false);        break;
-          case 11: changeCustom(3,false);        break;
+      else {
+        if (Enc_B != Enc_B_prev) {
+          if ((Enc_A == HIGH && Enc_B == LOW) || (Enc_A == LOW && Enc_B == HIGH)) {
+          // Counter-clockwise
+//            Serial.println("B changed -");
+            switch(select_state) {
+              case  0: changeBrightness(false);      break;
+              case  1: changeEffectSpeed(false);     break;
+              case  2: changeEffectIntensity(false); break;
+              case  3: changePalette(false);         break;
+              case  4: changeEffect(false);          break;
+              case  5: changeHue(false);             break;
+              case  6: changeSat(false);             break;
+              case  7: changeCCT(false);             break;
+              case  8: changePreset(false);          break;
+              case  9: changeCustom(1,false);        break;
+              case 10: changeCustom(2,false);        break;
+              case 11: changeCustom(3,false);        break;
+            }
+          }
         }
       }
     }
+    else { // Full Step
+
+//    if ((Enc_A) && (!Enc_A_prev))
+// kkf check for half steps
+      if ((Enc_A_prev == HIGH) && (Enc_A == LOW))
+      { // WLEDMM: use falling edge detection
+        if (Enc_B == HIGH)
+        {
+          // Clockwise
+          switch(select_state) {
+            case  0: changeBrightness(true);      break;
+            case  1: changeEffectSpeed(true);     break;
+            case  2: changeEffectIntensity(true); break;
+            case  3: changePalette(true);         break;
+            case  4: changeEffect(true);          break;
+            case  5: changeHue(true);             break;
+            case  6: changeSat(true);             break;
+            case  7: changeCCT(true);             break;
+            case  8: changePreset(true);          break;
+            case  9: changeCustom(1,true);        break;
+            case 10: changeCustom(2,true);        break;
+            case 11: changeCustom(3,true);        break;
+          }
+        }
+        else
+        {
+          // Counter-clockwise
+          switch(select_state) {
+            case  0: changeBrightness(false);      break;
+            case  1: changeEffectSpeed(false);     break;
+            case  2: changeEffectIntensity(false); break;
+            case  3: changePalette(false);         break;
+            case  4: changeEffect(false);          break;
+            case  5: changeHue(false);             break;
+            case  6: changeSat(false);             break;
+            case  7: changeCCT(false);             break;
+            case  8: changePreset(false);          break;
+            case  9: changeCustom(1,false);        break;
+            case 10: changeCustom(2,false);        break;
+            case 11: changeCustom(3,false);        break;
+          }
+        }
+      }
+    }
+    
     Enc_A_prev = Enc_A;     // Store value of A for next time
+    Enc_B_prev = Enc_B;     // Store value of B for next time
   }
 }
 
@@ -1036,6 +1100,7 @@ void RotaryEncoderUIUsermod::addToConfig(JsonObject &root) {
   top[FPSTR(_presetLow)]  = presetLow;
   top[FPSTR(_presetHigh)] = presetHigh;
   top[FPSTR(_applyToAll)] = applyToAll;
+  top[FPSTR(_HalfStep)] = HalfStep;
   DEBUG_PRINTLN(F("Rotary Encoder config saved."));
 }
 
@@ -1079,6 +1144,7 @@ bool RotaryEncoderUIUsermod::readFromConfig(JsonObject &root) {
 
   enabled    = top[FPSTR(_enabled)] | enabled;
   applyToAll = top[FPSTR(_applyToAll)] | applyToAll;
+  HalfStep   = top[FPSTR(_HalfStep)] | HalfStep;
 
   DEBUG_PRINT(FPSTR(_name));
   if (!initDone) {
