@@ -185,6 +185,10 @@
 #include "../usermods/LDR_Dusk_Dawn_v2/usermod_LDR_Dusk_Dawn_v2.h"
 #endif
 
+#ifdef USERMOD_INA219
+#include "../usermods/INA219_v2/usermod_ina219.h"
+#endif
+
 //WLEDMM ARTIFX
 #ifdef USERMOD_ARTIFX
 #include "../usermods/artifx/usermod_v2_artifx.h"
@@ -381,6 +385,10 @@ void registerUsermods()
 
 #ifdef USERMOD_LDR_DUSK_DAWN
   usermods.add(new LDR_Dusk_Dawn_v2());
+#endif
+
+#ifdef USERMOD_INA219
+  usermods.add(new UsermodINA219("INA219", false));
 #endif
 
 
