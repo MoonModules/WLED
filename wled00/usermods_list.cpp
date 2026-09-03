@@ -206,6 +206,9 @@
 #ifdef USERMOD_AUTO_PLAYLIST
 #include "../usermods/usermod_v2_auto_playlist/usermod_v2_auto_playlist.h"
 #endif
+#ifdef USERMOD_VOICE_CONTROL
+#include "../usermods/usermod_v2_voice_control/usermod_v2_voice_control.h"
+#endif
 
 void registerUsermods()
 {
@@ -409,5 +412,8 @@ void registerUsermods()
   usermods.add(new AutoPlaylistUsermod(false));
 #endif
 
+#ifdef USERMOD_VOICE_CONTROL
+  usermods.add(new DF2301QUsermod(false));
+#endif
 
 }
