@@ -70,16 +70,15 @@
 //========================================================================================================================
 
 
-static const char _data_FX_mode_Module_Experiment10[] PROGMEM = "Y💡Module_Experiment10 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
+// Combined effects with custom parameters (effects that share a _base method in ANIMartRIX)
+static const char _data_FX_mode_Module_Experiment810[] PROGMEM = "Y💡Module_Experiment810 ☾@Speed,,W,,, HSV Color,Gamma Correction;;1;2;c1=128,o1=0,o2=0";  // c1: w 0.3-1.0, o1: use_hsv
 static const char _data_FX_mode_Module_Experiment9[] PROGMEM = "Y💡Module_Experiment9 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
-static const char _data_FX_mode_Module_Experiment8[] PROGMEM = "Y💡Module_Experiment8 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_Module_Experiment7[] PROGMEM = "Y💡Module_Experiment7 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_Module_Experiment6[] PROGMEM = "Y💡Module_Experiment6 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_Module_Experiment5[] PROGMEM = "Y💡Module_Experiment5 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_Module_Experiment4[] PROGMEM = "Y💡Module_Experiment4 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_Zoom2[] PROGMEM = "Y💡Zoom2 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
-static const char _data_FX_mode_Module_Experiment3[] PROGMEM = "Y💡Module_Experiment3 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
-static const char _data_FX_mode_Module_Experiment2[] PROGMEM = "Y💡Module_Experiment2 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
+static const char _data_FX_mode_Module_Experiment23[] PROGMEM = "Y💡Module_Experiment23 ☾@Speed,,Dist Offset,Dist Scale,,,Gamma Correction;;1;2;c1=128,c2=128,o2=0";  // c1: dist_offset, c2: dist_scale
 static const char _data_FX_mode_Module_Experiment1[] PROGMEM = "Y💡Module_Experiment1 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_Parametric_Water[] PROGMEM = "Y💡Parametric_Water ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_Water[] PROGMEM = "Y💡Water ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
@@ -87,23 +86,18 @@ static const char _data_FX_mode_Complex_Kaleido_6[] PROGMEM = "Y💡Complex_Kale
 static const char _data_FX_mode_Complex_Kaleido_5[] PROGMEM = "Y💡Complex_Kaleido_5 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_Complex_Kaleido_4[] PROGMEM = "Y💡Complex_Kaleido_4 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_Complex_Kaleido_3[] PROGMEM = "Y💡Complex_Kaleido_3 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
-static const char _data_FX_mode_Complex_Kaleido_2[] PROGMEM = "Y💡Complex_Kaleido_2 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
-static const char _data_FX_mode_Complex_Kaleido[] PROGMEM = "Y💡Complex_Kaleido ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
-static const char _data_FX_mode_SM10[] PROGMEM = "Y💡SM10 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
-static const char _data_FX_mode_SM9[] PROGMEM = "Y💡SM9 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
+static const char _data_FX_mode_Complex_Kaleido12[] PROGMEM = "Y💡Complex_Kaleido12 ☾@Speed,,Size,,,, Gamma Correction;;1;2;c1=128,o2=0";  // c1: size 0.5-1.0
+static const char _data_FX_mode_SM910[] PROGMEM = "Y💡SM910 ☾@Speed,,Scale,,, Variant,Gamma Correction;;1;2;c1=128,o1=0,o2=0";  // c1: scale 0.6-1.0, o1: variant10
 static const char _data_FX_mode_SM8[] PROGMEM = "Y💡SM8 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_SM7[] PROGMEM = "Y💡SM7 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
-static const char _data_FX_mode_SM6[] PROGMEM = "Y💡SM6 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
-static const char _data_FX_mode_SM5[] PROGMEM = "Y💡SM5 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
+static const char _data_FX_mode_SM56[] PROGMEM = "Y💡SM56 ☾@Speed,,Zoom,,, Variant,Gamma Correction;;1;2;c1=128,o1=0,o2=0";  // c1: s 0.7-1.0, o1: variant6
 static const char _data_FX_mode_SM4[] PROGMEM = "Y💡SM4 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_SM3[] PROGMEM = "Y💡SM3 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_SM2[] PROGMEM = "Y💡SM2 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_SM1[] PROGMEM = "Y💡SM1 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_Big_Caleido[] PROGMEM = "Y💡Big_Caleido ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
-static const char _data_FX_mode_RGB_Blobs5[] PROGMEM = "Y💡RGB_Blobs5 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
-static const char _data_FX_mode_RGB_Blobs4[] PROGMEM = "Y💡RGB_Blobs4 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
-static const char _data_FX_mode_RGB_Blobs3[] PROGMEM = "Y💡RGB_Blobs3 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
-static const char _data_FX_mode_RGB_Blobs2[] PROGMEM = "Y💡RGB_Blobs2 ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
+static const char _data_FX_mode_RGB_Blobs45[] PROGMEM = "Y💡RGB_Blobs45 ☾@Speed,,Scale,,,, Gamma Correction;;1;2;c1=128,o2=0";  // c1: scale 0.05-0.1
+static const char _data_FX_mode_RGB_Blobs23[] PROGMEM = "Y💡RGB_Blobs23 ☾@Speed,,,,,Variant,Gamma Correction;;1;2;o1=0,o2=0";  // o1: variant3
 static const char _data_FX_mode_RGB_Blobs[] PROGMEM = "Y💡RGB_Blobs ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_Polar_Waves[] PROGMEM = "Y💡Polar_Waves ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_Slow_Fade[] PROGMEM = "Y💡Slow_Fade ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
@@ -123,6 +117,11 @@ static const char _data_FX_mode_Waves[] PROGMEM = "Y💡Waves ☾@Speed,,,,,,Gam
 static const char _data_FX_mode_Chasing_Spirals[] PROGMEM = "Y💡Chasing_Spirals ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 static const char _data_FX_mode_Rotating_Blob[] PROGMEM = "Y💡Rotating_Blob ☾@Speed,,,,,,Gamma Correction;;1;2;o2=0";
 
+// local float map helper (same as in FX.cpp but needed here since that one is static)
+static float animartrix_mapf(float x, float in_min, float in_max, float out_min, float out_max) {
+	if (in_max == in_min) return out_min;
+	return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
 class ANIMartRIXMod:public ANIMartRIX {
 	private:
@@ -169,19 +168,17 @@ class ANIMartRIXMod:public ANIMartRIX {
 };
 ANIMartRIXMod anim;
 
-uint16_t mode_Module_Experiment10() {
-	anim.initEffect(); 
-	anim.Module_Experiment10();
+uint16_t mode_Module_Experiment810() {
+	anim.initEffect();
+	// c1 maps 0-255 to w range 0.3-1.0, o1 selects HSV color mode
+	float w = animartrix_mapf(SEGMENT.custom1, 0, 255, 0.3f, 1.0f);
+	bool use_hsv = SEGMENT.check1;
+	anim.Module_Experiment810_base(w, use_hsv);
 	return FRAMETIME;
 }
 uint16_t mode_Module_Experiment9() { 
 	anim.initEffect(); 
 	anim.Module_Experiment9();
-	return FRAMETIME;
-}
-uint16_t mode_Module_Experiment8() { 
-	anim.initEffect(); 
-	anim.Module_Experiment8();
 	return FRAMETIME;
 }
 uint16_t mode_Module_Experiment7() { 
@@ -209,14 +206,15 @@ uint16_t mode_Zoom2() {
 	anim.Zoom2();
 	return FRAMETIME;
 }
-uint16_t mode_Module_Experiment3() { 
-	anim.initEffect(); 
-	anim.Module_Experiment3();
-	return FRAMETIME;
-}
-uint16_t mode_Module_Experiment2() { 
-	anim.initEffect(); 
-	anim.Module_Experiment2();
+uint16_t mode_Module_Experiment23() {
+	anim.initEffect();
+	// c1 maps 0-255 to dist_offset 12-16, c2 maps 0-255 to dist_scale 4-16
+	float dist_offset = animartrix_mapf(SEGMENT.custom1, 0, 255, 12.0f, 16.0f);
+	float dist_scale = animartrix_mapf(SEGMENT.custom2, 0, 255, 4.0f, 16.0f);
+	// speed derived from dist_offset ratio, dir_idx: 0 for high offset, 3 for low
+	float speed = animartrix_mapf(SEGMENT.custom1, 0, 255, 0.01f, 0.02f);
+	int dir_idx = (SEGMENT.custom1 < 128) ? 3 : 0;
+	anim.Module_Experiment23_base(speed, dist_offset, dist_scale, dir_idx);
 	return FRAMETIME;
 }
 uint16_t mode_Module_Experiment1() { 
@@ -254,24 +252,20 @@ uint16_t mode_Complex_Kaleido_3() {
 	anim.Complex_Kaleido_3();
 	return FRAMETIME;
 }
-uint16_t mode_Complex_Kaleido_2() { 
-	anim.initEffect(); 
-	anim.Complex_Kaleido_2();
+uint16_t mode_Complex_Kaleido12() {
+	anim.initEffect();
+	// c1 maps 0-255 to size 0.5-1.0
+	float size = animartrix_mapf(SEGMENT.custom1, 0, 255, 0.5f, 1.0f);
+	anim.Complex_Kaleido_12_base(size);
 	return FRAMETIME;
 }
-uint16_t mode_Complex_Kaleido() { 
-	anim.initEffect(); 
-	anim.Complex_Kaleido();
-	return FRAMETIME;
-}
-uint16_t mode_SM10() { 
-	anim.initEffect(); 
-	anim.SM10();
-	return FRAMETIME;
-}
-uint16_t mode_SM9() { 
-	anim.initEffect(); 
-	anim.SM9();
+uint16_t mode_SM910() {
+	anim.initEffect();
+	// c1 maps 0-255 to scale 0.6-1.0, o1 selects variant10
+	float scale = animartrix_mapf(SEGMENT.custom1, 0, 255, 0.6f, 1.0f);
+	bool variant10 = SEGMENT.check1;
+	float speed = variant10 ? 0.006f : 0.005f;
+	anim.SM910_base(speed, scale, variant10);
 	return FRAMETIME;
 }
 uint16_t mode_SM8() { 
@@ -285,14 +279,12 @@ uint16_t mode_SM8() {
 //
 //	return FRAMETIME;
 // }
-uint16_t mode_SM6() { 
-	anim.initEffect(); 
-	anim.SM6();
-	return FRAMETIME;
-}
-uint16_t mode_SM5() { 
-	anim.initEffect(); 
-	anim.SM5();
+uint16_t mode_SM56() {
+	anim.initEffect();
+	// c1 maps 0-255 to s 0.7-1.0, o1 selects variant6
+	float s = animartrix_mapf(SEGMENT.custom1, 0, 255, 0.7f, 1.0f);
+	bool variant6 = SEGMENT.check1;
+	anim.SM56_base(s, variant6);
 	return FRAMETIME;
 }
 uint16_t mode_SM4() { 
@@ -320,24 +312,18 @@ uint16_t mode_Big_Caleido() {
 	anim.Big_Caleido();
 	return FRAMETIME;
 }
-uint16_t mode_RGB_Blobs5() { 
-	anim.initEffect(); 	
-	anim.RGB_Blobs5();
+uint16_t mode_RGB_Blobs45() {
+	anim.initEffect();
+	// c1 maps 0-255 to scale 0.05-0.1
+	float scale = animartrix_mapf(SEGMENT.custom1, 0, 255, 0.05f, 0.1f);
+	anim.RGB_Blobs45_base(scale);
 	return FRAMETIME;
 }
-uint16_t mode_RGB_Blobs4() { 
-	anim.initEffect(); 
-	anim.RGB_Blobs4();
-	return FRAMETIME;
-}
-uint16_t mode_RGB_Blobs3() { 
-	anim.initEffect(); 
-	anim.RGB_Blobs3();
-	return FRAMETIME;
-}
-uint16_t mode_RGB_Blobs2() { 
-	anim.initEffect(); 
-	anim.RGB_Blobs2();
+uint16_t mode_RGB_Blobs23() {
+	anim.initEffect();
+	// o1 selects variant3 (different dist offset and color mapping)
+	bool variant3 = SEGMENT.check1;
+	anim.RGB_Blobs23_base(variant3);
 	return FRAMETIME;
 }
 uint16_t mode_RGB_Blobs() { 
@@ -443,16 +429,14 @@ class AnimartrixUsermod : public Usermod {
 		
 		if(!enabled) return;
 
-      strip.addEffect(203, &mode_Module_Experiment10, _data_FX_mode_Module_Experiment10);
+      strip.addEffect(203, &mode_Module_Experiment810, _data_FX_mode_Module_Experiment810);
       strip.addEffect(204, &mode_Module_Experiment9, _data_FX_mode_Module_Experiment9);
-      strip.addEffect(205, &mode_Module_Experiment8, _data_FX_mode_Module_Experiment8);
       strip.addEffect(206, &mode_Module_Experiment7, _data_FX_mode_Module_Experiment7);
       strip.addEffect(207, &mode_Module_Experiment6, _data_FX_mode_Module_Experiment6);
       strip.addEffect(208, &mode_Module_Experiment5, _data_FX_mode_Module_Experiment5);
       strip.addEffect(209, &mode_Module_Experiment4, _data_FX_mode_Module_Experiment4);
       strip.addEffect(210, &mode_Zoom2, _data_FX_mode_Zoom2);
-      strip.addEffect(211, &mode_Module_Experiment3, _data_FX_mode_Module_Experiment3);
-      strip.addEffect(212, &mode_Module_Experiment2, _data_FX_mode_Module_Experiment2);
+      strip.addEffect(211, &mode_Module_Experiment23, _data_FX_mode_Module_Experiment23);
       strip.addEffect(213, &mode_Module_Experiment1, _data_FX_mode_Module_Experiment1);
       strip.addEffect(214, &mode_Parametric_Water, _data_FX_mode_Parametric_Water);
       strip.addEffect(215, &mode_Water, _data_FX_mode_Water);
@@ -460,23 +444,18 @@ class AnimartrixUsermod : public Usermod {
       strip.addEffect(217, &mode_Complex_Kaleido_5, _data_FX_mode_Complex_Kaleido_5);
       strip.addEffect(218, &mode_Complex_Kaleido_4, _data_FX_mode_Complex_Kaleido_4);
       strip.addEffect(219, &mode_Complex_Kaleido_3, _data_FX_mode_Complex_Kaleido_3);
-      strip.addEffect(220, &mode_Complex_Kaleido_2, _data_FX_mode_Complex_Kaleido_2);
-      strip.addEffect(221, &mode_Complex_Kaleido, _data_FX_mode_Complex_Kaleido);
-      strip.addEffect(222, &mode_SM10, _data_FX_mode_SM10);
-      strip.addEffect(223, &mode_SM9, _data_FX_mode_SM9);
+      strip.addEffect(220, &mode_Complex_Kaleido12, _data_FX_mode_Complex_Kaleido12);
+      strip.addEffect(222, &mode_SM910, _data_FX_mode_SM910);
       strip.addEffect(224, &mode_SM8, _data_FX_mode_SM8);
       // strip.addEffect(225, &mode_SM7, _data_FX_mode_SM7);
-      strip.addEffect(226, &mode_SM6, _data_FX_mode_SM6);
-      strip.addEffect(227, &mode_SM5, _data_FX_mode_SM5);
+      strip.addEffect(226, &mode_SM56, _data_FX_mode_SM56);
       strip.addEffect(228, &mode_SM4, _data_FX_mode_SM4);
       strip.addEffect(229, &mode_SM3, _data_FX_mode_SM3);
       strip.addEffect(230, &mode_SM2, _data_FX_mode_SM2);
       strip.addEffect(231, &mode_SM1, _data_FX_mode_SM1);
       strip.addEffect(232, &mode_Big_Caleido, _data_FX_mode_Big_Caleido);
-      strip.addEffect(233, &mode_RGB_Blobs5, _data_FX_mode_RGB_Blobs5);
-      strip.addEffect(234, &mode_RGB_Blobs4, _data_FX_mode_RGB_Blobs4);
-      strip.addEffect(235, &mode_RGB_Blobs3, _data_FX_mode_RGB_Blobs3);
-      strip.addEffect(236, &mode_RGB_Blobs2, _data_FX_mode_RGB_Blobs2);
+      strip.addEffect(233, &mode_RGB_Blobs45, _data_FX_mode_RGB_Blobs45);
+      strip.addEffect(235, &mode_RGB_Blobs23, _data_FX_mode_RGB_Blobs23);
       strip.addEffect(237, &mode_RGB_Blobs, _data_FX_mode_RGB_Blobs);
       strip.addEffect(238, &mode_Polar_Waves, _data_FX_mode_Polar_Waves);
       strip.addEffect(239, &mode_Slow_Fade, _data_FX_mode_Slow_Fade);
