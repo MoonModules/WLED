@@ -101,6 +101,10 @@
 #include "../usermods/ST7789_display/ST7789_Display.h"
 #endif
 
+#ifdef USERMOD_M5STACK_CORE_S3_DISPLAY
+#include "../usermods/M5Stack_CoreS3_Display/usermod_m5stack_s3_display.h"
+#endif
+
 #ifdef USERMOD_SEVEN_SEGMENT
 #include "../usermods/seven_segment_display/usermod_v2_seven_segment_display.h"
 #endif
@@ -297,6 +301,10 @@ void registerUsermods()
 
 #ifdef USERMOD_ST7789_DISPLAY
   usermods.add(new St7789DisplayUsermod());
+#endif
+
+#ifdef USERMOD_M5STACK_CORE_S3_DISPLAY
+  usermods.add(new M5StackCoreS3DisplayUsermod());
 #endif
 
 #ifdef USERMOD_SEVEN_SEGMENT
