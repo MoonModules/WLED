@@ -2253,8 +2253,10 @@ void WS2812FX::setMainSegmentId(uint8_t n) {
 }
 
 uint8_t WS2812FX::getLastActiveSegmentId(void) const {
-  for (size_t i = _segments.size() -1; i > 0; i--) {
-    if (_segments[i].isActive()) return i;
+  if (_segments.size() > 0) { // WLEDMM prevent unsigned wrap-around when _segments.size() < 1
+    for (size_t i = _segments.size() -1; i > 0; i--) {
+      if (_segments[i].isActive()) return i;
+    }
   }
   return 0;
 }
