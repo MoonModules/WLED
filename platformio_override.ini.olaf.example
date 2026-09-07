@@ -1,0 +1,8 @@
+; copy to platformio_override.ini (local override, ignored by git)
+
+[platformio]
+default_envs = esp32_4MB_V4_M
+
+[env]
+build_flags =
+  -D WLED_RELEASE_NAME=\"WLEDMM-OLAF\"
