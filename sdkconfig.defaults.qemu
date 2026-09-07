@@ -1,0 +1,5 @@
+# QEMU-specific ESP-IDF configuration
+# Enables OpenCores Ethernet MAC driver for QEMU's open_eth model
+
+CONFIG_ETH_USE_OPENETH=y
+CONFIG_ETH_ENABLED=y

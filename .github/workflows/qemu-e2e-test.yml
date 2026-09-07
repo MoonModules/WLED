@@ -1,0 +1,336 @@
+name: QEMU E2E Testing
+
+on:
+  pull_request:
+    branches: [ mdev, main ]
+  push:
+    branches: [ mdev, main, copilot/add-ci-workflow-for-esp32 ]
+  workflow_dispatch:
+
+jobs:
+  # Job 1: Build firmware for QEMU testing
+  build-firmware:
+    name: Build ESP32 Firmware for QEMU
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-pio-esp32_16MB_QEMU_debug-${{ hashFiles('**/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-esp32_16MB_QEMU_debug-
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install PlatformIO
+        run: pip install -r requirements.txt
+      
+      - name: Install Node.js dependencies
+        run: npm ci
+      
+      - name: Build Web UI
+        run: npm run build
+      
+      - name: Build ESP32 firmware
+        run: pio run -e esp32_16MB_QEMU_debug
+      
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-firmware
+          path: .pio/build/esp32_16MB_QEMU_debug/
+          retention-days: 1
+
+  # Job 2: Test with QEMU ESP32
+  test-qemu:
+    name: QEMU E2E Tests
+    runs-on: ubuntu-22.04
+    needs: build-firmware
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Download firmware artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: esp32-firmware
+          path: .pio/build/esp32_16MB_QEMU_debug/
+      
+      - name: Install Node.js dependencies
+        run: npm ci
+      
+      - name: Install Playwright Browsers
+        run: |
+          npm install @playwright/test
+          npx playwright install --with-deps chromium
+      
+      - name: Install ESP32 exception decoder
+        run: |
+          pip install esptool
+          # Install the exception decoder from platformio
+          pip install platformio
+          # The xtensa toolchain should be available from the firmware build artifacts
+      
+      - name: Install QEMU dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-2.0-0 libpixman-1-0 libglib2.0-0 binutils
+      
+      - name: Setup QEMU ESP32
+        run: |
+          bash .github/scripts/setup-qemu.sh
+      
+      - name: Make decoder script executable
+        run: |
+          chmod +x .github/scripts/monitor-qemu.py
+      
+      - name: Start QEMU with WLED firmware in background
+        run: |
+          chmod +x .github/scripts/run-qemu.sh
+          bash .github/scripts/run-qemu.sh .pio/build/esp32_16MB_QEMU_debug qemu-esp32 8080 > qemu-output.log 2>&1 &
+          echo "Waiting for QEMU to start and WLED to boot..."
+          sleep 45
+      
+      - name: Check QEMU status and wait for HTTP server
+        run: |
+          if [ ! -f qemu.pid ]; then
+            echo "ERROR: qemu.pid not found"
+            echo "=== QEMU Output (last 200 lines) ==="
+            tail -200 qemu-output.log || true
+            exit 1
+          fi
+          
+          QEMU_PID=$(cat qemu.pid)
+          if ! kill -0 $QEMU_PID 2>/dev/null; then
+            echo "ERROR: QEMU process not running"
+            echo "=== QEMU Output (last 200 lines) ==="
+            tail -200 qemu-output.log || true
+            exit 1
+          fi
+          
+          echo "QEMU is running (PID: $QEMU_PID)"
+          
+          # Check for network/DHCP initialization in logs
+          echo ""
+          echo "=== Verifying Network Initialization ==="
+          sleep 25  # Give a bit more time for network logs
+          
+          if grep -i "ETH Started\|ETH Connected\|eth: link up" qemu-output.log > /dev/null 2>&1; then
+            echo "✓ Ethernet initialization detected in logs"
+            grep -i "ETH Started\|ETH Connected\|eth: link up" qemu-output.log | tail -5
+          else
+            echo "⚠ Ethernet initialization messages not found (might still be starting)"
+          fi
+          
+          if grep -i "IP\|DHCP\|10\.0\.2\." qemu-output.log > /dev/null 2>&1; then
+            echo "✓ IP/DHCP activity detected in logs"
+            grep -i "IP\|DHCP\|10\.0\.2\." qemu-output.log | tail -5
+          else
+            echo "⚠ No IP/DHCP messages found yet"
+          fi
+          
+          echo ""
+          echo "=== Testing Network Connectivity ==="
+          echo "Note: ICMP ping to guest IP won't work (QEMU user-mode networking limitation)"
+          echo "Only TCP connectivity via hostfwd is supported"
+          
+          # Wait up to 1 minute for HTTP connectivity
+          for i in {1..30}; do
+            echo "Attempt $i/30: Testing HTTP connectivity..."
+            
+            # Test HTTP connectivity (only reliable test in QEMU user-mode networking)
+            if curl -f -m 5 http://localhost:8080/ > /dev/null 2>&1; then
+              echo "✓ SUCCESS: WLED HTTP server is responding!"
+              
+              # Additional connectivity verification
+              echo ""
+              echo "=== HTTP Server Verification ==="
+              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/)
+              echo "HTTP Status Code: $HTTP_STATUS"
+              
+              if [ "$HTTP_STATUS" = "200" ]; then
+                echo "✓ HTTP 200 OK - Server is fully operational"
+              else
+                echo "⚠ Unexpected status code: $HTTP_STATUS"
+              fi
+              
+              # Test basic page/API access
+              echo ""
+              echo "=== Testing Basic Page Access ==="
+              # Note: /index.htm only works if a custom file exists on LittleFS filesystem.
+              # The root URL / always works (serves compiled-in PAGE_index from html_*.h).
+              # Test /json/info which is always available via the JSON API.
+              if curl -f -m 5 http://localhost:8080/json/info > /dev/null 2>&1; then
+                echo "✓ /json/info accessible (JSON API working)"
+              else
+                echo "⚠ /json/info not accessible"
+              fi
+              if curl -f -m 5 http://localhost:8080/json/state > /dev/null 2>&1; then
+                echo "✓ /json/state accessible"
+              else
+                echo "⚠ /json/state not accessible"
+              fi
+              
+              exit 0
+            fi
+            sleep 2
+          done
+          
+          echo ""
+          echo "✗ ERROR: HTTP server not responding after 1 minute"
+          echo ""
+          echo "=== QEMU Output (last 80 lines) ==="
+          tail -80 qemu-output.log || true
+          echo ""
+          echo "=== Checking for ESP32 exceptions/crashes ==="
+          if grep -i "exception\|abort\|backtrace\|panic" qemu-output.log > /dev/null 2>&1; then
+            echo "FOUND: Firmware crash detected in QEMU output"
+            echo ""
+            grep -i "exception\|abort\|backtrace\|panic" qemu-output.log | head -20
+          else
+            echo "No obvious crash patterns found"
+          fi
+          echo ""
+          echo "ERROR: HTTP server failed to start - check QEMU logs above"
+          exit 1
+      
+      - name: Run Playwright tests against QEMU
+        env:
+          WLED_BASE_URL: http://localhost:8080
+        run: npm run test:e2e
+      
+      - name: Analyze QEMU output for crashes
+        if: always()
+        run: |
+          echo "=== Analyzing QEMU output for ESP32 crashes ==="
+          if [ -f qemu-output.log ]; then
+            if grep -i "exception\|abort\|backtrace\|panic\|guru meditation" qemu-output.log > /dev/null; then
+              echo "ESP32 Exception/Crash detected in QEMU output!"
+              echo ""
+              echo "=== Exception Context ==="
+              grep -A 25 -B 5 -i "exception\|abort\|backtrace\|panic\|guru meditation" qemu-output.log | head -150
+              echo ""
+              echo "=== Stack Trace Analysis ==="
+              # Extract backtrace if present
+              if grep -i "Backtrace:" qemu-output.log > /dev/null; then
+                BACKTRACE=$(grep -i "Backtrace:" qemu-output.log | tail -1)
+                echo "Raw Backtrace: $BACKTRACE"
+                echo ""
+                echo "Analyzing crash location:"
+                # Extract first address (PC/crash location)
+                CRASH_ADDR=$(echo "$BACKTRACE" | grep -oP '0x[0-9a-fA-F]+' | head -1)
+                if [ -n "$CRASH_ADDR" ]; then
+                  echo "  - Crash at address: $CRASH_ADDR"
+                  echo "  - This is likely in firmware code or ROM"
+                fi
+              fi
+              echo ""
+              echo "=== Manual Exception Decoder Instructions ==="
+              echo "To decode this crash manually:"
+              echo ""
+              echo "1. Download the 'esp32-firmware' artifact from this GitHub Actions run"
+              echo "2. Extract the firmware.elf file"
+              echo "3. Install ESP-IDF or use PlatformIO's exception decoder:"
+              echo ""
+              echo "   Method A - Using PlatformIO:"
+              echo "     pio device monitor --filter esp32_exception_decoder"
+              echo "     (Then paste the backtrace and exception info)"
+              echo ""
+              echo "   Method B - Using ESP-IDF addr2line:"
+              echo "     ~/.platformio/packages/toolchain-xtensa-esp32/bin/xtensa-esp32-elf-addr2line \\"
+              echo "       -pfiaC -e .pio/build/esp32_16MB_QEMU_debug/firmware.elf \\"
+              echo "       0x401771aa 0x4015b4c5 0x40134813 ..."
+              echo ""
+              echo "4. The decoded output will show:"
+              echo "   - Function names where the crash occurred"
+              echo "   - Source file locations (file:line)"
+              echo "   - Call stack leading to the crash"
+              echo ""
+              echo "=== Crash Analysis Guidance ==="
+              echo "Common crash causes in QEMU:"
+              echo "  - LoadStorePIFAddrError (0x0000000f): Invalid memory access"
+              echo "    * Often caused by accessing uninitialized pointers"
+              echo "    * Or accessing hardware registers not emulated by QEMU"
+              echo "    * Check if crash is in hardware/peripheral initialization code"
+              echo ""
+              echo "  - If crash is in ethernet/network code: May be QEMU limitation"
+              echo "  - If crash is in WiFi code: Expected - WiFi not emulated"
+              echo "  - If crash is in application code: Likely real firmware bug"
+              echo ""
+              echo "Note: This could be a QEMU-specific issue or a real firmware bug."
+              echo "QEMU ESP32 emulation has limitations:"
+              echo "  - Many peripherals are not fully emulated"
+              echo "  - Some hardware features may cause crashes in QEMU but work on real hardware"
+              echo "  - Network/ethernet emulation may have issues"
+            else
+              echo "No ESP32 exceptions detected in QEMU output"
+            fi
+          else
+            echo "No QEMU output log found"
+          fi
+      
+      - name: Upload QEMU logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qemu-logs
+          path: qemu-output.log
+          retention-days: 7
+      
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+      
+      - name: Upload JS console logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: js-console-logs
+          path: console-logs/
+          retention-days: 7
+      
+      - name: Stop QEMU
+        if: always()
+        run: |
+          if [ -f qemu.pid ]; then
+            QEMU_PID=$(cat qemu.pid)
+            echo "Stopping QEMU (PID: $QEMU_PID)"
+            kill $QEMU_PID || true
+            sleep 2
+            kill -9 $QEMU_PID 2>/dev/null || true
+          fi

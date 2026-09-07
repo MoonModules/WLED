@@ -368,8 +368,16 @@ WLED_GLOBAL char cmDNS[33] _INIT(MDNS_NAME);                       // mDNS addre
 WLED_GLOBAL char apSSID[33] _INIT("");                             // AP off by default (unless setup)
 WLED_GLOBAL byte apChannel _INIT(6);                               // 2.4GHz WiFi AP channel (1-13)
 WLED_GLOBAL byte apHide    _INIT(0);                               // hidden AP SSID
+#ifdef WLED_QEMU
+WLED_GLOBAL byte apBehavior _INIT(AP_BEHAVIOR_BUTTON_ONLY);        // access point opens when button0 pressed for at least 6 seconds
+#else
 WLED_GLOBAL byte apBehavior _INIT(AP_BEHAVIOR_BOOT_NO_CONN);       // access point opens when no connection after boot by default
+#endif
+#ifdef WLED_STATIC_IP_DEFAULT_1
+WLED_GLOBAL IPAddress staticIP      _INIT_N((( WLED_STATIC_IP_DEFAULT_1, WLED_STATIC_IP_DEFAULT_2, WLED_STATIC_IP_DEFAULT_3, WLED_STATIC_IP_DEFAULT_4)));
+#else
 WLED_GLOBAL IPAddress staticIP      _INIT_N(((  0,   0,  0,  0))); // static IP of ESP
+#endif
 WLED_GLOBAL IPAddress staticGateway _INIT_N(((  0,   0,  0,  0))); // gateway (router) IP
 WLED_GLOBAL IPAddress staticSubnet  _INIT_N(((255, 255, 255, 0))); // most common subnet in home networks
 #if defined(ARDUINO_ARCH_ESP32) && !defined(ARDUINO_ESP32_PICO) && !defined(WLEDMM_WIFI_POWERON_HACK)
@@ -935,7 +943,12 @@ WLED_GLOBAL volatile uint8_t jsonBufferLock _INIT(0);
 #endif
 
 #ifdef ARDUINO_ARCH_ESP32
+  #ifdef WLED_QEMU
+  // QEMU: Use Network.isConnected() instead of ETH.localIP() since ETH object uses OpenETH driver
+  #define WLED_CONNECTED Network.isConnected()
+  #else
   #define WLED_CONNECTED (WiFi.status() == WL_CONNECTED || ETH.localIP()[0] != 0)
+  #endif
 #else
   #define WLED_CONNECTED (WiFi.status() == WL_CONNECTED)
 #endif

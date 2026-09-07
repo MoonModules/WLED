@@ -4,6 +4,16 @@
 #include <Arduino.h>
 #ifdef ARDUINO_ARCH_ESP32
 #include "esp_ota_ops.h"
+#ifdef WLED_QEMU
+// Includes for OpenETH driver (QEMU's emulated ethernet MAC)
+#include "esp_eth.h"
+#include "esp_eth_mac.h"
+#include "esp_eth_phy.h"
+#include "esp_eth_netif_glue.h"
+#include "esp_netif.h"
+#include "esp_event.h"
+#include "tcpip_adapter.h" // This header is deprecated, please use new network related API in esp_netif.h
+#endif
 #endif
 #warning WLED-MM is licensed under the EUPL-1.2. By installing WLED MM you implicitly accept the terms!
 
@@ -12,7 +22,7 @@
 #include "soc/rtc_cntl_reg.h"
 #endif
 
-#if defined(WLED_DEBUG) && defined(ARDUINO_ARCH_ESP32)
+#if defined(WLED_DEBUG) && defined(ARDUINO_ARCH_ESP32) && !defined(WLED_QEMU)
 #include "../tools/ESP32-Chip_info.hpp"
 #endif
 
@@ -139,7 +149,9 @@ void WLED::loop()
   handleRemote();
   #endif
   handleSerial();
+#ifndef WLED_QEMU
   handleImprovWifiScan();
+#endif
 
   #if defined(ARDUINO_ARCH_ESP32) && defined(WLEDMM_PROTECT_SERVICE)  // WLEDMM experimental: handleNotifications() calls strip.show(); handleTransitions modifies segments
   if (!suspendStripService) {
@@ -395,6 +407,7 @@ void WLED::loop()
 	}
     #endif
     #endif
+#ifndef WLED_QEMU
     DEBUG_PRINT(F("Wifi state: "));      DEBUG_PRINTLN(WiFi.status());
 
     if (WiFi.status() != lastWifiState) {
@@ -402,6 +415,7 @@ void WLED::loop()
     }
     lastWifiState = WiFi.status();
     DEBUG_PRINT(F("State time: "));      DEBUG_PRINTLN(wifiStateChangedTime);
+#endif
     DEBUG_PRINT(F("NTP last sync: "));   DEBUG_PRINTLN(ntpLastSyncTime);
     DEBUG_PRINT(F("Client IP: "));       DEBUG_PRINTLN(Network.localIP());
     if (loops > 0) { // avoid division by zero
@@ -640,7 +654,7 @@ void WLED::setup()
   #endif
   USER_PRINT(F(", speed ")); USER_PRINT(ESP.getFlashChipSpeed()/1000000);USER_PRINTLN(F("MHz."));
   
-  #if defined(WLED_DEBUG) && defined(ARDUINO_ARCH_ESP32)
+  #if defined(WLED_DEBUG) && defined(ARDUINO_ARCH_ESP32) && !defined(WLED_QEMU)
   showRealSpeed();
   #endif
 
@@ -1111,6 +1125,7 @@ void WLED::initAP(bool resetAP)
   if (apBehavior == AP_BEHAVIOR_BUTTON_ONLY && !resetAP)
     return;
 
+#if !defined(WLED_QEMU) // QEMU does not support wifi AP mode
   if (resetAP) {
     WLED_SET_AP_SSID();
     strcpy_P(apPass, PSTR(WLED_AP_PASS));
@@ -1143,6 +1158,7 @@ void WLED::initAP(bool resetAP)
     dnsServer.start(53, "*", WiFi.softAPIP());
   }
   apActive = true;
+#endif // WLED_QEMU
 }
 
 bool WLED::initEthernet()
@@ -1223,6 +1239,118 @@ bool WLED::initEthernet()
   }
   #endif
 
+  #ifdef WLED_QEMU
+  // QEMU: Use OpenCores Ethernet MAC (designed for QEMU's open_eth model)
+  // Do NOT call ETH.begin() — it uses the real ESP32 EMAC which crashes in QEMU
+  // Reference: https://github.com/mluis/qemu-esp32/issues/2
+  //
+  // esp_eth_mac_new_openeth() is provided by the vendored openeth_mac library (lib/openeth_mac/).
+  // The -D CONFIG_ETH_USE_OPENETH=1 build flag enables the declaration in esp_eth_mac.h.
+
+  USER_PRINTLN(F("initC: QEMU mode - initializing OpenETH MAC driver"));
+  
+  // 1. Ensure event loop exists (Arduino may not have created it without WiFi/ETH)
+  esp_err_t err = esp_event_loop_create_default();
+  if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+    USER_PRINTF("initC: QEMU - ERROR: esp_event_loop_create_default failed: %d\n", err);
+    return false;
+  }
+  
+  // 2. Initialize TCP/IP stack
+  tcpip_adapter_init();
+  
+  // 3. Create the OpenCores MAC (designed for QEMU)
+  eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();
+  esp_eth_mac_t *mac = esp_eth_mac_new_openeth(&mac_config);
+  if (!mac) {
+    USER_PRINTLN(F("initC: QEMU - ERROR: esp_eth_mac_new_openeth() failed"));
+    USER_PRINTLN(F("initC: QEMU - CONFIG_ETH_USE_OPENETH may not be enabled in arduino-esp32"));
+    USER_PRINTLN(F("initC: QEMU - Check sdkconfig.defaults.qemu and rebuild ESP-IDF"));
+    return false;
+  }
+  
+  // 4. Create the DP83848 PHY (what QEMU emulates alongside open_eth)
+  eth_phy_config_t phy_config = ETH_PHY_DEFAULT_CONFIG();
+  phy_config.phy_addr = 1;         // QEMU open_eth uses PHY address 1
+  phy_config.reset_gpio_num = -1;  // No GPIO reset in QEMU
+  esp_eth_phy_t *phy = esp_eth_phy_new_dp83848(&phy_config);
+  if (!phy) {
+    USER_PRINTLN(F("initC: QEMU - ERROR: esp_eth_phy_new_dp83848() failed"));
+    return false;
+  }
+  
+  // 5. Install the Ethernet driver
+  esp_eth_config_t eth_config = ETH_DEFAULT_CONFIG(mac, phy);
+  esp_eth_handle_t eth_handle = NULL;
+  err = esp_eth_driver_install(&eth_config, &eth_handle);
+  if (err != ESP_OK) {
+    USER_PRINTF("initC: QEMU - ERROR: esp_eth_driver_install failed: %d\n", err);
+    return false;
+  }
+  
+  // 6. Attach to TCP/IP stack via netif glue
+  esp_netif_config_t cfg = ESP_NETIF_DEFAULT_ETH();
+  esp_netif_t *eth_netif = esp_netif_new(&cfg);
+  if (!eth_netif) {
+    USER_PRINTLN(F("initC: QEMU - ERROR: esp_netif_new failed"));
+    esp_eth_driver_uninstall(eth_handle);
+    return false;
+  }
+  
+  void *glue = esp_eth_new_netif_glue(eth_handle);
+  if (!glue) {
+    USER_PRINTLN(F("initC: QEMU - ERROR: esp_eth_new_netif_glue failed"));
+    esp_netif_destroy(eth_netif);
+    esp_eth_driver_uninstall(eth_handle);
+    return false;
+  }
+  
+  err = esp_netif_attach(eth_netif, glue);
+  if (err != ESP_OK) {
+    USER_PRINTF("initC: QEMU - ERROR: esp_netif_attach failed: %d\n", err);
+    esp_netif_destroy(eth_netif);
+    esp_eth_driver_uninstall(eth_handle);
+    return false;
+  }
+  
+  // 7. Register IP event handler so we know when DHCP succeeds
+  auto got_ip_handler = [](void*, esp_event_base_t, int32_t, void* event_data) {
+    ip_event_got_ip_t* event = (ip_event_got_ip_t*)event_data;
+    USER_PRINTF("initC: QEMU - Got IP via DHCP: " IPSTR "\n", IP2STR(&event->ip_info.ip));
+    USER_PRINTF("initC: QEMU - Gateway: " IPSTR "\n", IP2STR(&event->ip_info.gw));
+    USER_PRINTF("initC: QEMU - Netmask: " IPSTR "\n", IP2STR(&event->ip_info.netmask));
+  };
+  esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, got_ip_handler, NULL);
+  
+  // 8. Start Ethernet
+  err = esp_eth_start(eth_handle);
+  if (err != ESP_OK) {
+    USER_PRINTF("initC: QEMU - ERROR: esp_eth_start failed: %d\n", err);
+    esp_netif_destroy(eth_netif);
+    esp_eth_driver_uninstall(eth_handle);
+    return false;
+  }
+  
+  USER_PRINTLN(F("initC: QEMU - OpenETH driver started, waiting for DHCP..."));
+  
+  // Give DHCP some time to complete
+  delay(3000);
+  
+  // Check if we got an IP
+  tcpip_adapter_ip_info_t ip_info_check;
+  if (tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_ETH, &ip_info_check) == ESP_OK) {
+    if (ip_info_check.ip.addr != 0) {
+      USER_PRINTF("initC: QEMU - Confirmed IP: " IPSTR "\n", IP2STR(&ip_info_check.ip));
+    } else {
+      USER_PRINTLN(F("initC: QEMU - WARNING: No IP assigned yet (DHCP may still be negotiating)"));
+    }
+  }
+  
+  successfullyConfiguredEthernet = true;
+  USER_PRINTLN(F("initC: *** QEMU OpenETH configured successfully! ***"));
+  return true;
+
+  #else  // !WLED_QEMU
   if (!ETH.begin(
                 (uint8_t) es.eth_address,
                 (int)     es.eth_power,
@@ -1240,6 +1368,7 @@ bool WLED::initEthernet()
   }
 
   successfullyConfiguredEthernet = true;
+  #endif
   USER_PRINTLN(F("initC: *** Ethernet successfully configured! ***"));  // WLEDMM
   return true;
 #else
@@ -1260,19 +1389,32 @@ void WLED::initConnection()
   //if (strip.isUpdating()) USER_PRINTLN("WLED::initConnection: strip still updating.");
 #endif
 
+  #ifdef WLED_ENABLE_WEBSOCKETS
+  ws.onEvent(wsEvent);
+  #endif
+
+#ifndef WLED_QEMU
+  // QEMU: Skip WiFi initialization - WiFi hardware not emulated
+  // The firmware crashes with LoadStorePIFAddrError when WiFi functions try to access hardware registers
+
   WiFi.disconnect(true);        // close old connections
   delay(5);                     // wait for hardware to be ready
 #ifdef ESP8266
   WiFi.setPhyMode(force802_3g ? WIFI_PHY_MODE_11G : WIFI_PHY_MODE_11N);
 #endif
 
+#endif
+#ifndef WLED_QEMU
   if (staticIP[0] != 0 && staticGateway[0] != 0) {
     WiFi.config(staticIP, staticGateway, staticSubnet, IPAddress(1, 1, 1, 1));
   } else {
     WiFi.config(IPAddress((uint32_t)0), IPAddress((uint32_t)0), IPAddress((uint32_t)0));
   }
+#endif
 
   lastReconnectAttempt = millis();
+
+#ifndef WLED_QEMU
 
   if (!WLED_WIFI_CONFIGURED) {
     USER_PRINTLN(F("No WiFi connection configured."));  // WLEDMM
@@ -1289,6 +1431,7 @@ void WLED::initConnection()
     }
   }
   showWelcomePage = false;
+#endif
 
   USER_PRINT(F("Connecting to "));
   USER_PRINT(clientSSID);
@@ -1306,6 +1449,7 @@ void WLED::initConnection()
   WiFi.hostname(hostname);
 #endif
 
+#ifndef WLED_QEMU
   WiFi.begin(clientSSID, clientPass);
 #ifdef ARDUINO_ARCH_ESP32
   #if defined(LOLIN_WIFI_FIX) && (defined(ARDUINO_ARCH_ESP32C3) || defined(ARDUINO_ARCH_ESP32S2) || defined(ARDUINO_ARCH_ESP32S3))
@@ -1315,6 +1459,12 @@ void WLED::initConnection()
   WiFi.setHostname(hostname);
 #else
   wifi_set_sleep_type((noWifiSleep) ? NONE_SLEEP_T : MODEM_SLEEP_T);
+#endif
+#else
+  // QEMU mode: Skip all WiFi initialization
+  DEBUG_PRINTLN(F("initConnection: QEMU mode - skipping WiFi initialization"));
+  USER_PRINTLN(F("initConnection: *** QEMU mode - WiFi disabled, using ethernet only ***"));
+  lastReconnectAttempt = millis();
 #endif
 }
 
@@ -1502,6 +1652,7 @@ void WLED::handleConnection()
   #endif
   
   byte stac = 0;
+#ifndef WLED_QEMU
   if (apActive) {
 #ifdef ESP8266
     stac = wifi_softap_get_station_num();
@@ -1522,6 +1673,7 @@ void WLED::handleConnection()
       }
     }
   }
+#endif // WLED_QEMU
   if (forceReconnect) {
     USER_PRINTLN(F("Forcing reconnect."));
     initConnection();
@@ -1557,7 +1709,9 @@ void WLED::handleConnection()
     if (Network.isEthernet()) {
      #if ESP32
      USER_PRINTLN(" via Ethernet (disabling WiFi)");
+     #ifndef WLED_QEMU
      WiFi.disconnect(true);
+     #endif
      #endif
     } else {
      USER_PRINTLN(" via WiFi");
@@ -1576,7 +1730,9 @@ void WLED::handleConnection()
     // shut down AP
     if (apBehavior != AP_BEHAVIOR_ALWAYS && apActive) {
       dnsServer.stop();
+      #ifndef WLED_QEMU
       WiFi.softAPdisconnect(true);
+      #endif
       apActive = false;
       USER_PRINTLN(F("Access point disabled (handle)."));
     }

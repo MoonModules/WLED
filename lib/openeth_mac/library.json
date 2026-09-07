@@ -1,0 +1,13 @@
+{
+  "name": "openeth_mac",
+  "version": "1.0.0",
+  "description": "OpenCores Ethernet MAC driver for QEMU ESP32 emulation, vendored from ESP-IDF v4.4.7 (not compiled into pre-built Tasmota/arduino-esp32 libethernet.a)",
+  "license": "Apache-2.0",
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "build": {
+    "srcFilter": ["+<*.c>"],
+    "includeDir": ".",
+    "srcDir": "."
+  }
+}

@@ -32,3 +32,11 @@ compile_commands.json
 /wled00/wled00.ino.cpp
 /wled00/html_*.h
 _codeql_detected_source_root
+
+# E2E Testing
+/playwright-report/
+/test-results/
+/playwright/.cache/
+/console-logs/
+qemu-esp32/
+qemu.pid
