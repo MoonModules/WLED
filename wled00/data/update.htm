@@ -3,9 +3,55 @@
 <head>
 	<meta content='width=device-width' name='viewport'>
 	<title>WLED Update</title>
+	<script src="common.js" type="text/javascript"></script>
 	<script>
 		function B() { window.history.back(); }
 		function U() { document.getElementById("uf").style.display="none";document.getElementById("msg").style.display="block"; }
+		async function autoUpdate() {
+			const btn = gId('autoUpdBtn');
+			const status = gId('autoUpdStatus');
+			btn.disabled = true;
+			status.textContent = '';
+			try {
+				status.textContent = 'Fetching device info...';
+				const infoResp = await fetch(getURL('/json/info'));
+				if (!infoResp.ok) throw new Error('Failed to fetch device info');
+				const info = await infoResp.json();
+				if (!info || !info.repo || info.repo === 'unknown') {
+					status.textContent = 'No release repository available for this build.';
+					btn.disabled = false;
+					return;
+				}
+				status.textContent = 'Checking GitHub for latest release...';
+				const ghResp = await fetch(`https://api.github.com/repos/${info.repo}/releases/latest`);
+				if (!ghResp.ok) throw new Error(`GitHub API error: ${ghResp.status}`);
+				const ghRelease = await ghResp.json();
+				const releaseVer = ghRelease.tag_name.replace(/^v/, '');
+				const assetSuffix = `_${releaseVer}_${info.release}.bin`;
+				const asset = ghRelease.assets.find(a => a.name.endsWith(assetSuffix));
+				if (!asset) {
+					const available = ghRelease.assets.map(a => a.name).join(', ');
+					status.textContent = `Firmware not found (*${assetSuffix}). Available: ${available}`;
+					btn.disabled = false;
+					return;
+				}
+				status.textContent = `Downloading ${asset.name} (${Math.round(asset.size/1024)} KB)...`;
+				const fwUrl = asset.browser_download_url.replace(/^https?:\/\/[^/]+/, 'https://download.wled.me');
+				const fwResp = await fetch(fwUrl);
+				if (!fwResp.ok) throw new Error(`Download failed: ${fwResp.status}`);
+				const blob = await fwResp.blob();
+				const file = new File([blob], asset.name, {type: 'application/octet-stream'});
+				const dt = new DataTransfer();
+				dt.items.add(file);
+				document.querySelector('input[name="update"]').files = dt.files;
+				status.textContent = `Downloaded ${asset.name}. Uploading to device...`;
+				U();
+				gId('uf').submit();
+			} catch(e) {
+				status.textContent = 'Auto-update failed: ' + e.message;
+				btn.disabled = false;
+			}
+		}
 		function GetV() {/*injected values here*/}
 	</script>
 	<style>
@@ -19,6 +65,9 @@
 		Installed version: <span class="sip">WLEDMM ##VERSION##</span><br> <!--WLEDMM: show bin name-->
 		Download the latest release: <a href="https://github.com/MoonModules/WLED-MM/releases/latest" target="_blank" rel="noopener noreferrer">
 		<img src="https://img.shields.io/github/release/MoonModules/WLED-MM.svg?style=flat-square"></a><br>
+		<button type="button" id="autoUpdBtn" onclick="autoUpdate()">Auto update</button><br>
+		<span id="autoUpdStatus" style="display:block;margin-top:4px;font-size:13px;"></span>
+		<hr>
 		<input type='file' name='update' required><br> <!--should have accept='.bin', but it prevents file upload from android app-->
 		<button type="submit">Update!</button><br>
 		<button type="button" onclick="B()">Back</button>
