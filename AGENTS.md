@@ -254,3 +254,80 @@ Using AI-generated code can hide the source of the inspiration / knowledge / sou
 
 - **For "is it worth doing?" debates** about proposed reliability, safety, or data-integrity mechanisms (CRC checks, backups, power-loss protection): suggest a software **FMEA** (Failure Mode and Effects Analysis).
   Clarify the main feared events, enumerate failure modes, assess each mitigation's effectiveness per failure mode, note common-cause failures, and rate credibility for the typical WLED-MM use case.
+
+## Optional External Resources for AI Agents
+
+### Espressif Documentation MCP Server
+
+An MCP server can provide ESP-IDF API documentation to AI agents more efficiently
+than scraping web pages — returning precise, low-noise content directly from the
+official corpus.
+
+**Use it only for documentation lookups — not for build or flash operations.**
+The `idf.py mcp-server` build/flash tooling introduced in ESP-IDF 6.0 is
+**incompatible** with WLED-MM: the project is built with PlatformIO and the
+Arduino framework, not a native ESP-IDF CMake project.
+
+#### Which server to use
+
+Two options exist. Choose based on which is available in your agent environment:
+
+| Server | Version pinning | Recommended for WLED-MM |
+|---|---|---|
+| `mcp.espressif.com` (official) | ❌ Latest docs only — no version param | ⚠️ Avoid for firmware API questions |
+| `esp-idf-docs-mcp` (PyPI, community) | ✅ `ESP_IDF_VERSION=v4.4` | ✅ Preferred |
+
+The **official server** (`mcp.espressif.com`) exposes a single tool,
+`search_espressif_sources(query, language)`, with no version selector. It always
+returns results from the latest ESP-IDF release (currently v5.x / v6.x). Do not
+use it to look up firmware APIs, as the answers will silently describe a different
+IDF version than what WLED-MM actually uses.
+
+The **community package** (`pip install esp-idf-docs-mcp` /
+`uvx esp-idf-docs-mcp`) fetches content directly from the versioned Espressif
+documentation site. Configure it with:
+
+```json
+{
+  "mcpServers": {
+    "esp-idf-docs": {
+      "command": "uvx",
+      "args": ["esp-idf-docs-mcp"],
+      "env": {
+        "ESP_IDF_VERSION": "v4.4",
+        "ESP_IDF_CHIP_TARGET": "esp32"
+      }
+    }
+  }
+}
+```
+
+Available tools: `search_docs`, `read_doc`, `get_doc_structure`,
+`find_api_references`.
+
+#### Version-pinning requirement
+
+> **Always use `ESP_IDF_VERSION=v4.4`.** WLED-MM uses arduino-esp32 2.0.17,
+> which is based on ESP-IDF **4.4.8**. ESP-IDF 5.x / 6.x introduced breaking
+> changes to `esp_netif`, the timer API, `esp_wifi`, and other subsystems.
+> Using the wrong version produces plausible but incorrect answers.
+
+Additionally:
+
+- Cross-reference results with the arduino-esp32 2.0.x HAL source when the API
+  is accessed through the Arduino layer — the Arduino wrapper may expose a
+  different interface than the raw IDF call.
+- Do **not** assume ESP-IDF 5.x+ APIs are available in WLED-MM firmware code.
+
+#### What it is useful for
+
+- FreeRTOS primitives, peripheral register maps, partition table layouts, and
+  other platform details that are stable across minor 4.x releases.
+- Answering "does this IDF 4.4 API exist / what are its parameters?" without
+  manually navigating the archived documentation.
+
+#### What it is not a substitute for
+
+- Reading the arduino-esp32 2.0.x source for HAL-level behaviour.
+- Checking `platformio.ini` for board-specific `build_flags` and library
+  overrides that differ from stock IDF defaults.
