@@ -150,6 +150,21 @@ def bin_rename_copy(source, target, env):
     if os.path.isfile(source_map):
         print(f"Found linker mapfile {source_map}")
         shutil.copy(source_map, map_file)
+
+    # Copy boot_app0.bin to the build dir if available.
+    # Use the PlatformIO platform API to locate the exact arduino-esp32 framework package used
+    # for this build. ESP8266 builds return None from get_package_dir() and are silently skipped.
+    # Old arduino-esp32 1.0.x builds lack the file under tools/partitions/ and are also skipped.
+    _ARDUINO_ESP32_PACKAGE = "framework-arduinoespressif32"
+    try:
+        framework_dir = env.PioPlatform().get_package_dir(_ARDUINO_ESP32_PACKAGE)
+        if framework_dir:
+            boot_app0_src = os.path.join(str(framework_dir), "tools", "partitions", "boot_app0.bin")
+            if os.path.isfile(boot_app0_src):
+                shutil.copy(boot_app0_src, os.path.join(builddir, "boot_app0.bin"))
+    except Exception as e:
+        print(f"Warning: could not copy boot_app0.bin ({e})")
+
     # Check if this is a release build (CI sets WLED_RELEASE=True)
     is_release_build = os.environ.get('WLED_RELEASE', '').lower() in ('true', '1', 'yes')
     # show build flags summary for github CI builds
