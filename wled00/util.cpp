@@ -295,11 +295,39 @@ uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLe
     } else return 0;
   }
 
-  if (src == JSON_palette_names && mode > (GRADIENT_PALETTE_COUNT + 13)) {
-    snprintf_P(dest, maxLen, PSTR("~ Custom %d ~"), 255-mode);
-    dest[maxLen] = '\0';
-    return strlen(dest);
+  if (src == JSON_palette_names) {
+    if (mode > WLED_CUSTOM_PALETTE_ID_BASE) {
+      // usermod palette (IDs 201-255)
+      uint8_t umIdx = WLED_USERMOD_PALETTE_ID_BASE - mode;
+      if (umIdx >= usermodPalettes.size()) {
+        dest[0] = '\0'; // empty string if requested index is out of bounds
+        return 0;
+      }
+      const UsermodPalette &ump = usermodPalettes[umIdx];
+      char base[33];
+      strncpy_P(base, ump.name, sizeof(base) - 1);
+      base[sizeof(base) - 1] = '\0';
+      if (ump.palName) {
+        // usermod supplied a specific display name — prefix with the usermod name (e.g. "AudioReactive: Ratio")
+        char palName[33];
+        strncpy_P(palName, ump.palName, sizeof(palName) - 1);
+        palName[sizeof(palName) - 1] = '\0';
+        snprintf(dest, maxLen + 1, "%s: %s", base, palName);
+      } else {
+        // fallback: "UMName index" (e.g. "AudioReactive 1")
+        snprintf(dest, maxLen + 1, "%s %u", base, (unsigned)ump.palIndex);
+      }
+      return strlen(dest);
+    }
+    if (mode >= FIXED_PALETTE_COUNT && mode <= WLED_CUSTOM_PALETTE_ID_BASE) {
+      // user custom palette (IDs FIXED_PALETTE_COUNT up to WLED_CUSTOM_PALETTE_ID_BASE=200)
+      snprintf_P(dest, maxLen, PSTR("~ Custom %d ~"), WLED_CUSTOM_PALETTE_ID_BASE - mode);
+      dest[maxLen] = '\0';
+      return strlen(dest);
+    }
   }
+
+
 
   uint8_t qComma = 0;
   bool insideQuotes = false;
@@ -612,35 +640,6 @@ um_data_t* simulateSound(uint8_t simulationId)
 }
 
 //WLEDMM enumerateLedmaps moved to FX_fcn.cpp
-
-//WLEDMM netmindz ar palette
-CRGB getCRGBForBand(int x, uint8_t *fftResult, int pal) { 
-  CRGB value;
-  CHSV hsv;
-  if(pal == 71) { // bit hacky to use palette id here, but don't want to litter the code with lots of different methods. TODO: add enum for palette creation type
-    if(x == 1) {
-      value = CRGB(fftResult[10]/2, fftResult[4]/2, fftResult[0]/2);
-    }
-    else if(x == 255) {
-      value = CRGB(fftResult[10]/2, fftResult[0]/2, fftResult[4]/2);
-    } 
-    else {
-      value = CRGB(fftResult[0]/2, fftResult[4]/2, fftResult[10]/2);
-    } 
-  }
-  else if(pal == 72) {
-    int b = map(x, 1, 255, 0, 10); // convert palette position to lower half of freq band
-    hsv = CHSV(fftResult[b], 255, map(fftResult[b], 0, 255, 30, 255));  // pick hue
-    hsv2rgb_rainbow(hsv, value);  // convert to R,G,B
-  }
-  else if(pal == 73) {
-    int b = map(x, 0, 255, 0, 8); // convert palette position to lower half of freq band
-    hsv = CHSV(uint8_t(fftResult[b]), 255, x);
-    hsv2rgb_rainbow(hsv, value);  // convert to R,G,B
-  }
-
-  return value;
-}
 
 /*
  * Returns a new, random color wheel index with a minimum distance of 42 from pos.

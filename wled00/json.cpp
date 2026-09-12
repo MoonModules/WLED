@@ -1064,6 +1064,18 @@ void serializeInfo(JsonObject root)
   root[F("fxcount")] = strip.getModeCount();
   root[F("palcount")] = strip.getPaletteCount();
   root[F("cpalcount")] = strip.customPalettes.size(); //number of custom palettes
+  root[F("umpalcount")] = usermodPalettes.size(); // number of usermod-registered palettes
+  root[F("cpalmax")] = WLED_MAX_CUSTOM_PALETTES;  // maximum number of custom palettes
+  // send usermod palette names so the UI can label them correctly
+  if (usermodPalettes.size() > 0) {
+    JsonArray umpalnames = root.createNestedArray(F("umpalnames"));
+    for (size_t j = 0; j < usermodPalettes.size(); j++) {
+      char buf[34];
+      extractModeName(WLED_USERMOD_PALETTE_ID_BASE - j, JSON_palette_names, buf, sizeof(buf) - 1);
+      umpalnames.add(buf);
+    }
+  }
+
 
   JsonArray ledmaps = root.createNestedArray(F("maps"));
   for (size_t i=0; i<WLED_MAX_LEDMAPS; i++) {
@@ -1352,21 +1364,31 @@ void serializePalettes(JsonObject root, AsyncWebServerRequest* request)
     page = request->getParam("page")->value().toInt();
   }
 
-  int palettesCount = strip.getPaletteCount();
-  int customPalettes = strip.customPalettes.size();
+  const int customPalettesCount = strip.customPalettes.size();
+  const int umPalettesCount     = usermodPalettes.size();
+  const int palettesCount       = strip.getPaletteCount() - customPalettesCount - umPalettesCount; // fixed built-in palette count
 
-  int maxPage = (palettesCount + customPalettes -1) / itemPerPage;
+  int maxPage = (palettesCount + umPalettesCount + customPalettesCount -1) / itemPerPage;
   if (page > maxPage) page = maxPage;
 
   int start = itemPerPage * page;
-  int end = start + itemPerPage;
-  if (end > palettesCount + customPalettes) end = palettesCount + customPalettes;
+  int end = min(start + itemPerPage, palettesCount + umPalettesCount + customPalettesCount);
+
 
   root[F("m")] = maxPage; // inform caller how many pages there are
   JsonObject palettes  = root.createNestedObject("p");
 
   for (int i = start; i < end; i++) {
-    JsonArray curPalette = palettes.createNestedArray(String(i>=palettesCount ? 255 - i + palettesCount : i));
+    // compute the palette ID for this sequential index
+    int paletteId;
+    if (i >= palettesCount + umPalettesCount) // user custom palette (IDs 200, 199, ...)
+      paletteId = WLED_CUSTOM_PALETTE_ID_BASE - (i - palettesCount - umPalettesCount);
+    else if (i >= palettesCount)              // usermod palette (IDs 255, 254, ...)
+      paletteId = WLED_USERMOD_PALETTE_ID_BASE - (i - palettesCount);
+    else
+      paletteId = i;                          // fixed palette
+    JsonArray curPalette = palettes.createNestedArray(String(paletteId));
+
     switch (i) {
       case 0: //default palette
         setPaletteColors(curPalette, PartyColors_p);
@@ -1377,7 +1399,7 @@ void serializePalettes(JsonObject root, AsyncWebServerRequest* request)
           curPalette.add("r");
           curPalette.add("r");
         break;
-      case 74: //WLEDMM random AC
+      case 71: //WLEDMM "* Random Cycle"
           curPalette.add("r");
           curPalette.add("r");
           curPalette.add("r");
@@ -1438,10 +1460,14 @@ void serializePalettes(JsonObject root, AsyncWebServerRequest* request)
         break;
       default:
         {
-        if (i>=palettesCount) {
-          setPaletteColors(curPalette, strip.customPalettes[i - palettesCount]);
+        if (i >= palettesCount + umPalettesCount) { // user custom palettes (lowest IDs in the custom range)
+          int custIdx = i - palettesCount - umPalettesCount;
+          setPaletteColors(curPalette, strip.customPalettes[custIdx]);
+        } else if (i >= palettesCount) { // usermod palettes (IDs 255, 254, ...)
+          int umIdx = i - palettesCount;
+          setPaletteColors(curPalette, usermodPalettes[umIdx].palette);
         } else {
-          // WLEDMM workaround for palettes index overflow at i=74 -> gGradientPalettes index=61 out of bounds.
+          // WLEDMM workaround for palettes index overflow at i=71 -> gGradientPalettes index out of bounds.
           int palIndex = i-13;
           constexpr int palMax = sizeof(gGradientPalettes)/sizeof(gGradientPalettes[0]) -1;
           if ((palIndex < 0) || (palIndex > palMax)) {
@@ -1455,6 +1481,7 @@ void serializePalettes(JsonObject root, AsyncWebServerRequest* request)
         }
         }
         break;
+
     }
   }
 }

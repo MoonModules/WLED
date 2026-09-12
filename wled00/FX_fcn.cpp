@@ -356,8 +356,20 @@ CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) c
   static CRGBPalette16 randomPalette = CRGBPalette16(DEFAULT_COLOR);
   static CRGBPalette16 prevRandomPalette = CRGBPalette16(CRGB(BLACK));
   byte tcp[76] = { 255 };   //WLEDMM: prevent out-of-range access in loadDynamicGradientPalette()
-  if (pal < 245 && pal > GRADIENT_PALETTE_COUNT+13) pal = 0;
-  if (pal > 245 && (strip.customPalettes.size() == 0 || 255U-pal > strip.customPalettes.size()-1)) pal = 0; // TODO remove strip dependency by moving customPalettes out of strip
+  // there is one randomly generated palette (1) followed by 4 palettes created from segment colors (2-5)
+  // those are followed by 7 fastled palettes (6-12), 58 gradient palettes (13-70) and WLEDMM's "* Random Cycle" (71)
+  // then come user custom palettes (IDs <=200) and usermod palettes (IDs 201-255), both growing downward from their respective base IDs
+  // (matches upstream WLED's palette ID layout, PR #5548, adapted to WLEDMM's own fixed-palette set)
+  const int umCount   = usermodPalettes.size();
+  const int custCount = strip.customPalettes.size(); // TODO remove strip dependency by moving customPalettes out of strip
+  if (pal >= FIXED_PALETTE_COUNT) {
+    if (pal > WLED_CUSTOM_PALETTE_ID_BASE) { // usermod range (IDs 201-255)
+      if ((int)(WLED_USERMOD_PALETTE_ID_BASE - pal) >= umCount) pal = 0;
+    } else { // custom range (IDs 72-200)
+      if ((int)(WLED_CUSTOM_PALETTE_ID_BASE - pal) >= custCount) pal = 0;
+    }
+  }
+
   //default palette. Differs depending on effect
   if (pal == 0) switch (mode) {
     case FX_MODE_FIRE_2012  : pal = 35; break; // heat palette
@@ -395,7 +407,7 @@ CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) c
         targetPalette[i].b = prevRandomPalette[i].b*(5000-timeSinceLastChange)/5000 + randomPalette[i].b*timeSinceLastChange/5000;
       }
       break;}
-    case 74: {//periodically replace palette with a random one. Transition palette change in 500ms
+    case 71: {//WLEDMM "* Random Cycle": periodically replace palette with a random one. Transition palette change in 500ms
       uint32_t timeSinceLastChange = millis() - _lastPaletteChange;
       if (timeSinceLastChange > randomPaletteChangeTime * 1000U) {
         prevRandomPalette = randomPalette;
@@ -454,13 +466,24 @@ CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) c
       targetPalette = RainbowColors_p; break;
     case 12: //Rainbow stripe colors
       targetPalette = RainbowStripeColors_p; break;
-    case 71: //WLEDMM netmindz ar palette +1
-    case 72: //WLEDMM netmindz ar palette +2
-    case 73: //WLEDMM netmindz ar palette +3
-        targetPalette.loadDynamicGradientPalette(getAudioPalette(pal)); break; 
     default: //progmem palettes
-      if (pal>245) {
-        targetPalette = strip.customPalettes[255-pal]; // we checked bounds above
+      if (pal > WLED_CUSTOM_PALETTE_ID_BASE) { // usermod palette (IDs 201-255)
+        uint8_t umIdx = WLED_USERMOD_PALETTE_ID_BASE - pal;
+        targetPalette = usermodPalettes[umIdx].palette;
+#ifdef WLED_DEBUG
+        { // WLEDMM DIAGNOSTIC: log the usermod palette contents once per second to check if it's being refreshed
+          static unsigned long _lastUmPalDebug = 0;
+          if (millis() - _lastUmPalDebug > 1000) {
+            _lastUmPalDebug = millis();
+            CRGB c0 = targetPalette[0], c8 = targetPalette[8], c15 = targetPalette[15];
+            DEBUG_PRINTF_P(PSTR("WLEDMM um-palette[%u] (id %u, size=%u): [0]=%d,%d,%d [8]=%d,%d,%d [15]=%d,%d,%d\n"),
+              umIdx, pal, (unsigned)usermodPalettes.size(),
+              c0.r, c0.g, c0.b, c8.r, c8.g, c8.b, c15.r, c15.g, c15.b);
+          }
+        }
+#endif
+      } else if (pal >= FIXED_PALETTE_COUNT) { // user custom palette (IDs 72-200)
+        targetPalette = strip.customPalettes[WLED_CUSTOM_PALETTE_ID_BASE - pal];
       } else {
         memcpy_P(tcp, (byte*)pgm_read_dword(&(gGradientPalettes[pal-13])), 72);
         targetPalette.loadDynamicGradientPalette(tcp);
@@ -469,6 +492,7 @@ CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) c
   }
   return targetPalette;
 }
+
 
 void Segment::startTransition(uint16_t dur) {
   if (transitional || _t) return; // already in transition no need to store anything
@@ -680,8 +704,14 @@ void Segment::setMode(uint8_t fx, bool loadDefaults, bool sliderDefaultsOnly) {
 }
 
 void Segment::setPalette(uint8_t pal) {
-  if (pal < 245 && pal > GRADIENT_PALETTE_COUNT+13) pal = 0; // built in palettes
-  if (pal > 245 && (strip.customPalettes.size() == 0 || 255U-pal > strip.customPalettes.size()-1)) pal = 0; // custom palettes
+  if (pal >= FIXED_PALETTE_COUNT) {
+    if (pal > WLED_CUSTOM_PALETTE_ID_BASE) { // usermod range (IDs 201-255)
+      if ((int)(WLED_USERMOD_PALETTE_ID_BASE - pal) >= (int)usermodPalettes.size()) pal = 0;
+    } else { // custom range (IDs 72-200)
+      if ((int)(WLED_CUSTOM_PALETTE_ID_BASE - pal) >= (int)strip.customPalettes.size()) pal = 0;
+    }
+  }
+
   if (pal != palette) {
     if (strip.paletteFade && on) startTransition(strip.getTransition());
     palette = pal;
@@ -1659,45 +1689,6 @@ uint8_t Segment::get_random_wheel_index(uint8_t pos) const { // WLEDMM use fast 
  * @returns Single color from palette
  */
 // WLEDMM: Segment::color_from_palette() moved to FX.h for better optimization by the compiler
-
- //WLEDMM netmindz ar palette
-uint8_t * Segment::getAudioPalette(int pal) const {
-  // https://forum.makerforums.info/t/hi-is-it-possible-to-define-a-gradient-palette-at-runtime-the-define-gradient-palette-uses-the/63339
-  
-  um_data_t *um_data;
-  if (!usermods.getUMData(&um_data, USERMOD_ID_AUDIOREACTIVE)) {
-    um_data = simulateSound(SEGMENT.soundSim);
-  }
-  uint8_t *fftResult = (uint8_t*)um_data->u_data[2];
-
-  static uint8_t xyz[16];  // Needs to be 4 times however many colors are being used.
-                           // 3 colors = 12, 4 colors = 16, etc.
-
-  xyz[0] = 0;  // anchor of first color - must be zero
-  xyz[1] = 0;
-  xyz[2] = 0;
-  xyz[3] = 0;
-  
-  CRGB rgb = getCRGBForBand(1, fftResult, pal);
-  xyz[4] = 1;  // anchor of first color
-  xyz[5] = rgb.r;
-  xyz[6] = rgb.g;
-  xyz[7] = rgb.b;
-  
-  rgb = getCRGBForBand(128, fftResult, pal);
-  xyz[8] = 128;
-  xyz[9] = rgb.r;
-  xyz[10] = rgb.g;
-  xyz[11] = rgb.b;
-  
-  rgb = getCRGBForBand(255, fftResult, pal);
-  xyz[12] = 255;  // anchor of last color - must be 255
-  xyz[13] = rgb.r;
-  xyz[14] = rgb.g;
-  xyz[15] = rgb.b;
-
-  return xyz;
-}
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2770,7 +2761,6 @@ bool WS2812FX::deserializeMap(uint8_t n) {
 WS2812FX* WS2812FX::instance = nullptr;
 
 const char JSON_mode_names[] PROGMEM = R"=====(["FX names moved"])=====";
- //WLEDMM netmindz ar palette add Audio responsive
 const char JSON_palette_names[] PROGMEM = R"=====([
 "Default","* Random Smooth ☾","* Color 1","* Colors 1&2","* Color Gradient","* Colors Only","Party","Cloud","Lava","Ocean",
 "Forest","Rainbow","Rainbow Bands","Sunset","Rivendell","Breeze","Red & Blue","Yellowout","Analogous","Splash",
@@ -2779,5 +2769,5 @@ const char JSON_palette_names[] PROGMEM = R"=====([
 "Magenta","Magred","Yelmag","Yelblu","Orange & Teal","Tiamat","April Night","Orangery","C9","Sakura",
 "Aurora","Atlantica","C9 2","C9 New","Temperature","Aurora 2","Retro Clown","Candy","Toxy Reaf","Fairy Reaf",
 "Semi Blue","Pink Candy","Red Reaf","Aqua Flash","Yelblu Hot","Lite Light","Red Flash","Blink Red","Red Shift","Red Tide",
-"Candy2","Audio Responsive Ratio ☾","Audio Responsive Hue ☾","Audio Responsive Ramp ☾","* Random Cycle"
+"Candy2","* Random Cycle"
 ])=====";

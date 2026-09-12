@@ -504,3 +504,14 @@ IRAM_ATTR_YN uint32_t __attribute__((hot)) gamma32(uint32_t color)
   return RGBW32(r, g, b, w);
 }
 #endif
+
+// WLEDMM: removes all palette entries registered by the usermod identified by `name` (pointer identity match,
+// matching upstream WLED's wled00/colors.cpp removeUsermodPalettes(), PR #5548). Returns the number removed.
+size_t removeUsermodPalettes(const char *name) {
+  size_t before = usermodPalettes.size();
+  for (int i = (int)usermodPalettes.size() - 1; i >= 0; i--) {
+    if (usermodPalettes[i].name == name)
+      usermodPalettes.erase(usermodPalettes.begin() + i);
+  }
+  return before - usermodPalettes.size();
+}

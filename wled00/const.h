@@ -5,7 +5,26 @@
  * Readability defines and their associated numerical values + compile-time constants
  */
 
-#define GRADIENT_PALETTE_COUNT 62 //WLEDMM netmindz ar palette +3, ewowi Random Smooth palette +1
+constexpr size_t FASTLED_PALETTE_COUNT = 7;   //  6-12 = sizeof(fastledPalettes) / sizeof(fastledPalettes[0]);
+constexpr size_t GRADIENT_PALETTE_COUNT = 58; // 13-70 = sizeof(gGradientPalettes) / sizeof(gGradientPalettes[0]);
+constexpr size_t DYNAMIC_PALETTE_COUNT = 6;   //  0- 5 = dynamic palettes (0=default(virtual),1=random,2=primary,3=primary+secondary,4=primary+secondary+tertiary,5=primary+secondary(+tertiary if not black)
+constexpr size_t WLEDMM_EXTRA_PALETTE_COUNT = 1; // 71 = "* Random Cycle" WLEDMM extra (in addition to upstream's "Random Smooth" at id 1)
+constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_COUNT + GRADIENT_PALETTE_COUNT + WLEDMM_EXTRA_PALETTE_COUNT; // total number of fixed palettes (=72)
+
+// Palette ID space layout (palette IDs are uint8_t, 0-255):
+//   0  .. FIXED_PALETTE_COUNT-1            : fixed built-in palettes (WLEDMM: includes "* Random Cycle" at 71)
+//   72 .. WLED_CUSTOM_PALETTE_ID_BASE(200) : user custom palettes (index 0 = ID 200, growing downward)
+//   201.. WLED_USERMOD_PALETTE_ID_BASE(255): usermod-registered palettes (index 0 = ID 255, growing downward)
+constexpr uint8_t WLED_USERMOD_PALETTE_ID_BASE = 255; // highest ID for usermod palettes
+constexpr uint8_t WLED_CUSTOM_PALETTE_ID_BASE  = 200; // highest ID for user custom palettes
+constexpr size_t  WLED_MAX_USERMOD_PALETTES     = WLED_USERMOD_PALETTE_ID_BASE - WLED_CUSTOM_PALETTE_ID_BASE; // 55 slots (IDs 201-255)
+#ifndef ESP8266
+  #define WLED_MAX_CUSTOM_PALETTES (WLED_CUSTOM_PALETTE_ID_BASE - FIXED_PALETTE_COUNT + 1) // 129 slots (IDs 72-200)
+#else
+  #define WLED_MAX_CUSTOM_PALETTES 10 // ESP8266: limit custom palettes to 10
+#endif
+#define WLED_MAX_CUSTOM_PALETTE_GAP 20 // max number of empty palette files in a row before stopping to look for more (20 takes 100ms)
+
 
 //Defaults
 #define DEFAULT_CLIENT_SSID "Your_Network"

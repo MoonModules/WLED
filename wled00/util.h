@@ -49,7 +49,6 @@ uint16_t beatsin16_t(accum88 beats_per_minute, uint16_t lowest = 0, uint16_t hig
 uint8_t beatsin8_t(accum88 beats_per_minute, uint8_t lowest = 0, uint8_t highest = 255, uint32_t timebase = 0, uint8_t phase_offset = 0);
 
 uint8_t get_random_wheel_index(uint8_t pos);
-CRGB getCRGBForBand(int x, uint8_t *fftResult, int pal); //WLEDMM netmindz ar palette
 char *cleanUpName(char *in); // to clean up a name that was read from file
 
 uint32_t hashInt(uint32_t s);

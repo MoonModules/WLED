@@ -1094,7 +1094,8 @@ class WS2812FX {  // 96 bytes
     inline uint8_t getTargetFps()  const { return _targetFps; }
     inline uint8_t getModeCount()  const { return _modeCount; }
     inline static constexpr uint8_t getMaxSegments(void)  { return MAX_NUM_SEGMENTS; }  // returns maximum number of supported segments (fixed value)
-    inline static constexpr uint8_t getPaletteCount()  { return 13 + GRADIENT_PALETTE_COUNT; }  // will only return built-in palette count
+    // WLEDMM: total palette count = fixed built-ins + user custom palettes + usermod-registered palettes (matches upstream WLED's getPaletteCount(), PR #5548)
+    inline uint8_t getPaletteCount()  const { return (uint8_t)(FIXED_PALETTE_COUNT + customPalettes.size() + usermodPalettes.size()); }
 
     uint16_t
       ablMilliampsMax,

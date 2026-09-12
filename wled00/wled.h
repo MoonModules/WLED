@@ -595,6 +595,8 @@ WLED_GLOBAL bool wasConnected _INIT(false);
 
 // color
 WLED_GLOBAL byte lastRandomIndex _INIT(0);        // used to save last random color so the new one is not the same
+WLED_GLOBAL std::vector<UsermodPalette> usermodPalettes; // WLEDMM: usermod-registered palettes (IDs 255, 254, 253...), see colors.h
+
 
 // transitions
 WLED_GLOBAL bool          transitionActive        _INIT(false);

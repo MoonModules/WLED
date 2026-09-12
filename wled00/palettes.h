@@ -844,14 +844,6 @@ const byte candy2_gp[] PROGMEM = {
   211,  39, 33, 34,
   255,   1,  1,  1};
 
- //WLEDMM netmindz ar palette
-// Start off as just RGB, but replace in runtime with colors relating to the music
-const byte audio_responsive_gp[] PROGMEM = {
-   0, 255, 0, 0,
-   125, 0, 255, 0,
-   255, 0, 0, 255
-};
-
 // Single array of defined cpt-city color palettes.
 // This will let us programmatically choose one based on
 // a number, rather than having to activate each explicitly
@@ -915,10 +907,6 @@ const byte* const gGradientPalettes[] PROGMEM = {
   red_shift_gp,                 //68-55 Red Shift
   red_tide_gp,                  //69-56 Red Tide
   candy2_gp,                    //70-57 Candy2
-  // Palette contents not actually used as built on the fly, just here to create menu option
-  audio_responsive_gp,          //71-58 AudioResponsive  WLEDMM netmindz ar palette - placeholder1
-  audio_responsive_gp,          //72-59 AudioResponsive  WLEDMM netmindz ar palette - placeholder2
-  audio_responsive_gp,          //73-60 AudioResponsive  WLEDMM netmindz ar palette - placeholder3
 };
 
 #endif

@@ -76,6 +76,20 @@ struct CRGBW {
 
 #endif
 
+// WLEDMM: Palette registered by a usermod at fixed IDs (255, 254, 253... 201), growing downward from WLED_USERMOD_PALETTE_ID_BASE.
+// Display name is "name: palName" (if palName non-null) or falls back to "name index" (e.g. "AudioReactive 1"), see util.cpp
+// (matches upstream WLED's wled00/colors.h UsermodPalette, PR #5548)
+struct UsermodPalette {
+  CRGBPalette16 palette;
+  const char   *name;      // PROGMEM base name string (must not be nullptr), used as identity key by removeUsermodPalettes()
+  uint8_t       palIndex;  // index of the palette for a usermod
+  const char   *palName;   // optional PROGMEM display name; "name: palName" if set, else "name index"
+};
+
+// Remove all entries from usermodPalettes whose name pointer matches 'name'. Returns number of entries removed.
+size_t removeUsermodPalettes(const char *name);
+extern std::vector<UsermodPalette> usermodPalettes; // usermod-registered palettes (IDs 255, 254, 253...), see wled.h
+
 
 struct CHSV32 { // 32bit HSV color with 16bit hue for more accurate conversions - credits @dedehai
   union {
