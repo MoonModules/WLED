@@ -468,7 +468,20 @@ CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) c
       targetPalette = RainbowStripeColors_p; break;
     default: //progmem palettes
       if (pal > WLED_CUSTOM_PALETTE_ID_BASE) { // usermod palette (IDs 201-255)
-        targetPalette = usermodPalettes[WLED_USERMOD_PALETTE_ID_BASE - pal].palette;
+        uint8_t umIdx = WLED_USERMOD_PALETTE_ID_BASE - pal;
+        targetPalette = usermodPalettes[umIdx].palette;
+#ifdef WLED_DEBUG
+        { // WLEDMM DIAGNOSTIC: log the usermod palette contents once per second to check if it's being refreshed
+          static unsigned long _lastUmPalDebug = 0;
+          if (millis() - _lastUmPalDebug > 1000) {
+            _lastUmPalDebug = millis();
+            CRGB c0 = targetPalette[0], c8 = targetPalette[8], c15 = targetPalette[15];
+            DEBUG_PRINTF_P(PSTR("WLEDMM um-palette[%u] (id %u, size=%u): [0]=%d,%d,%d [8]=%d,%d,%d [15]=%d,%d,%d\n"),
+              umIdx, pal, (unsigned)usermodPalettes.size(),
+              c0.r, c0.g, c0.b, c8.r, c8.g, c8.b, c15.r, c15.g, c15.b);
+          }
+        }
+#endif
       } else if (pal >= FIXED_PALETTE_COUNT) { // user custom palette (IDs 72-200)
         targetPalette = strip.customPalettes[WLED_CUSTOM_PALETTE_ID_BASE - pal];
       } else {
